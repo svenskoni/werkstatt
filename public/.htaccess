@@ -1,0 +1,9 @@
+# Plesk: Statische Dateien direkt ausliefern
+Options -Indexes
+DirectoryIndex disabled
+
+# Sicherheit: PHP-Ausführung in uploads/ verhindern
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phar)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

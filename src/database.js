@@ -1,116 +1,135 @@
 'use strict';
-// SQLite-Datenbankschicht mit better-sqlite3
-const Database = require('better-sqlite3');
-const path     = require('path');
-const fs       = require('fs');
+// SQLite-Datenbankschicht mit sqlite3 (async, kein nativer Build nötig)
+const sqlite3 = require('sqlite3').verbose();
+const path    = require('path');
+const fs      = require('fs');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'stoerungen.db');
-
-// Verzeichnis sicherstellen
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new sqlite3.Database(DB_PATH);
 
-// Schema anlegen
-db.exec(`
-  CREATE TABLE IF NOT EXISTS stoerungen (
-    id              TEXT PRIMARY KEY,
-    fahrzeug        TEXT NOT NULL,
-    schwere         TEXT NOT NULL,
+// WAL-Modus & Foreign Keys
+db.serialize(() => {
+  db.run('PRAGMA journal_mode = WAL');
+  db.run('PRAGMA foreign_keys = ON');
+
+  db.run(`CREATE TABLE IF NOT EXISTS stoerungen (
+    id                 TEXT PRIMARY KEY,
+    fahrzeug           TEXT NOT NULL,
+    schwere            TEXT NOT NULL,
     fehlerBeschreibung TEXT NOT NULL,
-    beschreibung    TEXT,
-    status          TEXT NOT NULL DEFAULT 'gesendet',
-    createdBy       TEXT NOT NULL,
-    createdAt       TEXT NOT NULL
-  );
+    beschreibung       TEXT,
+    status             TEXT NOT NULL DEFAULT 'gesendet',
+    createdBy          TEXT NOT NULL,
+    createdAt          TEXT NOT NULL
+  )`);
 
-  CREATE TABLE IF NOT EXISTS stoerung_history (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    stoerungId  TEXT NOT NULL,
-    status      TEXT NOT NULL,
-    changedBy   TEXT NOT NULL,
-    changedAt   TEXT NOT NULL,
-    note        TEXT,
+  db.run(`CREATE TABLE IF NOT EXISTS stoerung_history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    stoerungId TEXT NOT NULL,
+    status     TEXT NOT NULL,
+    changedBy  TEXT NOT NULL,
+    changedAt  TEXT NOT NULL,
+    note       TEXT,
     FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
-  );
+  )`);
 
-  CREATE TABLE IF NOT EXISTS stoerung_attachments (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    stoerungId    TEXT NOT NULL,
-    filename      TEXT NOT NULL,
-    originalname  TEXT NOT NULL,
-    mimetype      TEXT NOT NULL,
-    size          INTEGER NOT NULL,
+  db.run(`CREATE TABLE IF NOT EXISTS stoerung_attachments (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    stoerungId   TEXT NOT NULL,
+    filename     TEXT NOT NULL,
+    originalname TEXT NOT NULL,
+    mimetype     TEXT NOT NULL,
+    size         INTEGER NOT NULL,
     FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
-  );
-`);
+  )`);
+});
 
-// --- CRUD Funktionen ---------------------------------------------------
-const stmts = {
-  insertStorung:      db.prepare(`INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt) VALUES (?,?,?,?,?,?,?,?)`),
-  insertHistory:      db.prepare(`INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`),
-  insertAttachment:   db.prepare(`INSERT INTO stoerung_attachments (stoerungId,filename,originalname,mimetype,size) VALUES (?,?,?,?,?)`),
-  getAll:             db.prepare(`SELECT * FROM stoerungen ORDER BY createdAt DESC`),
-  getByStatus:        db.prepare(`SELECT * FROM stoerungen WHERE status = ? ORDER BY createdAt DESC`),
-  getById:            db.prepare(`SELECT * FROM stoerungen WHERE id = ?`),
-  updateStatus:       db.prepare(`UPDATE stoerungen SET status = ? WHERE id = ?`),
-  getHistory:         db.prepare(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`),
-  getAttachments:     db.prepare(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`),
-  getOpenByFahrzeug:  db.prepare(`SELECT * FROM stoerungen WHERE status != 'erledigt' AND fahrzeug = ? ORDER BY createdAt DESC`),
-  searchFehler:       db.prepare(`SELECT * FROM stoerungen WHERE status != 'erledigt' AND lower(fehlerBeschreibung) LIKE ? ORDER BY createdAt DESC LIMIT 5`),
-};
+// ── Hilfsfunktion: Promise-Wrapper ────────────────────────────────────────
+function run(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err); else resolve(this);
+    });
+  });
+}
+function all(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err); else resolve(rows);
+    });
+  });
+}
+function get(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err); else resolve(row);
+    });
+  });
+}
 
-function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, attachments = [] }) {
+// ── CRUD ─────────────────────────────────────────────────────────────────
+async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, attachments = [] }) {
   const now = new Date().toISOString();
-  db.transaction(() => {
-    stmts.insertStorung.run(id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now);
-    stmts.insertHistory.run(id, 'gesendet', createdBy, now, null);
-    for (const a of attachments) {
-      stmts.insertAttachment.run(id, a.filename, a.originalname, a.mimetype, a.size);
-    }
-  })();
+  await run(
+    `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt) VALUES (?,?,?,?,?,?,?,?)`,
+    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now]
+  );
+  await run(
+    `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
+    [id, 'gesendet', createdBy, now, null]
+  );
+  for (const a of attachments) {
+    await run(
+      `INSERT INTO stoerung_attachments (stoerungId,filename,originalname,mimetype,size) VALUES (?,?,?,?,?)`,
+      [id, a.filename, a.originalname, a.mimetype, a.size]
+    );
+  }
   return getStorungById(id);
 }
 
-function getStorungById(id) {
-  const s = stmts.getById.get(id);
+async function getStorungById(id) {
+  const s = await get(`SELECT * FROM stoerungen WHERE id = ?`, [id]);
   if (!s) return null;
-  s.history     = stmts.getHistory.all(id);
-  s.attachments = stmts.getAttachments.all(id);
+  s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [id]);
+  s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`, [id]);
   return s;
 }
 
-function getAllStorungen() {
-  const rows = stmts.getAll.all();
-  return rows.map(s => {
-    s.history     = stmts.getHistory.all(s.id);
-    s.attachments = stmts.getAttachments.all(s.id);
+async function getAllStorungen() {
+  const rows = await all(`SELECT * FROM stoerungen ORDER BY createdAt DESC`);
+  return Promise.all(rows.map(async s => {
+    s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
+    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`, [s.id]);
     return s;
-  });
+  }));
 }
 
-function getByStatus(status) {
-  const rows = stmts.getByStatus.all(status);
-  return rows.map(s => {
-    s.history     = stmts.getHistory.all(s.id);
-    s.attachments = stmts.getAttachments.all(s.id);
+async function getByStatus(status) {
+  const rows = await all(`SELECT * FROM stoerungen WHERE status = ? ORDER BY createdAt DESC`, [status]);
+  return Promise.all(rows.map(async s => {
+    s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
+    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`, [s.id]);
     return s;
-  });
+  }));
 }
 
-function updateStatus(id, newStatus, changedBy, note) {
+async function updateStatus(id, newStatus, changedBy, note) {
   const now = new Date().toISOString();
-  db.transaction(() => {
-    stmts.updateStatus.run(newStatus, id);
-    stmts.insertHistory.run(id, newStatus, changedBy, now, note || null);
-  })();
+  await run(`UPDATE stoerungen SET status = ? WHERE id = ?`, [newStatus, id]);
+  await run(
+    `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
+    [id, newStatus, changedBy, now, note || null]
+  );
   return getStorungById(id);
 }
 
-function searchSimilarFehler(query) {
-  return stmts.searchFehler.all('%' + query.toLowerCase() + '%');
+async function searchSimilarFehler(query) {
+  return all(
+    `SELECT * FROM stoerungen WHERE status != 'erledigt' AND lower(fehlerBeschreibung) LIKE ? ORDER BY createdAt DESC LIMIT 5`,
+    ['%' + query.toLowerCase() + '%']
+  );
 }
 
 module.exports = { createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus, searchSimilarFehler };

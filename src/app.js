@@ -7,109 +7,84 @@ const rateLimit      = require('express-rate-limit');
 const path           = require('path');
 const fs             = require('fs');
 
-const authRouter      = require('../routes/auth');
-const stoerungRouter  = require('../routes/stoerungen');
+const authRoutes      = require('../routes/auth');
+const stoerungRoutes  = require('../routes/stoerungen');
 
 const app = express();
-const isProd = process.env.NODE_ENV === 'production';
 
-// --- Sicherheits-Header (Helmet) ----------------------------------------
+// ── Upload-Verzeichnis sicherstellen ──────────────────────────────────────
+const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+// ── Sicherheits-Header ────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'"],
-      styleSrc:   ["'self'", "'unsafe-inline'",
-                   'https://fonts.googleapis.com',
-                   'https://api.fontshare.com'],
-      fontSrc:    ["'self'",
-                   'https://fonts.gstatic.com',
-                   'https://api.fontshare.com'],
+      scriptSrc:  ["'self'", "'unsafe-inline'", 'cdn.jsdelivr.net', 'unpkg.com'],
+      styleSrc:   ["'self'", "'unsafe-inline'", 'fonts.googleapis.com', 'cdn.jsdelivr.net'],
+      fontSrc:    ["'self'", 'fonts.gstatic.com', 'api.fontshare.com'],
       imgSrc:     ["'self'", 'data:', 'blob:'],
       connectSrc: ["'self'"],
-      objectSrc:  ["'none'"],
-      frameAncestors: ["'none'"],
     }
   },
-  hsts: isProd ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
-  frameguard: { action: 'deny' },
-  referrerPolicy: { policy: 'same-origin' },
+  hsts: process.env.NODE_ENV === 'production'
+    ? { maxAge: 63072000, includeSubDomains: true, preload: true }
+    : false
 }));
 
-// --- Globales Rate-Limit ------------------------------------------------
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Zu viele Anfragen – bitte später erneut versuchen.'
-}));
+// ── Rate Limiting ─────────────────────────────────────────────────────────
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false }));
+app.use('/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false }));
 
-// --- View Engine --------------------------------------------------------
-app.set('views', path.join(__dirname, '..', 'views'));
-app.set('view engine', 'ejs');
-app.use(ejsLayouts);
-app.set('layout', 'layout');
-
-// --- Static / Upload Verzeichnisse ---------------------------------------
-const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
+// ── Body-Parser & statische Dateien ──────────────────────────────────────
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// --- Body Parser --------------------------------------------------------
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(express.json({ limit: '1mb' }));
-
-// --- Session ------------------------------------------------------------
+// ── Session ───────────────────────────────────────────────────────────────
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev-secret-please-change',
-  resave: false,
+  secret:            process.env.SESSION_SECRET || 'bitte-in-env-aendern-' + Math.random(),
+  resave:            false,
   saveUninitialized: false,
-  name: 'fw_sid',
+  name:              'fw.sid',
   cookie: {
     httpOnly: true,
-    secure: isProd,
+    secure:   process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 8 * 60 * 60 * 1000, // 8 Stunden
+    maxAge:   8 * 60 * 60 * 1000  // 8 Stunden
   }
 }));
 
-// --- Globale Template-Variablen -----------------------------------------
+// ── Template Engine ───────────────────────────────────────────────────────
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '..', 'views'));
+app.use(ejsLayouts);
+app.set('layout', 'layout');
+
+// ── Globale Template-Variablen ────────────────────────────────────────────
 app.use((req, res, next) => {
-  res.locals.user    = req.session.user || null;
-  res.locals.path    = req.path;
-  res.locals.SCHWERE = {
-    klein:       { label: 'Klein',        icon: '🟢', order: 1 },
-    normal:      { label: 'Normal',       icon: '🟡', order: 2 },
-    schwer:      { label: 'Schwer',       icon: '🟠', order: 3 },
-    totalausfall:{ label: 'Totalausfall', icon: '🔴', order: 4 },
-  };
+  res.locals.user        = req.session.user || null;
+  res.locals.currentPath = req.path;
   next();
 });
 
-// --- Routen -------------------------------------------------------------
-app.use('/',         authRouter);
-app.use('/',         stoerungRouter);
+// ── Routen ────────────────────────────────────────────────────────────────
+app.use('/',        authRoutes);
+app.use('/',        stoerungRoutes);
 
-// --- 404 ----------------------------------------------------------------
+// ── 404 ───────────────────────────────────────────────────────────────────
 app.use((req, res) => {
-  res.status(404).render('error', {
-    title: '404 – Seite nicht gefunden',
-    message: 'Die angeforderte Seite existiert nicht.'
-  });
+  res.status(404).render('error', { title: '404 – Nicht gefunden', message: 'Die angeforderte Seite existiert nicht.' });
 });
 
-// --- Fehlerbehandlung ---------------------------------------------------
+// ── Fehler-Handler ────────────────────────────────────────────────────────
 app.use((err, req, res, _next) => {
-  console.error('[Error]', err);
+  console.error('[ERROR]', err);
   const status = err.status || 500;
   res.status(status).render('error', {
-    title: status + ' – Fehler',
-    message: isProd ? 'Ein interner Fehler ist aufgetreten.' : err.message
+    title:   `${status} – Serverfehler`,
+    message: process.env.NODE_ENV === 'production' ? 'Ein interner Fehler ist aufgetreten.' : err.message
   });
 });
 

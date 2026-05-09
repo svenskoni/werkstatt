@@ -1,75 +1,63 @@
 'use strict';
-// SQLite-Datenbankschicht mit sqlite3 (async, kein nativer Build nötig)
-const sqlite3 = require('sqlite3').verbose();
-const path    = require('path');
-const fs      = require('fs');
+// SQLite via @libsql/client – reines JavaScript, kein node-gyp erforderlich
+const { createClient } = require('@libsql/client');
+const path = require('path');
+const fs   = require('fs');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'stoerungen.db');
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const DB_DIR  = path.join(__dirname, '..', 'data');
+const DB_FILE = process.env.DB_PATH || path.join(DB_DIR, 'stoerungen.db');
+fs.mkdirSync(DB_DIR, { recursive: true });
 
-const db = new sqlite3.Database(DB_PATH);
+const db = createClient({ url: 'file:' + DB_FILE });
 
-// WAL-Modus & Foreign Keys
-db.serialize(() => {
-  db.run('PRAGMA journal_mode = WAL');
-  db.run('PRAGMA foreign_keys = ON');
-
-  db.run(`CREATE TABLE IF NOT EXISTS stoerungen (
-    id                 TEXT PRIMARY KEY,
-    fahrzeug           TEXT NOT NULL,
-    schwere            TEXT NOT NULL,
-    fehlerBeschreibung TEXT NOT NULL,
-    beschreibung       TEXT,
-    status             TEXT NOT NULL DEFAULT 'gesendet',
-    createdBy          TEXT NOT NULL,
-    createdAt          TEXT NOT NULL
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS stoerung_history (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    stoerungId TEXT NOT NULL,
-    status     TEXT NOT NULL,
-    changedBy  TEXT NOT NULL,
-    changedAt  TEXT NOT NULL,
-    note       TEXT,
-    FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS stoerung_attachments (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    stoerungId   TEXT NOT NULL,
-    filename     TEXT NOT NULL,
-    originalname TEXT NOT NULL,
-    mimetype     TEXT NOT NULL,
-    size         INTEGER NOT NULL,
-    FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
-  )`);
-});
-
-// ── Hilfsfunktion: Promise-Wrapper ────────────────────────────────────────
-function run(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err); else resolve(this);
-    });
-  });
-}
-function all(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err); else resolve(rows);
-    });
-  });
-}
-function get(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err); else resolve(row);
-    });
-  });
+// Schema beim Start anlegen
+async function initDb() {
+  await db.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS stoerungen (
+      id                 TEXT PRIMARY KEY,
+      fahrzeug           TEXT NOT NULL,
+      schwere            TEXT NOT NULL,
+      fehlerBeschreibung TEXT NOT NULL,
+      beschreibung       TEXT,
+      status             TEXT NOT NULL DEFAULT 'gesendet',
+      createdBy          TEXT NOT NULL,
+      createdAt          TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS stoerung_history (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      stoerungId TEXT NOT NULL,
+      status     TEXT NOT NULL,
+      changedBy  TEXT NOT NULL,
+      changedAt  TEXT NOT NULL,
+      note       TEXT,
+      FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS stoerung_attachments (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      stoerungId   TEXT NOT NULL,
+      filename     TEXT NOT NULL,
+      originalname TEXT NOT NULL,
+      mimetype     TEXT NOT NULL,
+      size         INTEGER NOT NULL,
+      FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
+    );
+  `);
 }
 
-// ── CRUD ─────────────────────────────────────────────────────────────────
+// ── Hilfsfunktionen ─────────────────────────────────────────────────────────
+async function run(sql, args = []) {
+  return db.execute({ sql, args });
+}
+async function all(sql, args = []) {
+  const r = await db.execute({ sql, args });
+  return r.rows;
+}
+async function get(sql, args = []) {
+  const r = await db.execute({ sql, args });
+  return r.rows[0] || null;
+}
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
 async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, attachments = [] }) {
   const now = new Date().toISOString();
   await run(
@@ -132,4 +120,4 @@ async function searchSimilarFehler(query) {
   );
 }
 
-module.exports = { createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus, searchSimilarFehler };
+module.exports = { initDb, createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus, searchSimilarFehler };

@@ -1,34 +1,18 @@
-// Plesk Phusion Passenger Einstiegspunkt
-// WICHTIG: Passenger ruft diese Datei auf und verwaltet den HTTP-Server selbst.
-// Kein app.listen() hier - Passenger macht das intern!
+// Phusion Passenger Einstiegspunkt fuer Plesk
+// Passenger importiert diese Datei als Modul - KEIN app.listen() hier!
 'use strict';
 require('dotenv').config();
 
 const { initDb } = require('./src/database');
-const application = require('./src/app');
+const app = require('./src/app');
 
-// Datenbank beim ersten Request initialisieren (Passenger-kompatibel)
-let dbReady = false;
-const originalHandler = application;
-
-const wrappedApp = async (req, res, next) => {
-  if (!dbReady) {
-    try {
-      await initDb();
-      dbReady = true;
-    } catch (err) {
-      console.error('[FATAL] DB init fehlgeschlagen:', err);
-      res.status(500).send('Datenbankfehler beim Start');
-      return;
-    }
-  }
-  return originalHandler(req, res, next);
-};
-
-// Express-App als Passenger-Modul exportieren
-module.exports = application;
-
-// DB sofort initialisieren (non-blocking)
+// Datenbank initialisieren (async, non-blocking)
 initDb()
-  .then(() => { dbReady = true; console.log('[OK] Datenbank bereit'); })
-  .catch(err => console.error('[ERROR] DB init:', err));
+  .then(() => console.log('[OK] Datenbank initialisiert'))
+  .catch(err => {
+    console.error('[FATAL] Datenbank-Initialisierung fehlgeschlagen:', err.message);
+    // Nicht process.exit() - Passenger wuerde die App beenden
+  });
+
+// Passenger erwartet module.exports = express-app
+module.exports = app;

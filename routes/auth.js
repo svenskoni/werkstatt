@@ -1,15 +1,31 @@
 'use strict';
 const express    = require('express');
-const rateLimit  = require('express-rate-limit');
-const { verifyUser } = require('../middleware/auth');
+const bcrypt     = require('bcryptjs');
+const router     = express.Router();
 
-const router = express.Router();
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: 'Zu viele Login-Versuche. Bitte in 15 Minuten erneut versuchen.'
-});
+// Nutzer aus .env laden
+function getUsers() {
+  return [
+    {
+      username: 'viewer',
+      passwordHash: process.env.VIEWER_PASSWORD_HASH || '',
+      role: 'view',
+      displayName: process.env.VIEWER_DISPLAY || 'Betrachter',
+    },
+    {
+      username: 'benutzer',
+      passwordHash: process.env.USER_PASSWORD_HASH || '',
+      role: 'user',
+      displayName: process.env.USER_DISPLAY || 'Benutzer',
+    },
+    {
+      username: 'admin',
+      passwordHash: process.env.ADMIN_PASSWORD_HASH || '',
+      role: 'admin',
+      displayName: process.env.ADMIN_DISPLAY || 'Administrator',
+    },
+  ];
+}
 
 // GET /login
 router.get('/login', (req, res) => {
@@ -18,36 +34,40 @@ router.get('/login', (req, res) => {
 });
 
 // POST /login
-router.post('/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body;
+router.post('/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const users = getUsers();
+    const user  = users.find(u => u.username === (username || '').trim().toLowerCase());
 
-  if (!username || !password) {
-    return res.status(400).render('login', { error: 'Bitte Benutzername und Passwort eingeben.' });
+    if (!user || !user.passwordHash) {
+      return res.status(401).render('login', { error: 'Benutzername oder Passwort falsch.' });
+    }
+
+    const valid = await bcrypt.compare(password || '', user.passwordHash);
+    if (!valid) {
+      return res.status(401).render('login', { error: 'Benutzername oder Passwort falsch.' });
+    }
+
+    // Session regenerieren (Session-Fixation-Schutz)
+    req.session.regenerate(err => {
+      if (err) return res.status(500).render('login', { error: 'Session-Fehler.' });
+      req.session.user = {
+        username:    user.username,
+        role:        user.role,
+        displayName: user.displayName,
+      };
+      res.redirect('/');
+    });
+  } catch (err) {
+    console.error('[Login] Fehler:', err);
+    res.status(500).render('login', { error: 'Interner Fehler beim Login.' });
   }
-
-  const user = await verifyUser(String(username).trim(), String(password));
-  if (!user) {
-    // Kurze Verzögerung gegen Timing-Angriffe
-    await new Promise(r => setTimeout(r, 300 + Math.random() * 200));
-    return res.status(401).render('login', { error: 'Benutzername oder Passwort falsch.' });
-  }
-
-  // Session regenerieren (Session Fixation verhindern)
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).render('error', { title: 'Fehler', message: 'Login fehlgeschlagen.' });
-    req.session.user = user;
-    const returnTo = req.session.returnTo || '/';
-    delete req.session.returnTo;
-    res.redirect(returnTo);
-  });
 });
 
 // POST /logout
 router.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('fw_sid');
-    res.redirect('/');
-  });
+  req.session.destroy(() => res.redirect('/'));
 });
 
 module.exports = router;

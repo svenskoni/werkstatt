@@ -1,0 +1,97 @@
+<div class="dashboard-container">
+  <!-- Stats -->
+  <div class="stats-bar" role="region" aria-label="Übersicht">
+    <div class="stat-item">
+      <span class="stat-num" style="color:var(--color-text)"><%= stats.total %></span>
+      <span class="stat-label">Gesamt</span>
+    </div>
+    <div class="stat-divider" aria-hidden="true"></div>
+    <div class="stat-item">
+      <span class="stat-num" style="color:var(--color-new)"><%= stats.offen %></span>
+      <span class="stat-label">Eingegangen</span>
+    </div>
+    <div class="stat-divider" aria-hidden="true"></div>
+    <div class="stat-item">
+      <span class="stat-num" style="color:var(--color-active)"><%= stats.aktiv %></span>
+      <span class="stat-label">In Bearbeitung</span>
+    </div>
+    <div class="stat-divider" aria-hidden="true"></div>
+    <div class="stat-item">
+      <span class="stat-num" style="color:var(--color-done)"><%= stats.erledigt %></span>
+      <span class="stat-label">Erledigt</span>
+    </div>
+    <% if (user && (user.role === 'user' || user.role === 'admin')) { %>
+      <div style="margin-left:auto">
+        <a href="/stoerung/neu" class="btn btn-primary btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Neue Störung
+        </a>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- Kanban -->
+  <div class="kanban-board" role="main">
+
+    <!-- SPALTE: Eingegangen -->
+    <section class="kanban-col" aria-label="Eingegangene Störungen">
+      <div class="kanban-header kanban-header-new">
+        <div class="kanban-title-wrap">
+          <span class="kanban-dot dot-new" aria-hidden="true"></span>
+          <h2 class="kanban-title">Eingegangen</h2>
+          <span class="kanban-count"><%= gesendet.length %></span>
+        </div>
+        <p class="kanban-subtitle">Neu gemeldet, noch nicht bestätigt</p>
+      </div>
+      <div class="kanban-cards">
+        <% if (gesendet.length === 0) { %>
+          <div class="empty-state-card">&#x2714; Keine offenen Meldungen</div>
+        <% } %>
+        <% gesendet.forEach(s => { %>
+          <%- include('partials/stoerung-card', { s, user, SCHWERE: res.locals.SCHWERE }) %>
+        <% }); %>
+      </div>
+    </section>
+
+    <!-- SPALTE: In Bearbeitung -->
+    <section class="kanban-col" aria-label="Störungen in Bearbeitung">
+      <div class="kanban-header kanban-header-active">
+        <div class="kanban-title-wrap">
+          <span class="kanban-dot dot-active" aria-hidden="true"></span>
+          <h2 class="kanban-title">In Bearbeitung</h2>
+          <span class="kanban-count"><%= bestaetigt.length %></span>
+        </div>
+        <p class="kanban-subtitle">Bestätigt, wird bearbeitet</p>
+      </div>
+      <div class="kanban-cards">
+        <% if (bestaetigt.length === 0) { %>
+          <div class="empty-state-card">&mdash; Nichts in Bearbeitung</div>
+        <% } %>
+        <% bestaetigt.forEach(s => { %>
+          <%- include('partials/stoerung-card', { s, user, SCHWERE: res.locals.SCHWERE }) %>
+        <% }); %>
+      </div>
+    </section>
+
+    <!-- SPALTE: Erledigt -->
+    <section class="kanban-col" aria-label="Erledigte Störungen">
+      <div class="kanban-header kanban-header-done">
+        <div class="kanban-title-wrap">
+          <span class="kanban-dot dot-done" aria-hidden="true"></span>
+          <h2 class="kanban-title">Erledigt</h2>
+          <span class="kanban-count"><%= erledigt.length %></span>
+        </div>
+        <p class="kanban-subtitle">Abgeschlossen</p>
+      </div>
+      <div class="kanban-cards">
+        <% if (erledigt.length === 0) { %>
+          <div class="empty-state-card">&mdash; Noch nichts erledigt</div>
+        <% } %>
+        <% erledigt.forEach(s => { %>
+          <%- include('partials/stoerung-card', { s, user, SCHWERE: res.locals.SCHWERE }) %>
+        <% }); %>
+      </div>
+    </section>
+
+  </div>
+</div>

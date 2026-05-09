@@ -1,0 +1,59 @@
+<%
+function formatDate(iso) {
+  return new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'});
+}
+%>
+<div class="form-container">
+  <div class="form-header">
+    <a href="/" class="back-link">← Dashboard</a>
+    <h1 class="page-title">Störung: <%= storung.fahrzeug %></h1>
+  </div>
+
+  <div class="detail-grid">
+    <div class="detail-card">
+      <table class="detail-table">
+        <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>
+        <tr><th>Schweregrad</th><td><span class="schwere-badge schwere-<%= storung.schwere.toLowerCase() %>"><%= SCHWERE[storung.schwere]?.icon %> <%= SCHWERE[storung.schwere]?.label %></span></td></tr>
+        <tr><th>Fehler</th><td><%= storung.fehlerBeschreibung %></td></tr>
+        <tr><th>Status</th><td><strong><%= storung.status === 'gesendet' ? 'Eingegangen' : storung.status === 'bestaetigt' ? 'In Bearbeitung' : 'Erledigt' %></strong></td></tr>
+        <tr><th>Gemeldet von</th><td><%= storung.createdBy %></td></tr>
+        <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
+        <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
+      </table>
+      <% if (storung.beschreibung) { %>
+        <div class="detail-beschreibung"><%= storung.beschreibung %></div>
+      <% } %>
+    </div>
+
+    <% if (storung.attachments.length > 0) { %>
+    <div class="detail-card">
+      <h3 style="margin-bottom:var(--space-3)">Anhänge (<%= storung.attachments.length %>)</h3>
+      <div class="attachment-grid">
+        <% storung.attachments.forEach(a => { %>
+          <% if (a.mimetype.startsWith('image/')) { %>
+            <a href="/uploads/<%= a.filename %>" target="_blank" rel="noopener">
+              <img src="/uploads/<%= a.filename %>" alt="<%= a.originalname %>" loading="lazy" width="200" height="150" style="object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-border)">
+            </a>
+          <% } else { %>
+            <a href="/uploads/<%= a.filename %>" target="_blank" rel="noopener" class="btn btn-ghost">🎬 <%= a.originalname %></a>
+          <% } %>
+        <% }); %>
+      </div>
+    </div>
+    <% } %>
+
+    <div class="detail-card">
+      <h3 style="margin-bottom:var(--space-3)">Statusverlauf</h3>
+      <ol class="history-list" style="list-style:none">
+        <% storung.history.forEach(h => { %>
+          <li class="history-item">
+            <span class="history-status"><%= h.status === 'gesendet' ? 'Eingegangen' : h.status === 'bestaetigt' ? 'In Bearbeitung' : 'Erledigt' %></span>
+            <span class="history-by">von <%= h.changedBy %></span>
+            <span class="history-date"><%= formatDate(h.changedAt) %></span>
+            <% if (h.note) { %><span class="history-note">„<%= h.note %>“</span><% } %>
+          </li>
+        <% }); %>
+      </ol>
+    </div>
+  </div>
+</div>

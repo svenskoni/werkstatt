@@ -1,0 +1,64 @@
+<%
+function ago(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'gerade eben';
+  if (m < 60) return m + ' Min. ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' Std. ago';
+  return Math.floor(h / 24) + ' Tagen ago';
+}
+%>
+<article class="stoerung-card card-<%= s.status %>" role="article">
+  <div class="card-top">
+    <span class="card-fahrzeug"><%= s.fahrzeug %></span>
+    <span class="schwere-badge schwere-<%= s.schwere.toLowerCase() %>">
+      <%= SCHWERE[s.schwere]?.icon %> <%= SCHWERE[s.schwere]?.label %>
+    </span>
+  </div>
+
+  <p class="card-fehler"><%= s.fehlerBeschreibung %></p>
+
+  <% if (s.beschreibung) { %>
+    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '&hellip;' : '' %></p>
+  <% } %>
+
+  <div class="card-bottom">
+    <span class="card-meta"><%= s.createdBy %></span>
+    <span class="card-meta">&middot;</span>
+    <span class="card-meta"><%= ago(s.createdAt) %></span>
+    <% if (s.attachments.length > 0) { %>
+      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anhänge">&#128204; <%= s.attachments.length %></span>
+    <% } %>
+  </div>
+
+  <div class="card-actions">
+    <a href="/stoerung/<%= s.id %>" class="btn btn-ghost btn-xs">Details</a>
+    <% if (user && user.role === 'admin') { %>
+      <% if (s.status === 'gesendet') { %>
+        <button class="btn btn-sm status-change-btn"
+          style="background:var(--color-active);color:#fff;border:none"
+          data-id="<%= s.id %>" data-target="bestaetigt">
+          ✓ Bestätigen
+        </button>
+      <% } %>
+      <% if (s.status === 'bestaetigt') { %>
+        <button class="btn btn-sm status-change-btn"
+          style="background:var(--color-done);color:#fff;border:none"
+          data-id="<%= s.id %>" data-target="erledigt">
+          ✓ Erledigt
+        </button>
+        <button class="btn btn-xs btn-ghost status-change-btn"
+          data-id="<%= s.id %>" data-target="gesendet">
+          ↩ Zurück
+        </button>
+      <% } %>
+      <% if (s.status === 'erledigt') { %>
+        <button class="btn btn-xs btn-ghost status-change-btn"
+          data-id="<%= s.id %>" data-target="bestaetigt">
+          ↩ Wiederöffnen
+        </button>
+      <% } %>
+    <% } %>
+  </div>
+</article>

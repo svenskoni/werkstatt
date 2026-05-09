@@ -1,0 +1,178 @@
+<div class="form-container">
+  <div class="form-header">
+    <a href="/" class="back-link">← Dashboard</a>
+    <h1 class="page-title">🚨 Neue Störung melden</h1>
+  </div>
+
+  <% if (errors && errors.length > 0) { %>
+    <div class="alert alert-error" role="alert">
+      <ul class="error-list">
+        <% errors.forEach(e => { %><li><%= e %></li><% }); %>
+      </ul>
+    </div>
+  <% } %>
+
+  <form class="stoerung-form" action="/stoerung/neu" method="POST" enctype="multipart/form-data" novalidate>
+
+    <!-- Fahrzeug -->
+    <div class="form-group">
+      <label class="form-label required" for="fahrzeug">Fahrzeug</label>
+      <select id="fahrzeug" name="fahrzeug" class="form-control form-select" required>
+        <option value="" disabled <%= !old.fahrzeug ? 'selected' : '' %>>Fahrzeug wählen…</option>
+        <% VEHICLES.forEach(v => { %>
+          <option value="<%= v %>" <%= old.fahrzeug === v ? 'selected' : '' %>><%= v %></option>
+        <% }); %>
+      </select>
+    </div>
+
+    <!-- Schweregrad -->
+    <div class="form-group">
+      <fieldset>
+        <legend class="form-label required">Schweregrad</legend>
+        <div class="schwere-grid">
+          <% [['klein','Klein','🟢','Kleinere Schäden, Fahrzeug einsatzbereit'],['normal','Normal','🟡','Eingeschränkte Funktion'],['schwer','Schwer','🟠','Erheblicher Schaden'],['totalausfall','Totalausfall','🔴','Fahrzeug nicht einsatzbereit']].forEach(([val,label,icon,hint]) => { %>
+          <label class="schwere-option <%= old.schwere === val ? 'checked' : '' %>">
+            <input type="radio" name="schwere" value="<%= val %>" <%= old.schwere === val ? 'checked' : '' %> required>
+            <span class="schwere-icon"><%= icon %></span>
+            <span class="schwere-label"><%= label %></span>
+            <span class="form-hint" style="margin:0;text-align:center"><%= hint %></span>
+          </label>
+          <% }); %>
+        </div>
+      </fieldset>
+    </div>
+
+    <!-- Fehlerbeschreibung -->
+    <div class="form-group">
+      <label class="form-label required" for="fehlerBeschreibung">Fehlerbeschreibung</label>
+      <input
+        type="text"
+        id="fehlerBeschreibung"
+        name="fehlerBeschreibung"
+        class="form-control"
+        placeholder="Kurze, prägnante Beschreibung des Fehlers…"
+        value="<%= old.fehlerBeschreibung || '' %>"
+        required
+        minlength="3"
+        maxlength="200"
+        autocomplete="off"
+      >
+      <div id="similarWarning" class="similar-warning" hidden>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="similarText">Es gibt ähnliche offene Störungen.</span>
+      </div>
+      <span class="form-hint">Wird automatisch mit offenen Störungen abgeglichen.</span>
+    </div>
+
+    <!-- Detailbeschreibung -->
+    <div class="form-group">
+      <label class="form-label" for="beschreibung">Detailbeschreibung</label>
+      <textarea
+        id="beschreibung"
+        name="beschreibung"
+        class="form-control"
+        rows="4"
+        placeholder="Wann aufgetreten? Unter welchen Umständen? Bereits bekanntes Problem?…"
+        maxlength="2000"
+      ><%= old.beschreibung || '' %></textarea>
+    </div>
+
+    <!-- Upload -->
+    <div class="form-group">
+      <label class="form-label">Fotos / Videos (max. <%= process.env.MAX_UPLOAD_MB || 8 %> MB pro Datei)</label>
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="attachments" name="attachments" multiple accept="image/*,video/*" class="upload-input">
+        <div class="upload-placeholder" id="uploadPlaceholder">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span>Klicken oder Dateien hierher ziehen</span>
+          <span class="upload-hint">JPG, PNG, GIF, WebP, MP4, MOV &middot; max. 6 Dateien</span>
+        </div>
+        <div class="file-preview" id="filePreview" hidden></div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <a href="/" class="btn btn-ghost">Abbrechen</a>
+      <button type="submit" class="btn btn-primary btn-lg">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Störung melden
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+// Schweregrad visuelle Auswahl
+document.querySelectorAll('.schwere-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.schwere-option').forEach(o => o.classList.remove('checked'));
+    opt.classList.add('checked');
+  });
+});
+
+// Upload Drag & Drop
+const area = document.getElementById('uploadArea');
+const input = document.getElementById('attachments');
+const preview = document.getElementById('filePreview');
+const placeholder = document.getElementById('uploadPlaceholder');
+
+area.addEventListener('click', () => input.click());
+area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('drag-over'); });
+area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
+area.addEventListener('drop', e => {
+  e.preventDefault(); area.classList.remove('drag-over');
+  const dt = new DataTransfer();
+  [...e.dataTransfer.files].forEach(f => dt.items.add(f));
+  input.files = dt.files;
+  showPreview(input.files);
+});
+input.addEventListener('change', () => showPreview(input.files));
+
+function showPreview(files) {
+  preview.innerHTML = '';
+  if (!files.length) { preview.hidden = true; placeholder.hidden = false; return; }
+  preview.hidden = false; placeholder.hidden = true;
+  [...files].forEach(f => {
+    const item = document.createElement('div'); item.className = 'file-item';
+    const MAX = (parseInt('<%= process.env.MAX_UPLOAD_MB || 8 %>') * 1024 * 1024);
+    if (f.type.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.className = 'file-thumb'; img.alt = f.name; img.width = 100; img.height = 75;
+      img.src = URL.createObjectURL(f);
+      item.appendChild(img);
+    } else {
+      const icon = document.createElement('div'); icon.className = 'file-icon'; icon.textContent = '🎬';
+      item.appendChild(icon);
+    }
+    const name = document.createElement('span'); name.className = 'file-name'; name.textContent = f.name; item.appendChild(name);
+    const size = document.createElement('span'); size.className = 'file-size';
+    size.textContent = f.size > MAX ? '⚠️ zu groß' : (f.size / 1024).toFixed(0) + ' KB';
+    if (f.size > MAX) size.style.color = 'var(--color-primary)';
+    item.appendChild(size);
+    preview.appendChild(item);
+  });
+}
+
+// Ähnliche Fehler Abgleich
+const fehlerInput = document.getElementById('fehlerBeschreibung');
+const warning = document.getElementById('similarWarning');
+const warningText = document.getElementById('similarText');
+let debounceTimer;
+fehlerInput.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(async () => {
+    const q = fehlerInput.value.trim();
+    if (q.length < 3) { warning.hidden = true; return; }
+    try {
+      const r = await fetch('/api/similar?q=' + encodeURIComponent(q));
+      const data = await r.json();
+      if (data.length > 0) {
+        warningText.textContent = data.length + ' ähnliche offene Störung(en) gefunden: ' + data.map(d => d.fahrzeug + ' – ' + d.fehler).join(' | ');
+        warning.hidden = false;
+      } else {
+        warning.hidden = true;
+      }
+    } catch { warning.hidden = true; }
+  }, 400);
+});
+</script>

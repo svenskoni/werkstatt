@@ -1,9 +1,21 @@
-# Plesk: Statische Dateien direkt ausliefern
-Options -Indexes
+# Plesk Passenger: Alle Anfragen an Node.js weiterleiten
+Options -Indexes -MultiViews
 DirectoryIndex disabled
 
-# Sicherheit: PHP-Ausführung in uploads/ verhindern
-<FilesMatch "\.(php|phtml|php3|php4|php5|php7|phar)$">
-    Order allow,deny
-    Deny from all
+# Statische Dateien direkt ausliefern (CSS, JS, Bilder, Uploads)
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Alles andere an Node.js (Passenger)
+RewriteRule ^ ../app.js [L]
+
+# Sicherheit: PHP-Ausführung verhindern
+<FilesMatch "\.(?:php[0-9]?|phtml|phar)$">
+    Require all denied
 </FilesMatch>
+
+# Sicherheits-Header
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"

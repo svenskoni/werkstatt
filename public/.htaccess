@@ -1,21 +1,28 @@
-# Plesk Passenger: Alle Anfragen an Node.js weiterleiten
+# Plesk + Phusion Passenger
+# Passenger leitet alle Anfragen automatisch an Node.js weiter.
+# Diese Datei regelt NUR statische Dateien und Sicherheit.
+
 Options -Indexes -MultiViews
 DirectoryIndex disabled
 
-# Statische Dateien direkt ausliefern (CSS, JS, Bilder, Uploads)
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^ - [L]
-
-# Alles andere an Node.js (Passenger)
-RewriteRule ^ ../app.js [L]
-
-# Sicherheit: PHP-Ausführung verhindern
-<FilesMatch "\.(?:php[0-9]?|phtml|phar)$">
+# Sicherheit: PHP-Ausfuehrung in uploads/ verhindern
+<FilesMatch "\.(?:php[0-9]?|phtml|phar|cgi|pl|py|sh)$">
     Require all denied
 </FilesMatch>
 
 # Sicherheits-Header
-Header always set X-Content-Type-Options "nosniff"
-Header always set X-Frame-Options "SAMEORIGIN"
-Header always set Referrer-Policy "strict-origin-when-cross-origin"
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Browsercache fuer statische Assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css              "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/jpeg            "access plus 6 months"
+    ExpiresByType image/png             "access plus 6 months"
+    ExpiresByType image/webp            "access plus 6 months"
+</IfModule>

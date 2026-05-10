@@ -75,13 +75,13 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
   upload.array('attachments', 6),
   async (req, res, next) => {
     try {
-      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt } = req.body;
+      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
       const errors = [];
 
       if (!melderName || melderName.trim().length < 3)
         errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
-      if (!melderKontakt || melderKontakt.trim().length < 5)
-        errors.push('Handy oder E‑Mail ist erforderlich.');
+      if ((!melderHandy || melderHandy.trim().length < 5) && (!melderMail || melderMail.trim().length < 5))
+        errors.push('Handy oder E‑Mail muss ausgefüllt sein.');
 
       if (!VEHICLES.includes(fahrzeug))
         errors.push('Ungültiges Fahrzeug.');
@@ -93,8 +93,15 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
       if (errors.length > 0) {
         return res.status(400).render('stoerung-neu', {
           VEHICLES, errors,
-          old: { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt },
+          old: { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail },
         });
+      }
+
+      let melderKontakt = '';
+      if (melderHandy && melderHandy.trim()) melderKontakt += 'Handy: ' + melderHandy.trim();
+      if (melderMail && melderMail.trim()) {
+        if (melderKontakt) melderKontakt += ' | ';
+        melderKontakt += 'Mail: ' + melderMail.trim();
       }
 
       const storung = await db.createStorung({

@@ -32,19 +32,33 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label required" for="melderKontakt">Handy oder E‑Mail</label>
+      <label class="form-label required" for="melderHandy">Handy</label>
       <input
-        type="text"
-        id="melderKontakt"
-        name="melderKontakt"
+        type="tel"
+        id="melderHandy"
+        name="melderHandy"
         class="form-control"
-        placeholder="Mobilnummer oder E‑Mailadresse"
-        value="<%= old.melderKontakt || '' %>"
-        required
+        placeholder="Mobilnummer"
+        value="<%= old.melderHandy || '' %>"
         minlength="5"
-        maxlength="120"
+        maxlength="40"
+        autocomplete="tel"
       >
-      <span class="form-hint">Wird nur für Rückfragen der Werkstatt verwendet.</span>
+      <span class="form-hint">Handy oder E‑Mail muss ausgefüllt sein.</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="melderMail">E‑Mail</label>
+      <input
+        type="email"
+        id="melderMail"
+        name="melderMail"
+        class="form-control"
+        placeholder="E‑Mailadresse"
+        value="<%= old.melderMail || '' %>"
+        maxlength="120"
+        autocomplete="email"
+      >
     </div>
 
     <!-- Fahrzeug -->
@@ -119,6 +133,7 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           <span>Klicken oder Dateien hierher ziehen</span>
           <span class="upload-hint">JPG, PNG, GIF, WebP, MP4, MOV &middot; max. 6 Dateien</span>
+          <button type="button" class="btn btn-sm btn-ghost" id="uploadButton">Dateien auswählen…</button>
         </div>
         <div class="file-preview" id="filePreview" hidden></div>
       </div>
@@ -148,8 +163,15 @@ const area = document.getElementById('uploadArea');
 const input = document.getElementById('attachments');
 const preview = document.getElementById('filePreview');
 const placeholder = document.getElementById('uploadPlaceholder');
+const uploadButton = document.getElementById('uploadButton');
 
-area.addEventListener('click', () => input.click());
+if (uploadButton) {
+  uploadButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    input.click();
+  });
+}
+
 area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('drag-over'); });
 area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
 area.addEventListener('drop', e => {

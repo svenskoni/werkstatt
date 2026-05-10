@@ -16,7 +16,8 @@ function formatDate(iso) {
         <tr><th>Schweregrad</th><td><span class="schwere-badge schwere-<%= storung.schwere.toLowerCase() %>"><%= SCHWERE[storung.schwere]?.icon %> <%= SCHWERE[storung.schwere]?.label %></span></td></tr>
         <tr><th>Fehler</th><td><%= storung.fehlerBeschreibung %></td></tr>
         <tr><th>Status</th><td><strong><%= storung.status === 'gesendet' ? 'Eingegangen' : storung.status === 'bestaetigt' ? 'In Bearbeitung' : 'Erledigt' %></strong></td></tr>
-        <tr><th>Gemeldet von</th><td><%= storung.createdBy %></td></tr>
+        <tr><th>Gemeldet von</th><td><%= storung.melderName %> &ndash; <%= storung.melderKontakt %></td></tr>
+        <tr><th>Erfasst von</th><td><%= storung.createdBy %></td></tr>
         <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
       </table>
@@ -55,5 +56,44 @@ function formatDate(iso) {
         <% }); %>
       </ol>
     </div>
+
+    <% if (user && user.role === 'admin') { %>
+    <div class="detail-card" style="border-color:var(--color-primary)">
+      <h3 style="margin-bottom:var(--space-2);color:var(--color-primary)">⚠️ Gefahrenbereich (Admin)</h3>
+      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
+        Löscht diese Störung <strong>vollständig</strong>: alle Anhänge vom Server, alle
+        Datenbankeinträge inkl. Verlauf. Diese Aktion ist <strong>nicht rückgängig</strong> zu machen.
+      </p>
+      <button class="btn btn-danger" id="deleteBtn" data-id="<%= storung.id %>">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        Störung endgültig löschen
+      </button>
+    </div>
+    <% } %>
   </div>
 </div>
+
+<% if (user && user.role === 'admin') { %>
+<script>
+document.getElementById('deleteBtn').addEventListener('click', async function() {
+  const id = this.dataset.id;
+  if (!confirm('Störung wirklich ENDGÜLTIG löschen?\nAlle Anhänge und Datenbankeinträge werden gelöscht.')) return;
+  this.disabled = true;
+  this.textContent = 'Lösche…';
+  try {
+    const r = await fetch('/stoerung/' + id, { method: 'DELETE' });
+    const data = await r.json();
+    if (data.ok) {
+      window.location.href = '/?success=deleted';
+    } else {
+      alert('Fehler: ' + (data.error || 'Unbekannt'));
+      this.disabled = false;
+      this.textContent = 'Störung endgültig löschen';
+    }
+  } catch (e) {
+    alert('Netzwerkfehler.');
+    this.disabled = false;
+  }
+});
+</script>
+<% } %>

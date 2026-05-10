@@ -41,7 +41,6 @@ function flushFilesToDisk(files = []) {
   });
 }
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
 router.get('/', optionalLogin, async (req, res, next) => {
   try {
     const [gesendet, bestaetigt, erledigt] = await Promise.all([
@@ -62,7 +61,6 @@ router.get('/', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Neue Störung ─────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireRole('user', 'admin'), (req, res) => {
   res.render('stoerung-neu', { VEHICLES, errors: null, old: {} });
 });
@@ -112,7 +110,6 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         attachments: savedFiles,
       });
 
-      // Admin-Info + Melder-Bestätigung parallel senden
       mailer.sendStorungMail(storung).catch(err => console.error('[Mailer]', err.message));
       mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Mailer Melder]', err.message));
 
@@ -121,7 +118,6 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
   }
 );
 
-// ── Detail ───────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id(*)', optionalLogin, async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
@@ -136,7 +132,6 @@ router.get('/stoerung/:id(*)', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Status ändern ────────────────────────────────────────────────────────────
 router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
     const { newStatus, note } = req.body;
@@ -155,17 +150,15 @@ router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Löschen ──────────────────────────────────────────────────────────────────
 router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
-    // Bei erledigt: kein Grund nötig
     let grund = sanitize(req.body?.grund || '');
     if (!grund && storung.status !== 'erledigt')
       return res.status(400).json({ error: 'Bitte eine Begr\u00fcndung angeben.' });
-    if (!grund) grund = 'Erledigt – automatisch bereinigt';
+    if (!grund) grund = 'Erledigt \u2013 automatisch bereinigt';
 
     for (const att of storung.attachments || []) {
       const filePath = path.join(UPLOAD_DIR, att.filename);
@@ -173,24 +166,24 @@ router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) =
     }
 
     mailer.sendDeleteMail(storung, req.session.user.username, grund)
-      .catch(err => console.error('[Mailer] Lösch-Mail Fehler:', err.message));
+      .catch(err => console.error('[Mailer] L\u00f6sch-Mail Fehler:', err.message));
 
     await db.deleteStorung(req.params.id);
     return res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
-// ── API: Ähnliche Fehler ─────────────────────────────────────────────────────
+// API: Ähnliche Fehler – jetzt mit optionalem ?fahrzeug= Parameter
 router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) => {
   try {
-    const q = String(req.query.q || '').trim();
-    if (q.length < 2) return res.json([]);
-    const results = await db.searchSimilarFehler(q);
+    const q        = String(req.query.q        || '').trim();
+    const fahrzeug = String(req.query.fahrzeug || '').trim() || null;
+    if (q.length < 6) return res.json([]);
+    const results = await db.searchSimilarFehler(q, fahrzeug && VEHICLES.includes(fahrzeug) ? fahrzeug : null);
     res.json(results.map(s => ({ id: s.id, fahrzeug: s.fahrzeug, fehler: s.fehlerBeschreibung, schwere: s.schwere })));
   } catch (err) { next(err); }
 });
 
-// ── API: Suche ──────────────────────────────────────────────────────────────────
 router.get('/api/suche', optionalLogin, async (req, res, next) => {
   try {
     const fahrzeug    = String(req.query.fahrzeug || '').trim();

@@ -37,11 +37,11 @@
         maxlength="120" autocomplete="email">
     </div>
 
-    <!-- Benachrichtigung opt-in -->
+    <!-- Benachrichtigung opt-in (nur sichtbar wenn E-Mail vorhanden) -->
     <div class="form-group" id="benachrichtigungGroup" style="display:none">
       <div class="toggle-card" id="benachrichtigungToggle" role="checkbox" aria-checked="false" tabindex="0"
         style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4);border-radius:var(--radius-md);border:2px solid var(--color-border);cursor:pointer;background:var(--color-surface);transition:border-color var(--transition-interactive),background var(--transition-interactive)">
-        <div class="toggle-icon" style="font-size:22px;line-height:1">🔔</div>
+        <div style="font-size:22px;line-height:1">🔔</div>
         <div style="flex:1">
           <div style="font-weight:600;font-size:var(--text-sm)">Ich möchte bei Statusänderungen informiert werden</div>
           <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px">Sie erhalten eine E-Mail wenn sich der Status ändert (z. B. „In Bearbeitung“, „Erledigt“)</div>
@@ -85,12 +85,12 @@
       <input type="text" id="fehlerBeschreibung" name="fehlerBeschreibung" class="form-control"
         placeholder="Kurze, prägnante Beschreibung des Fehlers…"
         value="<%= old.fehlerBeschreibung || '' %>"
-        required minlength="3" maxlength="200" autocomplete="off">
+        required minlength="6" maxlength="200" autocomplete="off">
       <div id="similarWarning" class="similar-warning" hidden>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span id="similarText">Ähnliche offene Störungen gefunden.</span>
       </div>
-      <span class="form-hint">Wird automatisch mit offenen Störungen abgeglichen.</span>
+      <span class="form-hint">Mind. 6 Zeichen &ndash; wird mit offenen Störungen dieses Fahrzeugs abgeglichen.</span>
     </div>
 
     <!-- Detailbeschreibung -->
@@ -127,7 +127,7 @@
 </div>
 
 <script>
-// Schweregrad visuelle Auswahl
+// Schweregrad
 document.querySelectorAll('.schwere-option').forEach(opt => {
   opt.addEventListener('click', () => {
     document.querySelectorAll('.schwere-option').forEach(o => o.classList.remove('checked'));
@@ -135,7 +135,7 @@ document.querySelectorAll('.schwere-option').forEach(opt => {
   });
 });
 
-// Upload Drag & Drop
+// Upload
 const area = document.getElementById('uploadArea');
 const input = document.getElementById('attachments');
 const preview = document.getElementById('filePreview');
@@ -173,72 +173,66 @@ function showPreview(files) {
   });
 }
 
-// Ähnliche Fehler Abgleich
-const fehlerInput = document.getElementById('fehlerBeschreibung');
-const warning = document.getElementById('similarWarning');
-const warningText = document.getElementById('similarText');
+// Ähnliche Fehler – nur im gewählten Fahrzeug, ab 6 Zeichen
+const fehlerInput   = document.getElementById('fehlerBeschreibung');
+const fahrzeugSelect = document.getElementById('fahrzeug');
+const warning       = document.getElementById('similarWarning');
+const warningText   = document.getElementById('similarText');
 let debounceTimer;
-fehlerInput.addEventListener('input', () => {
+
+function checkSimilar() {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
-    const q = fehlerInput.value.trim();
-    if (q.length < 3) { warning.hidden = true; return; }
+    const q        = fehlerInput.value.trim();
+    const fahrzeug = fahrzeugSelect.value;
+    if (q.length < 6) { warning.hidden = true; return; }
     try {
-      const r = await fetch('/api/similar?q=' + encodeURIComponent(q));
+      const params = new URLSearchParams({ q });
+      if (fahrzeug) params.set('fahrzeug', fahrzeug);
+      const r = await fetch('/api/similar?' + params.toString());
       const data = await r.json();
       if (data.length > 0) {
-        warningText.textContent = data.length + ' ähnliche offene Störung(en): ' + data.map(d => d.fahrzeug + ' – ' + d.fehler).join(' | ');
+        warningText.textContent = data.length + ' ähnliche offene Störung(en) bei ' +
+          (fahrzeug || 'diesem Fahrzeug') + ': ' +
+          data.map(d => d.fehler).join(' | ');
         warning.hidden = false;
       } else { warning.hidden = true; }
     } catch { warning.hidden = true; }
   }, 400);
-});
+}
 
-// Benachrichtigungs-Toggle – nur anzeigen wenn E-Mail ausgefüllt
-const mailInput   = document.getElementById('melderMail');
-const benGrp      = document.getElementById('benachrichtigungGroup');
-const benToggle   = document.getElementById('benachrichtigungToggle');
-const benInput    = document.getElementById('melderBenachrichtigungInput');
-const benCheck    = benToggle.querySelector('.toggle-check');
-let benActive     = false;
+fehlerInput.addEventListener('input', checkSimilar);
+fahrzeugSelect.addEventListener('change', checkSimilar);
+
+// Benachrichtigungs-Toggle
+const mailInput  = document.getElementById('melderMail');
+const benGrp     = document.getElementById('benachrichtigungGroup');
+const benToggle  = document.getElementById('benachrichtigungToggle');
+const benInput   = document.getElementById('melderBenachrichtigungInput');
+const benCheck   = benToggle.querySelector('.toggle-check');
+let benActive    = false;
 
 function updateBenVisible() {
   const hasMail = mailInput.value.trim().includes('@');
   benGrp.style.display = hasMail ? 'block' : 'none';
-  if (!hasMail) {
-    benActive = false;
-    benInput.value = '0';
-    applyBenState();
-  }
+  if (!hasMail) { benActive = false; benInput.value = '0'; applyBenState(); }
 }
-
 function applyBenState() {
   if (benActive) {
     benToggle.style.borderColor = 'var(--color-primary)';
     benToggle.style.background  = 'oklch(from var(--color-primary) l c h / 0.07)';
-    benCheck.textContent = '✓';
-    benCheck.style.borderColor = 'var(--color-primary)';
-    benCheck.style.color = 'var(--color-primary)';
-    benCheck.style.fontWeight = 'bold';
+    benCheck.textContent = '✓'; benCheck.style.borderColor = 'var(--color-primary)';
+    benCheck.style.color = 'var(--color-primary)'; benCheck.style.fontWeight = 'bold';
     benToggle.setAttribute('aria-checked', 'true');
   } else {
     benToggle.style.borderColor = 'var(--color-border)';
     benToggle.style.background  = 'var(--color-surface)';
-    benCheck.textContent = '';
-    benCheck.style.borderColor = 'var(--color-border)';
+    benCheck.textContent = ''; benCheck.style.borderColor = 'var(--color-border)';
     benToggle.setAttribute('aria-checked', 'false');
   }
 }
-
-benToggle.addEventListener('click', () => {
-  benActive = !benActive;
-  benInput.value = benActive ? '1' : '0';
-  applyBenState();
-});
-benToggle.addEventListener('keydown', e => {
-  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); benToggle.click(); }
-});
-
+benToggle.addEventListener('click', () => { benActive = !benActive; benInput.value = benActive ? '1' : '0'; applyBenState(); });
+benToggle.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); benToggle.click(); } });
 mailInput.addEventListener('input', updateBenVisible);
 updateBenVisible();
 </script>

@@ -45,10 +45,9 @@ async function initDb() {
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
   `);
-  // Migration: Spalte nachrüsten falls DB bereits existiert
   try {
     await db.execute(`ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`);
-  } catch { /* Spalte existiert bereits – kein Fehler */ }
+  } catch { /* already exists */ }
 }
 
 async function run(sql, args = []) { return db.execute({ sql, args }); }
@@ -65,7 +64,6 @@ async function generateTicketId(fahrzeug, isoDate) {
   return prefix + String(next).padStart(3, '0');
 }
 
-// ── CRUD ─────────────────────────────────────────────────────────────────────
 async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
   const now = new Date().toISOString();
   const id  = await generateTicketId(fahrzeug, now);
@@ -137,9 +135,27 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
   return all(sql, args);
 }
 
-async function searchSimilarFehler(query) {
+/**
+ * Ähnliche Fehler – gefiltert nach Fahrzeug (wenn angegeben) und nur nicht-erledigte.
+ * @param {string} query  Suchbegriff (mind. 6 Zeichen erwartet vom Frontend)
+ * @param {string} [fahrzeug]  Fahrzeugkennzeichen – nur in diesem Fahrzeug suchen
+ */
+async function searchSimilarFehler(query, fahrzeug) {
+  if (fahrzeug) {
+    return all(
+      `SELECT * FROM stoerungen
+       WHERE status != 'erledigt'
+         AND fahrzeug = ?
+         AND lower(fehlerBeschreibung) LIKE ?
+       ORDER BY createdAt DESC LIMIT 5`,
+      [fahrzeug, '%' + query.toLowerCase() + '%']
+    );
+  }
   return all(
-    `SELECT * FROM stoerungen WHERE status != 'erledigt' AND lower(fehlerBeschreibung) LIKE ? ORDER BY createdAt DESC LIMIT 5`,
+    `SELECT * FROM stoerungen
+     WHERE status != 'erledigt'
+       AND lower(fehlerBeschreibung) LIKE ?
+     ORDER BY createdAt DESC LIMIT 5`,
     ['%' + query.toLowerCase() + '%']
   );
 }

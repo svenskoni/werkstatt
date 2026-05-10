@@ -1,4 +1,7 @@
 'use strict';
-// Rein fuer Kompatibilitaet, wird unter Plesk NICHT verwendet.
-// Kann spaeter geloescht werden, stoert aber nicht.
-require('./app.js');
+// Ehemaliger Einstiegspunkt, wird unter Plesk nicht mehr benötigt.
+// Aus Gruenden der Klarheit belassen wir nur app.js als offiziellen Startpunkt.
+// Diese Datei kann spaeter komplett entfernt werden, wenn sichergestellt ist,
+// dass nirgendwo mehr auf server.js verwiesen wird.
+
+require('./app');

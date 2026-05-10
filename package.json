@@ -1,10 +1,12 @@
 {
   "name": "feuerwehr-stoerungsmelder",
-  "version": "1.4.0",
-  "description": "Feuerwehr Störungs- und Reparaturmeldungssystem – LZ Frechen (Plesk-only)",
+  "version": "1.4.1",
+  "description": "Feuerwehr Störungs- und Reparaturmeldungssystem – LZ Frechen (Plesk only)",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "debug-port": "node -e \"console.log('PORT=', process.env.PORT || 'UNSET')\"",
+    "debug-app": "node app.js"
   },
   "engines": {
     "node": ">=18.0.0"

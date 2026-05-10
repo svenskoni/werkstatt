@@ -32,8 +32,8 @@
           </a>
         <% } %>
 
-        <!-- Suche-Button (immer sichtbar) -->
-        <button class="btn btn-ghost btn-sm" id="searchBtn" aria-label="Störung suchen" title="Störung suchen">
+        <!-- Suche-Button -->
+        <button class="btn btn-ghost btn-sm" id="searchBtn" aria-label="St&ouml;rung suchen" title="St&ouml;rung suchen">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
@@ -100,6 +100,7 @@
         <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
       </div>
 
+      <!-- Fahrzeug -->
       <div class="form-group">
         <label class="form-label" for="searchFahrzeug">Fahrzeug</label>
         <select class="form-control" id="searchFahrzeug">
@@ -110,9 +111,32 @@
         </select>
       </div>
 
+      <!-- Monat -->
       <div class="form-group">
         <label class="form-label" for="searchMonat">Monat <span style="font-weight:400;color:var(--color-text-muted)">(optional)</span></label>
         <input type="month" class="form-control" id="searchMonat">
+      </div>
+
+      <!-- Status-Filter -->
+      <div class="form-group" style="margin-bottom:var(--space-5)">
+        <span class="form-label" style="display:block;margin-bottom:var(--space-2)">Status</span>
+        <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
+            <input type="checkbox" id="statusGesendet" value="gesendet" checked>
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--color-new);display:inline-block"></span>
+            Eingegangen
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
+            <input type="checkbox" id="statusBestaetigt" value="bestaetigt" checked>
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--color-active);display:inline-block"></span>
+            In Bearbeitung
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
+            <input type="checkbox" id="statusErledigt" value="erledigt" checked>
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--color-done);display:inline-block"></span>
+            Erledigt
+          </label>
+        </div>
       </div>
 
       <button class="btn btn-primary" id="searchSubmit" style="width:100%">Suchen</button>
@@ -126,20 +150,14 @@
   // Such-Modal
   (function () {
     const VEHICLES = <%- JSON.stringify(VEHICLES) %>;
-    const btn    = document.getElementById('searchBtn');
-    const modal  = document.getElementById('searchModal');
-    const close  = document.getElementById('searchModalClose');
-    const submit = document.getElementById('searchSubmit');
+    const btn     = document.getElementById('searchBtn');
+    const modal   = document.getElementById('searchModal');
+    const close   = document.getElementById('searchModalClose');
+    const submit  = document.getElementById('searchSubmit');
     const results = document.getElementById('searchResults');
 
-    function openModal() {
-      modal.hidden = false;
-      modal.focus();
-    }
-    function closeModal() {
-      modal.hidden = true;
-      results.innerHTML = '';
-    }
+    function openModal() { modal.hidden = false; modal.focus(); }
+    function closeModal() { modal.hidden = true; results.innerHTML = ''; }
 
     btn.addEventListener('click', openModal);
     close.addEventListener('click', closeModal);
@@ -148,13 +166,23 @@
 
     const SCHWERE_ICON = { klein: '\uD83D\uDFE2', normal: '\uD83D\uDFE1', schwer: '\uD83D\uDFE0', totalausfall: '\uD83D\uDD34' };
     const STATUS_LABEL = { gesendet: 'Eingegangen', bestaetigt: 'In Bearbeitung', erledigt: 'Erledigt' };
+    const STATUS_COLOR = { gesendet: 'var(--color-new)', bestaetigt: 'var(--color-active)', erledigt: 'var(--color-done)' };
 
     submit.addEventListener('click', async () => {
       const fahrzeug = document.getElementById('searchFahrzeug').value.trim();
       const monat    = document.getElementById('searchMonat').value.trim();
 
+      // Gewählte Status sammeln
+      const checkedStatuses = ['statusGesendet','statusBestaetigt','statusErledigt']
+        .filter(id => document.getElementById(id).checked)
+        .map(id => document.getElementById(id).value);
+
       if (!fahrzeug) {
         results.innerHTML = '<p style="color:var(--color-error)">Bitte ein Fahrzeug w&auml;hlen.</p>';
+        return;
+      }
+      if (checkedStatuses.length === 0) {
+        results.innerHTML = '<p style="color:var(--color-error)">Bitte mindestens einen Status ausw&auml;hlen.</p>';
         return;
       }
 
@@ -165,6 +193,8 @@
       try {
         const params = new URLSearchParams({ fahrzeug });
         if (monat) params.set('monat', monat);
+        params.set('status', checkedStatuses.join(','));
+
         const res  = await fetch('/api/suche?' + params);
         const data = await res.json();
 
@@ -174,11 +204,15 @@
           const rows = data.map(s => {
             const icon   = SCHWERE_ICON[s.schwere] || '';
             const status = STATUS_LABEL[s.status]  || s.status;
+            const color  = STATUS_COLOR[s.status]  || 'var(--color-text-muted)';
             const datum  = new Date(s.createdAt).toLocaleDateString('de-DE');
             return `<a href="/stoerung/${encodeURIComponent(s.id)}" class="search-result-item">
               <span class="search-result-id">${s.id}</span>
               <span class="search-result-fehler">${s.fehlerBeschreibung}</span>
-              <span class="search-result-meta">${icon} &nbsp;${datum} &nbsp;&middot;&nbsp; ${status}</span>
+              <span class="search-result-meta">
+                ${icon}&nbsp;${datum}&nbsp;&middot;&nbsp;
+                <span style="color:${color};font-weight:600">${status}</span>
+              </span>
             </a>`;
           });
           results.innerHTML = '<div class="search-result-list">' + rows.join('') + '</div>';

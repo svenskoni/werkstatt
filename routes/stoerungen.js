@@ -174,14 +174,19 @@ router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) 
   } catch (err) { next(err); }
 });
 
-// ── API: Suche nach Fahrzeug + Monat ─────────────────────────────────────────
+// ── API: Suche nach Fahrzeug + Monat + Status ────────────────────────────────
 router.get('/api/suche', optionalLogin, async (req, res, next) => {
   try {
     const fahrzeug = String(req.query.fahrzeug || '').trim();
-    const monat    = String(req.query.monat    || '').trim(); // YYYY-MM oder leer
+    const monat    = String(req.query.monat    || '').trim();
+    // status kann komma-getrennt übergeben werden: ?status=gesendet,bestaetigt
+    const statusParam = String(req.query.status || '').trim();
+    const statuses = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     if (!VEHICLES.includes(fahrzeug))
       return res.status(400).json({ error: 'Ung\u00fcltiges Fahrzeug.' });
-    const results = await db.searchByFahrzeugMonat(fahrzeug, monat || null);
+
+    const results = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statuses);
     res.json(results);
   } catch (err) { next(err); }
 });

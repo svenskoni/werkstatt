@@ -52,8 +52,6 @@ async function get(sql, args = []) { const r = await db.execute({ sql, args }); 
 
 /**
  * Erzeugt die lesbare Ticket-ID: <Fahrzeug>-<YYYY>-<MM>-<NNN>
- * Beispiel: FRE1/HLF20/1-2026-05-003
- * Zähler läuft pro Fahrzeug + Jahr + Monat.
  */
 async function generateTicketId(fahrzeug, isoDate) {
   const d     = new Date(isoDate);
@@ -126,27 +124,29 @@ async function updateStatus(id, newStatus, changedBy, note) {
 }
 
 /**
- * Suche: Fahrzeug (exakt) + optionaler Monat (YYYY-MM)
- * Gibt id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt zurück.
+ * Suche: Fahrzeug (exakt) + optionaler Monat (YYYY-MM) + optionaler Status-Filter (Array)
+ * statuses = [] oder null → alle Status
  */
-async function searchByFahrzeugMonat(fahrzeug, monat) {
+async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
+  const validStatuses = ['gesendet', 'bestaetigt', 'erledigt'];
+  const filtered = Array.isArray(statuses) && statuses.length > 0
+    ? statuses.filter(s => validStatuses.includes(s))
+    : validStatuses;
+
+  const placeholders = filtered.map(() => '?').join(',');
+  const args = [fahrzeug, ...filtered];
+
+  let sql = `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
+             FROM stoerungen
+             WHERE fahrzeug = ? AND status IN (${placeholders})`;
+
   if (monat) {
-    // monat = "YYYY-MM"
-    return all(
-      `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
-       FROM stoerungen
-       WHERE fahrzeug = ? AND strftime('%Y-%m', createdAt) = ?
-       ORDER BY createdAt DESC`,
-      [fahrzeug, monat]
-    );
+    sql += ` AND strftime('%Y-%m', createdAt) = ?`;
+    args.push(monat);
   }
-  return all(
-    `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
-     FROM stoerungen
-     WHERE fahrzeug = ?
-     ORDER BY createdAt DESC`,
-    [fahrzeug]
-  );
+
+  sql += ` ORDER BY createdAt DESC`;
+  return all(sql, args);
 }
 
 async function searchSimilarFehler(query) {

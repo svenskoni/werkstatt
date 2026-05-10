@@ -41,6 +41,7 @@ async function initDb() {
       originalname TEXT NOT NULL,
       mimetype     TEXT NOT NULL,
       size         INTEGER NOT NULL,
+      createdAt    TEXT NOT NULL,
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
   `);
@@ -72,8 +73,8 @@ async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschr
   );
   for (const a of attachments) {
     await run(
-      `INSERT INTO stoerung_attachments (stoerungId,filename,originalname,mimetype,size) VALUES (?,?,?,?,?)`,
-      [id, a.filename, a.originalname, a.mimetype, a.size]
+      `INSERT INTO stoerung_attachments (stoerungId,filename,originalname,mimetype,size,createdAt) VALUES (?,?,?,?,?,?)`,
+      [id, a.filename, a.originalname, a.mimetype, a.size, now]
     );
   }
   return getStorungById(id);

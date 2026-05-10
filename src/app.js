@@ -9,14 +9,14 @@ const fs             = require('fs');
 
 const authRoutes     = require('../routes/auth');
 const stoerungRoutes = require('../routes/stoerungen');
+const db             = require('./database');
+const cleanup        = require('./cleanup');
 
 const app = express();
 
-// Upload-Verzeichnis sicherstellen
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
 
-// Sicherheits-Header (Helmet)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -33,67 +33,48 @@ app.use(helmet({
     : false
 }));
 
-// Rate Limiting
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false }));
-app.use('/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({ windowMs: 15*60*1000, max: 200, standardHeaders: true, legacyHeaders: false }));
+app.use('/login', rateLimit({ windowMs: 15*60*1000, max: 15, standardHeaders: true, legacyHeaders: false }));
 
-// Body-Parser
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
-
-// Statische Dateien
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Session
 app.use(session({
   secret:            process.env.SESSION_SECRET || 'fw-secret-bitte-aendern',
   resave:            false,
   saveUninitialized: false,
   name:              'fw.sid',
-  cookie: {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge:   8 * 60 * 60 * 1000
-  }
+  cookie: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 8*60*60*1000 }
 }));
 
-// Template Engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '..', 'views'));
 app.use(ejsLayouts);
 app.set('layout', 'layout');
 
-// Globale Template-Variablen
 app.use((req, res, next) => {
   res.locals.user        = req.session.user || null;
   res.locals.currentPath = req.path;
-  res.locals.path        = req.path; // Alias fuer bestehende EJS-Templates
+  res.locals.path        = req.path;
   next();
 });
 
-// Routen
 app.use('/', authRoutes);
 app.use('/', stoerungRoutes);
 
-// 404
-app.use((req, res) => {
-  res.status(404).render('error', {
-    title:   '404 – Nicht gefunden',
-    message: 'Die angeforderte Seite existiert nicht.'
+app.use((req, res) => res.status(404).render('error', { title: '404 – Nicht gefunden', message: 'Die Seite existiert nicht.' }));
+app.use((err, req, res, _next) => {
+  console.error('[ERROR]', err);
+  res.status(err.status || 500).render('error', {
+    title: `${err.status || 500} – Fehler`,
+    message: process.env.NODE_ENV === 'production' ? 'Ein interner Fehler ist aufgetreten.' : err.message,
   });
 });
 
-// Fehler-Handler
-app.use((err, req, res, _next) => {
-  console.error('[ERROR]', err);
-  const status = err.status || 500;
-  res.status(status).render('error', {
-    title:   `${status} – Serverfehler`,
-    message: process.env.NODE_ENV === 'production'
-      ? 'Ein interner Fehler ist aufgetreten.'
-      : err.message
-  });
-});
+// DB initialisieren, dann Cleanup-Scheduler starten
+db.initDb()
+  .then(() => cleanup.scheduleDaily())
+  .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });
 
 module.exports = app;

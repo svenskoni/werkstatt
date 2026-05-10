@@ -11,14 +11,12 @@ const { requireRole, optionalLogin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// --- Upload-Konfiguration (memoryStorage – Dateien erst nach Validierung speichern) ---
 const MAX_MB      = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const ALLOWED_MIME = new Set([
   'image/jpeg','image/png','image/gif','image/webp',
   'video/mp4','video/quicktime','video/x-msvideo','video/webm',
 ]);
 
-// Multer hält Dateien IM RAM – wird erst nach Validierung auf die Platte geschrieben
 const upload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: MAX_MB * 1024 * 1024, files: 6 },
@@ -35,8 +33,6 @@ function sanitize(str) {
   return sanitizeHtml(String(str || ''), { allowedTags: [], allowedAttributes: {} }).trim();
 }
 
-// Schreibt die im RAM gepufferten Dateien auf die Platte
-// Gibt Array mit { filename, originalname, mimetype, size } zurück
 function flushFilesToDisk(files = []) {
   return files.map(f => {
     const ext      = path.extname(f.originalname).toLowerCase();
@@ -46,9 +42,7 @@ function flushFilesToDisk(files = []) {
   });
 }
 
-// ========================================================================
-// GET / – Dashboard
-// ========================================================================
+// ── Dashboard ────────────────────────────────────────────────────────────────
 router.get('/', optionalLogin, async (req, res, next) => {
   try {
     const [gesendet, bestaetigt, erledigt] = await Promise.all([
@@ -69,16 +63,12 @@ router.get('/', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ========================================================================
-// GET /stoerung/neu – Formular
-// ========================================================================
+// ── Formular ─────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireRole('user', 'admin'), (req, res) => {
   res.render('stoerung-neu', { VEHICLES, errors: null, old: {} });
 });
 
-// ========================================================================
-// POST /stoerung/neu – Speichern
-// ========================================================================
+// ── Neue Störung speichern ────────────────────────────────────────────────────
 router.post('/stoerung/neu', requireRole('user', 'admin'),
   upload.array('attachments', 6),
   async (req, res, next) => {
@@ -98,14 +88,12 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         errors.push('Fehlerbeschreibung zu kurz (mind. 3 Zeichen).');
 
       if (errors.length > 0) {
-        // Dateien sind noch im RAM – nichts auf Platte, keine Karteileichen
         return res.status(400).render('stoerung-neu', {
           VEHICLES, errors,
           old: { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail },
         });
       }
 
-      // Erst JETZT auf Platte schreiben – Validierung war erfolgreich
       const savedFiles = flushFilesToDisk(req.files || []);
 
       let melderKontakt = '';
@@ -116,37 +104,24 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
       }
 
       const storung = await db.createStorung({
-        id:                 uuidv4(),
-        fahrzeug:           sanitize(fahrzeug),
-        schwere:            sanitize(schwere),
-        fehlerBeschreibung: sanitize(fehlerBeschreibung),
-        beschreibung:       sanitize(beschreibung),
-        createdBy:          req.session.user.username,
-        melderName:         sanitize(melderName),
-        melderKontakt:      sanitize(melderKontakt),
-        attachments:        savedFiles,
+        id: uuidv4(), fahrzeug: sanitize(fahrzeug), schwere: sanitize(schwere),
+        fehlerBeschreibung: sanitize(fehlerBeschreibung), beschreibung: sanitize(beschreibung),
+        createdBy: req.session.user.username,
+        melderName: sanitize(melderName), melderKontakt: sanitize(melderKontakt),
+        attachments: savedFiles,
       });
 
-      mailer.sendStorungMail(storung).catch(err =>
-        console.error('[Mailer] Fehler:', err.message));
-
+      mailer.sendStorungMail(storung).catch(err => console.error('[Mailer] Fehler:', err.message));
       res.redirect('/?success=created');
     } catch (err) { next(err); }
   }
 );
 
-// ========================================================================
-// GET /stoerung/:id – Detail
-// ========================================================================
+// ── Detail ────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', optionalLogin, async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
-    if (!storung) {
-      return res.status(404).render('error', {
-        title: '404 – Nicht gefunden',
-        message: 'Diese Störung existiert nicht.',
-      });
-    }
+    if (!storung) return res.status(404).render('error', { title: '404', message: 'Nicht gefunden.' });
     const SCHWERE = {
       klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
       normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
@@ -157,23 +132,17 @@ router.get('/stoerung/:id', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ========================================================================
-// POST /status/:id – Status ändern (Admin)
-// ========================================================================
+// ── Status ändern ─────────────────────────────────────────────────────────────
 router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
   try {
     const { newStatus, note } = req.body;
-    const allowed = ['gesendet', 'bestaetigt', 'erledigt'];
-
-    if (!allowed.includes(newStatus))
+    if (!['gesendet','bestaetigt','erledigt'].includes(newStatus))
       return res.status(400).json({ error: 'Ungültiger Status.' });
 
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
-    const updated = await db.updateStatus(
-      req.params.id, newStatus, req.session.user.username, note);
-
+    const updated = await db.updateStatus(req.params.id, newStatus, req.session.user.username, note);
     mailer.sendStatusMail(updated, req.session.user.username)
       .catch(err => console.error('[Mailer] Status-Mail Fehler:', err.message));
 
@@ -182,20 +151,32 @@ router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ========================================================================
-// GET /api/similar – Ähnliche Fehler
-// ========================================================================
+// ── Störung löschen (Admin) ───────────────────────────────────────────────────
+router.delete('/stoerung/:id', requireRole('admin'), async (req, res, next) => {
+  try {
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+
+    // Dateien von Platte löschen
+    for (const att of storung.attachments || []) {
+      const filePath = path.join(UPLOAD_DIR, att.filename);
+      try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
+    }
+
+    // DB-Eintrag löschen (inkl. History + Attachments via CASCADE)
+    await db.deleteStorung(req.params.id);
+
+    return res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ── Ähnliche Fehler ───────────────────────────────────────────────────────────
 router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim();
     if (q.length < 2) return res.json([]);
     const results = await db.searchSimilarFehler(q);
-    res.json(results.map(s => ({
-      id:       s.id,
-      fahrzeug: s.fahrzeug,
-      fehler:   s.fehlerBeschreibung,
-      schwere:  s.schwere,
-    })));
+    res.json(results.map(s => ({ id: s.id, fahrzeug: s.fahrzeug, fehler: s.fehlerBeschreibung, schwere: s.schwere })));
   } catch (err) { next(err); }
 });
 

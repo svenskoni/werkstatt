@@ -1,5 +1,4 @@
 'use strict';
-// SQLite via @libsql/client – reines JavaScript, kein node-gyp erforderlich
 const { createClient } = require('@libsql/client');
 const path = require('path');
 const fs   = require('fs');
@@ -10,7 +9,6 @@ fs.mkdirSync(DB_DIR, { recursive: true });
 
 const db = createClient({ url: 'file:' + DB_FILE });
 
-// Schema beim Start anlegen
 async function initDb() {
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS stoerungen (
@@ -42,23 +40,15 @@ async function initDb() {
       mimetype     TEXT NOT NULL,
       size         INTEGER NOT NULL,
       createdAt    TEXT NOT NULL,
+      compressed   INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
   `);
 }
 
-// ── Hilfsfunktionen ─────────────────────────────────────────────────────────
-async function run(sql, args = []) {
-  return db.execute({ sql, args });
-}
-async function all(sql, args = []) {
-  const r = await db.execute({ sql, args });
-  return r.rows;
-}
-async function get(sql, args = []) {
-  const r = await db.execute({ sql, args });
-  return r.rows[0] || null;
-}
+async function run(sql, args = []) { return db.execute({ sql, args }); }
+async function all(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows; }
+async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
 async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, attachments = [] }) {
@@ -123,4 +113,42 @@ async function searchSimilarFehler(query) {
   );
 }
 
-module.exports = { initDb, createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus, searchSimilarFehler };
+// ── Cleanup-Hilfsfunktionen ──────────────────────────────────────────────────
+
+/** Anhänge von erledigten Störungen, die älter als cutoff sind und noch nicht komprimiert wurden */
+async function getAttachmentsForCompression(cutoffIso) {
+  return all(`
+    SELECT a.* FROM stoerung_attachments a
+    JOIN stoerungen s ON s.id = a.stoerungId
+    WHERE s.status = 'erledigt'
+      AND s.createdAt < ?
+      AND a.compressed = 0
+  `, [cutoffIso]);
+}
+
+async function markAttachmentCompressed(id) {
+  return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]);
+}
+
+/** Alle Anhänge aufsteigend nach Erstelldatum – für Purge */
+async function getOldestAttachments() {
+  return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`);
+}
+
+async function deleteAttachment(id) {
+  return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]);
+}
+
+/** Löscht eine Störung vollständig (inkl. History + Attachments via ON DELETE CASCADE) */
+async function deleteStorung(id) {
+  return run(`DELETE FROM stoerungen WHERE id = ?`, [id]);
+}
+
+module.exports = {
+  initDb,
+  createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
+  searchSimilarFehler,
+  getAttachmentsForCompression, markAttachmentCompressed,
+  getOldestAttachments, deleteAttachment,
+  deleteStorung,
+};

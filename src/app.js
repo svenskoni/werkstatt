@@ -68,6 +68,7 @@ app.set('layout', 'layout');
 app.use((req, res, next) => {
   res.locals.user        = req.session.user || null;
   res.locals.currentPath = req.path;
+  res.locals.path        = req.path; // Alias fuer bestehende EJS-Templates
   next();
 });
 

@@ -14,6 +14,39 @@
 
   <form class="stoerung-form" action="/stoerung/neu" method="POST" enctype="multipart/form-data" novalidate>
 
+    <!-- Melderdaten -->
+    <div class="form-group">
+      <label class="form-label required" for="melderName">Name des Melders</label>
+      <input
+        type="text"
+        id="melderName"
+        name="melderName"
+        class="form-control"
+        placeholder="Vor- und Nachname"
+        value="<%= old.melderName || '' %>"
+        required
+        minlength="3"
+        maxlength="100"
+        autocomplete="name"
+      >
+    </div>
+
+    <div class="form-group">
+      <label class="form-label required" for="melderKontakt">Handy oder E‑Mail</label>
+      <input
+        type="text"
+        id="melderKontakt"
+        name="melderKontakt"
+        class="form-control"
+        placeholder="Mobilnummer oder E‑Mailadresse"
+        value="<%= old.melderKontakt || '' %>"
+        required
+        minlength="5"
+        maxlength="120"
+      >
+      <span class="form-hint">Wird nur für Rückfragen der Werkstatt verwendet.</span>
+    </div>
+
     <!-- Fahrzeug -->
     <div class="form-group">
       <label class="form-label required" for="fahrzeug">Fahrzeug</label>
@@ -27,7 +60,7 @@
 
     <!-- Schweregrad -->
     <div class="form-group">
-      <fieldset>
+      <fieldset class="schwere-fieldset">
         <legend class="form-label required">Schweregrad</legend>
         <div class="schwere-grid">
           <% [['klein','Klein','🟢','Kleinere Schäden, Fahrzeug einsatzbereit'],['normal','Normal','🟡','Eingeschränkte Funktion'],['schwer','Schwer','🟠','Erheblicher Schaden'],['totalausfall','Totalausfall','🔴','Fahrzeug nicht einsatzbereit']].forEach(([val,label,icon,hint]) => { %>

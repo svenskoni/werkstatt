@@ -4,11 +4,6 @@ const bcrypt = require('bcryptjs');
 function getUsers() {
   return [
     {
-      username: process.env.USER_VIEW_NAME  || 'viewer',
-      passHash: process.env.USER_VIEW_PASS_HASH,
-      role: 'view'
-    },
-    {
       username: process.env.USER_USER_NAME  || 'benutzer',
       passHash: process.env.USER_USER_PASS_HASH,
       role: 'user'

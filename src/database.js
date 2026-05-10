@@ -21,7 +21,9 @@ async function initDb() {
       beschreibung       TEXT,
       status             TEXT NOT NULL DEFAULT 'gesendet',
       createdBy          TEXT NOT NULL,
-      createdAt          TEXT NOT NULL
+      createdAt          TEXT NOT NULL,
+      melderName         TEXT NOT NULL,
+      melderKontakt      TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS stoerung_history (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,11 +60,11 @@ async function get(sql, args = []) {
 }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
-async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, attachments = [] }) {
+async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, attachments = [] }) {
   const now = new Date().toISOString();
   await run(
-    `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt) VALUES (?,?,?,?,?,?,?,?)`,
-    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now]
+    `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt]
   );
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
@@ -81,7 +83,7 @@ async function getStorungById(id) {
   const s = await get(`SELECT * FROM stoerungen WHERE id = ?`, [id]);
   if (!s) return null;
   s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [id]);
-  s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`, [id]);
+  s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [id]);
   return s;
 }
 
@@ -89,7 +91,7 @@ async function getAllStorungen() {
   const rows = await all(`SELECT * FROM stoerungen ORDER BY createdAt DESC`);
   return Promise.all(rows.map(async s => {
     s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
-    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`, [s.id]);
+    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
     return s;
   }));
 }
@@ -98,7 +100,7 @@ async function getByStatus(status) {
   const rows = await all(`SELECT * FROM stoerungen WHERE status = ? ORDER BY createdAt DESC`, [status]);
   return Promise.all(rows.map(async s => {
     s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
-    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ?`, [s.id]);
+    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
     return s;
   }));
 }

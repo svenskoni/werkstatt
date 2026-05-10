@@ -75,19 +75,25 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
   upload.array('attachments', 6),
   async (req, res, next) => {
     try {
-      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung } = req.body;
+      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt } = req.body;
       const errors = [];
 
-      if (!VEHICLES.includes(fahrzeug))       errors.push('Ungültiges Fahrzeug.');
+      if (!melderName || melderName.trim().length < 3)
+        errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
+      if (!melderKontakt || melderKontakt.trim().length < 5)
+        errors.push('Handy oder E‑Mail ist erforderlich.');
+
+      if (!VEHICLES.includes(fahrzeug))
+        errors.push('Ungültiges Fahrzeug.');
       if (!['klein','normal','schwer','totalausfall'].includes(schwere))
-                                              errors.push('Ungültiger Schweregrad.');
+        errors.push('Ungültiger Schweregrad.');
       if (!fehlerBeschreibung || fehlerBeschreibung.trim().length < 3)
-                                              errors.push('Fehlerbeschreibung zu kurz (mind. 3 Zeichen).');
+        errors.push('Fehlerbeschreibung zu kurz (mind. 3 Zeichen).');
 
       if (errors.length > 0) {
         return res.status(400).render('stoerung-neu', {
           VEHICLES, errors,
-          old: { fahrzeug, schwere, fehlerBeschreibung, beschreibung },
+          old: { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt },
         });
       }
 
@@ -98,6 +104,8 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         fehlerBeschreibung: sanitize(fehlerBeschreibung),
         beschreibung:       sanitize(beschreibung),
         createdBy:          req.session.user.username,
+        melderName:         sanitize(melderName),
+        melderKontakt:      sanitize(melderKontakt),
         attachments:        (req.files || []).map(f => ({
           filename:     f.filename,
           originalname: f.originalname,

@@ -3,11 +3,18 @@ function ago(iso) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1)  return 'gerade eben';
-  if (m < 60) return m + ' Min. ago';
+  if (m < 60) return m + ' Min.';
   const h = Math.floor(m / 60);
-  if (h < 24) return h + ' Std. ago';
-  return Math.floor(h / 24) + ' Tagen ago';
+  if (h < 24) return h + ' Std.';
+  return Math.floor(h / 24) + ' Tagen';
 }
+
+const SCHWERE = {
+  klein:        { label: 'Klein',        icon: '🟢' },
+  normal:       { label: 'Normal',       icon: '🟡' },
+  schwer:       { label: 'Schwer',       icon: '🟠' },
+  totalausfall: { label: 'Totalausfall', icon: '🔴' },
+};
 %>
 <article class="stoerung-card card-<%= s.status %>" role="article">
   <div class="card-top">

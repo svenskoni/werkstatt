@@ -48,7 +48,7 @@
           <div class="empty-state-card">&#x2714; Keine offenen Meldungen</div>
         <% } %>
         <% gesendet.forEach(s => { %>
-          <%- include('partials/stoerung-card', { s, user, SCHWERE: res.locals.SCHWERE }) %>
+          <%- include('partials/stoerung-card', { s, user }) %>
         <% }); %>
       </div>
     </section>
@@ -68,7 +68,7 @@
           <div class="empty-state-card">&mdash; Nichts in Bearbeitung</div>
         <% } %>
         <% bestaetigt.forEach(s => { %>
-          <%- include('partials/stoerung-card', { s, user, SCHWERE: res.locals.SCHWERE }) %>
+          <%- include('partials/stoerung-card', { s, user }) %>
         <% }); %>
       </div>
     </section>
@@ -88,7 +88,7 @@
           <div class="empty-state-card">&mdash; Noch nichts erledigt</div>
         <% } %>
         <% erledigt.forEach(s => { %>
-          <%- include('partials/stoerung-card', { s, user, SCHWERE: res.locals.SCHWERE }) %>
+          <%- include('partials/stoerung-card', { s, user }) %>
         <% }); %>
       </div>
     </section>

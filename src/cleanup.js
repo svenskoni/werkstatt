@@ -1,7 +1,7 @@
 'use strict';
 const fs    = require('fs');
 const path  = require('path');
-const sharp = require('sharp');
+const Jimp  = require('jimp');
 const db    = require('./database');
 
 const UPLOAD_DIR    = path.join(__dirname, '..', 'public', 'uploads');
@@ -19,14 +19,16 @@ function dirSizeBytes(dir) {
 }
 
 async function compressImage(filePath) {
-  const tmp = filePath + '.tmp';
+  const origSize = fs.statSync(filePath).size;
+  const tmp = filePath + '.tmp.jpg';
   try {
-    await sharp(filePath)
-      .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 60 })
-      .toFile(tmp);
-    const origSize = fs.statSync(filePath).size;
-    const newSize  = fs.statSync(tmp).size;
+    const img = await Jimp.read(filePath);
+    // Max 1280px auf der längsten Seite, nur verkleinern
+    if (img.width > 1280 || img.height > 1280) {
+      img.scaleToFit({ w: 1280, h: 1280 });
+    }
+    await img.quality(60).write(tmp);
+    const newSize = fs.statSync(tmp).size;
     if (newSize < origSize) {
       fs.renameSync(tmp, filePath);
       return { compressed: true, saved: origSize - newSize };
@@ -34,7 +36,7 @@ async function compressImage(filePath) {
     fs.unlinkSync(tmp);
     return { compressed: false };
   } catch (err) {
-    try { fs.unlinkSync(tmp); } catch {}
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
     throw err;
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "feuerwehr-stoerungsmelder",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Feuerwehr St\u00f6rungs- und Reparaturmeldungssystem \u2013 LZ Frechen (Plesk only)",
   "main": "app.js",
   "scripts": {
@@ -24,7 +24,7 @@
     "express-rate-limit": "^7.1.5",
     "ejs": "^3.1.9",
     "sanitize-html": "^2.11.0",
-    "sharp": "^0.33.4",
+    "jimp": "^0.22.12",
     "@libsql/client": "^0.14.0"
   }
 }

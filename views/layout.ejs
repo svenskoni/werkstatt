@@ -6,9 +6,6 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Störungsmelder – LZ Frechen</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F692;</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
@@ -48,7 +45,7 @@
             <button class="user-btn" id="userMenuBtn" aria-expanded="false" aria-haspopup="true">
               <span><%= user.username %></span>
               <span class="role-badge role-<%= user.role %>">
-                <%= user.role === 'admin' ? 'Admin' : user.role === 'user' ? 'Benutzer' : 'Ansicht' %>
+                <%= user.role === 'admin' ? 'Admin' : 'Benutzer' %>
               </span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
             </button>

@@ -4,18 +4,14 @@ require('dotenv').config();
 const { initDb }  = require('./src/database');
 const expressApp  = require('./src/app');
 
-// Plesk setzt die PORT-Variable automatisch, kein Fallback/Wrapper nötig
-const PORT = parseInt(process.env.PORT, 10);
-
-if (!PORT) {
-  console.error('[FATAL] Keine PORT-Variable gesetzt. Bitte Plesk-Node.js-Integration verwenden.');
-  process.exit(1);
-}
+// Plesk / Phusion Passenger: Port-Wert ist egal, wichtig ist nur, DASS listen() aufgerufen wird.
+// Wenn Plesk eine PORT-Variable setzt, nutzen wir sie, sonst Standard 3000.
+const PORT = process.env.PORT || 3000;
 
 initDb()
   .then(() => {
-    expressApp.listen(PORT, '127.0.0.1', () => {
-      console.log('[OK] Feuerwehr Stoerungsmelder laeuft auf Port ' + PORT + ' (Plesk)');
+    expressApp.listen(PORT, () => {
+      console.log('[OK] Feuerwehr Stoerungsmelder laeuft (Port ' + PORT + ', Plesk/Passenger)');
     });
   })
   .catch(err => {

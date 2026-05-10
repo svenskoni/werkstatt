@@ -12,6 +12,20 @@ const stoerungRoutes = require('../routes/stoerungen');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
 
+// Pflicht-Variablen prüfen – App startet nicht wenn etwas fehlt
+const REQUIRED_ENV = [
+  'NODE_ENV', 'SESSION_SECRET', 'APP_BASE_URL',
+  'VEHICLES',
+  'MAX_UPLOAD_MB', 'MAX_UPLOAD_DIR_MB', 'COMPRESS_AFTER_DAYS',
+  'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURE',
+  'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM', 'MAIL_RECIPIENTS',
+];
+const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missing.length > 0) {
+  console.error('[Config] Fehlende Umgebungsvariablen:', missing.join(', '));
+  process.exit(1);
+}
+
 const app = express();
 
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
@@ -41,7 +55,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use(session({
-  secret:            process.env.SESSION_SECRET || 'fw-secret-bitte-aendern',
+  secret:            process.env.SESSION_SECRET,
   resave:            false,
   saveUninitialized: false,
   name:              'fw.sid',
@@ -72,7 +86,6 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// DB initialisieren, dann Cleanup-Scheduler starten
 db.initDb()
   .then(() => cleanup.scheduleDaily())
   .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });

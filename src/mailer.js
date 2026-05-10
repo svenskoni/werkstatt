@@ -7,7 +7,7 @@ function getTransport() {
   if (!transport) {
     transport = nodemailer.createTransport({
       host:   process.env.MAIL_HOST,
-      port:   parseInt(process.env.MAIL_PORT || '587', 10),
+      port:   parseInt(process.env.MAIL_PORT, 10),
       secure: process.env.MAIL_SECURE === 'true',
       auth: {
         user: process.env.MAIL_USER,
@@ -27,12 +27,18 @@ const SCHWERE_LABEL = {
 };
 
 const STATUS_LABEL = {
-  gesendet:    'Eingegangen',
-  bestaetigt:  'In Bearbeitung',
-  erledigt:    'Erledigt',
+  gesendet:   'Eingegangen',
+  bestaetigt: 'In Bearbeitung',
+  erledigt:   'Erledigt',
 };
 
-function buildHtml(storung, baseUrl) {
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function buildHtml(storung) {
+  const baseUrl  = process.env.APP_BASE_URL;
   const schwere  = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status   = STATUS_LABEL[storung.status]    || storung.status;
   const datum    = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
@@ -53,71 +59,56 @@ function buildHtml(storung, baseUrl) {
   .footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}
   </style></head><body><div class="wrap">
   <div class="header">
-    <h1>🚨 Neue Störungsmeldung – ${storung.fahrzeug}</h1>
+    <h1>🚨 Neue Störungsmeldung – ${escHtml(storung.fahrzeug)}</h1>
     <p>Eingegangen: ${datum}</p>
   </div>
   <div class="body">
     <table>
-      <tr><th>Fahrzeug</th><td><strong>${storung.fahrzeug}</strong></td></tr>
+      <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
       <tr><th>Schweregrad</th><td>${schwere}</td></tr>
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
       <tr><th>Status</th><td>${status}</td></tr>
-      <tr><th>Gemeldet von</th><td>${escHtml(storung.createdBy)}</td></tr>
+      <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} &ndash; ${escHtml(storung.melderKontakt)}</td></tr>
+      <tr><th>Erfasst von</th><td>${escHtml(storung.createdBy)}</td></tr>
       <tr><th>Meldungs-ID</th><td><code style="font-size:11px">${storung.id}</code></td></tr>
     </table>
     ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
     ${storung.attachments.length > 0 ? `<p style="font-size:13px;color:#666">📎 ${storung.attachments.length} Anhang/Anhänge mitgesendet</p>` : ''}
     <a href="${detailUrl}" class="btn">Detail ansehen →</a>
   </div>
-  <div class="footer">Feuerwehr LZ Frechen – Störungsmelder &middot; werkstatt.lz-frechen.de</div>
+  <div class="footer">Feuerwehr LZ Frechen – Störungsmelder</div>
 </div></body></html>`;
 }
 
-function escHtml(str) {
-  return String(str || '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
-
 async function sendStorungMail(storung) {
-  const baseUrl    = process.env.APP_BASE_URL || 'https://werkstatt.lz-frechen.de';
-  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
-
+  const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length === 0) {
     console.warn('[Mailer] Keine Empfänger konfiguriert (MAIL_RECIPIENTS)');
     return;
   }
-
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
   const subject = `[Störung] ${storung.fahrzeug} – ${schwere} – ${storung.fehlerBeschreibung.slice(0, 50)}`;
-
   await getTransport().sendMail({
-    from:    process.env.MAIL_FROM || process.env.MAIL_USER,
+    from:    process.env.MAIL_FROM,
     to:      recipients.join(', '),
     subject,
-    html:    buildHtml(storung, baseUrl),
-    text:    `Störung: ${storung.fahrzeug} | ${schwere}\nFehler: ${storung.fehlerBeschreibung}\nGemeldet von: ${storung.createdBy}\nDetail: ${baseUrl}/stoerung/${storung.id}`,
+    html:    buildHtml(storung),
+    text:    `Störung: ${storung.fahrzeug} | ${schwere}\nFehler: ${storung.fehlerBeschreibung}\nGemeldet von: ${storung.melderName} (${storung.melderKontakt})\nDetail: ${process.env.APP_BASE_URL}/stoerung/${storung.id}`,
   });
-
   console.log(`[Mailer] E-Mail gesendet an ${recipients.join(', ')} für Störung ${storung.id}`);
 }
 
 async function sendStatusMail(storung, changedBy) {
-  const baseUrl    = process.env.APP_BASE_URL || 'https://werkstatt.lz-frechen.de';
-  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
+  const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length === 0) return;
-
   const status  = STATUS_LABEL[storung.status] || storung.status;
   const subject = `[Status] ${storung.fahrzeug} → ${status}`;
-
   await getTransport().sendMail({
-    from:    process.env.MAIL_FROM || process.env.MAIL_USER,
+    from:    process.env.MAIL_FROM,
     to:      recipients.join(', '),
     subject,
-    html:    buildHtml(storung, baseUrl),
-    text:    `Statuswechsel: ${storung.fahrzeug} → ${status}\nGeändert von: ${changedBy}\nDetail: ${baseUrl}/stoerung/${storung.id}`,
+    html:    buildHtml(storung),
+    text:    `Statuswechsel: ${storung.fahrzeug} → ${status}\nGeändert von: ${changedBy}\nDetail: ${process.env.APP_BASE_URL}/stoerung/${storung.id}`,
   });
 }
 

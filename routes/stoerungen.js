@@ -11,7 +11,7 @@ const { requireRole, optionalLogin } = require('../middleware/auth');
 
 const router = express.Router();
 
-const MAX_MB      = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
+const MAX_MB      = parseInt(process.env.MAX_UPLOAD_MB, 10);
 const ALLOWED_MIME = new Set([
   'image/jpeg','image/png','image/gif','image/webp',
   'video/mp4','video/quicktime','video/x-msvideo','video/webm',
@@ -26,8 +26,7 @@ const upload = multer({
 const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const VEHICLES = (process.env.VEHICLES || 'LF10,HLF20,TLF3000,DLA23,ELW1,MTF')
-  .split(',').map(v => v.trim());
+const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
 
 function sanitize(str) {
   return sanitizeHtml(String(str || ''), { allowedTags: [], allowedAttributes: {} }).trim();
@@ -42,7 +41,6 @@ function flushFilesToDisk(files = []) {
   });
 }
 
-// ── Dashboard ────────────────────────────────────────────────────────────────
 router.get('/', optionalLogin, async (req, res, next) => {
   try {
     const [gesendet, bestaetigt, erledigt] = await Promise.all([
@@ -63,12 +61,10 @@ router.get('/', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Formular ─────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireRole('user', 'admin'), (req, res) => {
   res.render('stoerung-neu', { VEHICLES, errors: null, old: {} });
 });
 
-// ── Neue Störung speichern ────────────────────────────────────────────────────
 router.post('/stoerung/neu', requireRole('user', 'admin'),
   upload.array('attachments', 6),
   async (req, res, next) => {
@@ -117,7 +113,6 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
   }
 );
 
-// ── Detail ────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', optionalLogin, async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
@@ -132,7 +127,6 @@ router.get('/stoerung/:id', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Status ändern ─────────────────────────────────────────────────────────────
 router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
   try {
     const { newStatus, note } = req.body;
@@ -151,26 +145,20 @@ router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Störung löschen (Admin) ───────────────────────────────────────────────────
 router.delete('/stoerung/:id', requireRole('admin'), async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
-    // Dateien von Platte löschen
     for (const att of storung.attachments || []) {
       const filePath = path.join(UPLOAD_DIR, att.filename);
       try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
     }
-
-    // DB-Eintrag löschen (inkl. History + Attachments via CASCADE)
     await db.deleteStorung(req.params.id);
-
     return res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
-// ── Ähnliche Fehler ───────────────────────────────────────────────────────────
 router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim();

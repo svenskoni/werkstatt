@@ -136,27 +136,35 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
 }
 
 /**
- * Ähnliche Fehler – gefiltert nach Fahrzeug (wenn angegeben) und nur nicht-erledigte.
- * @param {string} query  Suchbegriff (mind. 6 Zeichen erwartet vom Frontend)
- * @param {string} [fahrzeug]  Fahrzeugkennzeichen – nur in diesem Fahrzeug suchen
+ * Ähnliche Fehler im selben Fahrzeug.
+ * @param {string} query
+ * @param {string|null} fahrzeug
+ * @param {boolean} includeErledigt – wenn true, werden auch erledigte Einträge zurückgegeben
  */
-async function searchSimilarFehler(query, fahrzeug) {
+async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
+  const like = '%' + query.toLowerCase() + '%';
+  const orderBy = `ORDER BY CASE status WHEN 'erledigt' THEN 1 ELSE 0 END ASC, createdAt DESC`;
   if (fahrzeug) {
+    if (includeErledigt) {
+      return all(
+        `SELECT * FROM stoerungen WHERE fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
+        [fahrzeug, like]
+      );
+    }
     return all(
-      `SELECT * FROM stoerungen
-       WHERE status != 'erledigt'
-         AND fahrzeug = ?
-         AND lower(fehlerBeschreibung) LIKE ?
-       ORDER BY createdAt DESC LIMIT 5`,
-      [fahrzeug, '%' + query.toLowerCase() + '%']
+      `SELECT * FROM stoerungen WHERE status != 'erledigt' AND fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
+      [fahrzeug, like]
+    );
+  }
+  if (includeErledigt) {
+    return all(
+      `SELECT * FROM stoerungen WHERE lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
+      [like]
     );
   }
   return all(
-    `SELECT * FROM stoerungen
-     WHERE status != 'erledigt'
-       AND lower(fehlerBeschreibung) LIKE ?
-     ORDER BY createdAt DESC LIMIT 5`,
-    ['%' + query.toLowerCase() + '%']
+    `SELECT * FROM stoerungen WHERE status != 'erledigt' AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
+    [like]
   );
 }
 

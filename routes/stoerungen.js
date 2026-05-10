@@ -75,11 +75,11 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
       if (!melderName || melderName.trim().length < 3)
         errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
       if ((!melderHandy || melderHandy.trim().length < 5) && (!melderMail || melderMail.trim().length < 5))
-        errors.push('Handy oder E\u2011Mail muss ausgef\u00fcllt sein.');
+        errors.push('Handy oder E‑Mail muss ausgefüllt sein.');
       if (!VEHICLES.includes(fahrzeug))
-        errors.push('Ung\u00fcltiges Fahrzeug.');
+        errors.push('Ungültiges Fahrzeug.');
       if (!['klein','normal','schwer','totalausfall'].includes(schwere))
-        errors.push('Ung\u00fcltiger Schweregrad.');
+        errors.push('Ungültiger Schweregrad.');
       if (!fehlerBeschreibung || fehlerBeschreibung.trim().length < 3)
         errors.push('Fehlerbeschreibung zu kurz (mind. 3 Zeichen).');
 
@@ -123,10 +123,10 @@ router.get('/stoerung/:id(*)', optionalLogin, async (req, res, next) => {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).render('error', { title: '404', message: 'Nicht gefunden.' });
     const SCHWERE = {
-      klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
-      normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
-      schwer:       { label: 'Schwer',       icon: '\uD83D\uDFE0' },
-      totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
+      klein:        { label: 'Klein',        icon: '🟢' },
+      normal:       { label: 'Normal',       icon: '🟡' },
+      schwer:       { label: 'Schwer',       icon: '🟠' },
+      totalausfall: { label: 'Totalausfall', icon: '🔴' },
     };
     res.render('stoerung-detail', { storung, SCHWERE });
   } catch (err) { next(err); }
@@ -136,7 +136,7 @@ router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
     const { newStatus, note } = req.body;
     if (!['gesendet','bestaetigt','erledigt'].includes(newStatus))
-      return res.status(400).json({ error: 'Ung\u00fcltiger Status.' });
+      return res.status(400).json({ error: 'Ungültiger Status.' });
 
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
@@ -157,8 +157,8 @@ router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) =
 
     let grund = sanitize(req.body?.grund || '');
     if (!grund && storung.status !== 'erledigt')
-      return res.status(400).json({ error: 'Bitte eine Begr\u00fcndung angeben.' });
-    if (!grund) grund = 'Erledigt \u2013 automatisch bereinigt';
+      return res.status(400).json({ error: 'Bitte eine Begründung angeben.' });
+    if (!grund) grund = 'Erledigt – automatisch bereinigt';
 
     for (const att of storung.attachments || []) {
       const filePath = path.join(UPLOAD_DIR, att.filename);
@@ -166,21 +166,23 @@ router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) =
     }
 
     mailer.sendDeleteMail(storung, req.session.user.username, grund)
-      .catch(err => console.error('[Mailer] L\u00f6sch-Mail Fehler:', err.message));
+      .catch(err => console.error('[Mailer] Lösch-Mail Fehler:', err.message));
 
     await db.deleteStorung(req.params.id);
     return res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
-// API: Ähnliche Fehler – jetzt mit optionalem ?fahrzeug= Parameter
+// API: Ähnliche Fehler – inkl. erledigt wenn ?includeErledigt=1
 router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) => {
   try {
-    const q        = String(req.query.q        || '').trim();
-    const fahrzeug = String(req.query.fahrzeug || '').trim() || null;
+    const q               = String(req.query.q               || '').trim();
+    const fahrzeug        = String(req.query.fahrzeug        || '').trim() || null;
+    const includeErledigt = req.query.includeErledigt === '1';
     if (q.length < 6) return res.json([]);
-    const results = await db.searchSimilarFehler(q, fahrzeug && VEHICLES.includes(fahrzeug) ? fahrzeug : null);
-    res.json(results.map(s => ({ id: s.id, fahrzeug: s.fahrzeug, fehler: s.fehlerBeschreibung, schwere: s.schwere })));
+    const fz = fahrzeug && VEHICLES.includes(fahrzeug) ? fahrzeug : null;
+    const results = await db.searchSimilarFehler(q, fz, includeErledigt);
+    res.json(results.map(s => ({ id: s.id, fahrzeug: s.fahrzeug, fehler: s.fehlerBeschreibung, schwere: s.schwere, status: s.status })));
   } catch (err) { next(err); }
 });
 
@@ -191,7 +193,7 @@ router.get('/api/suche', optionalLogin, async (req, res, next) => {
     const statusParam = String(req.query.status   || '').trim();
     const statuses    = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : [];
     if (!VEHICLES.includes(fahrzeug))
-      return res.status(400).json({ error: 'Ung\u00fcltiges Fahrzeug.' });
+      return res.status(400).json({ error: 'Ungültiges Fahrzeug.' });
     const results = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statuses);
     res.json(results);
   } catch (err) { next(err); }

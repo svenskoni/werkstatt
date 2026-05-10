@@ -50,9 +50,28 @@ async function run(sql, args = []) { return db.execute({ sql, args }); }
 async function all(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows; }
 async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
+/**
+ * Erzeugt die lesbare Ticket-ID: <Fahrzeug>-<YYYY>-<MM>-<NNN>
+ * Beispiel: FRE1/HLF20/1-2026-05-003
+ * Zähler läuft pro Fahrzeug + Jahr + Monat.
+ */
+async function generateTicketId(fahrzeug, isoDate) {
+  const d     = new Date(isoDate);
+  const year  = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const prefix = `${fahrzeug}-${year}-${month}-`;
+  const row = await get(
+    `SELECT COUNT(*) as cnt FROM stoerungen WHERE id LIKE ?`,
+    [prefix + '%']
+  );
+  const next = (row ? Number(row.cnt) : 0) + 1;
+  return prefix + String(next).padStart(3, '0');
+}
+
 // ── CRUD ─────────────────────────────────────────────────────────────────────
-async function createStorung({ id, fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, attachments = [] }) {
+async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, attachments = [] }) {
   const now = new Date().toISOString();
+  const id  = await generateTicketId(fahrzeug, now);
   await run(
     `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt) VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt]
@@ -106,6 +125,30 @@ async function updateStatus(id, newStatus, changedBy, note) {
   return getStorungById(id);
 }
 
+/**
+ * Suche: Fahrzeug (exakt) + optionaler Monat (YYYY-MM)
+ * Gibt id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt zurück.
+ */
+async function searchByFahrzeugMonat(fahrzeug, monat) {
+  if (monat) {
+    // monat = "YYYY-MM"
+    return all(
+      `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
+       FROM stoerungen
+       WHERE fahrzeug = ? AND strftime('%Y-%m', createdAt) = ?
+       ORDER BY createdAt DESC`,
+      [fahrzeug, monat]
+    );
+  }
+  return all(
+    `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
+     FROM stoerungen
+     WHERE fahrzeug = ?
+     ORDER BY createdAt DESC`,
+    [fahrzeug]
+  );
+}
+
 async function searchSimilarFehler(query) {
   return all(
     `SELECT * FROM stoerungen WHERE status != 'erledigt' AND lower(fehlerBeschreibung) LIKE ? ORDER BY createdAt DESC LIMIT 5`,
@@ -114,8 +157,6 @@ async function searchSimilarFehler(query) {
 }
 
 // ── Cleanup-Hilfsfunktionen ──────────────────────────────────────────────────
-
-/** Anhänge von erledigten Störungen, die älter als cutoff sind und noch nicht komprimiert wurden */
 async function getAttachmentsForCompression(cutoffIso) {
   return all(`
     SELECT a.* FROM stoerung_attachments a
@@ -130,7 +171,6 @@ async function markAttachmentCompressed(id) {
   return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]);
 }
 
-/** Alle Anhänge aufsteigend nach Erstelldatum – für Purge */
 async function getOldestAttachments() {
   return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`);
 }
@@ -139,7 +179,6 @@ async function deleteAttachment(id) {
   return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]);
 }
 
-/** Löscht eine Störung vollständig (inkl. History + Attachments via ON DELETE CASCADE) */
 async function deleteStorung(id) {
   return run(`DELETE FROM stoerungen WHERE id = ?`, [id]);
 }
@@ -147,7 +186,7 @@ async function deleteStorung(id) {
 module.exports = {
   initDb,
   createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
-  searchSimilarFehler,
+  searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
   getOldestAttachments, deleteAttachment,
   deleteStorung,

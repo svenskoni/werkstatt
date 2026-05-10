@@ -3,7 +3,6 @@ const express        = require('express');
 const multer         = require('multer');
 const path           = require('path');
 const fs             = require('fs');
-const { v4: uuidv4 } = require('uuid');
 const sanitizeHtml   = require('sanitize-html');
 const db             = require('../src/database');
 const mailer         = require('../src/mailer');
@@ -11,7 +10,7 @@ const { requireRole, optionalLogin } = require('../middleware/auth');
 
 const router = express.Router();
 
-const MAX_MB      = parseInt(process.env.MAX_UPLOAD_MB, 10);
+const MAX_MB       = parseInt(process.env.MAX_UPLOAD_MB, 10);
 const ALLOWED_MIME = new Set([
   'image/jpeg','image/png','image/gif','image/webp',
   'video/mp4','video/quicktime','video/x-msvideo','video/webm',
@@ -34,6 +33,7 @@ function sanitize(str) {
 
 function flushFilesToDisk(files = []) {
   return files.map(f => {
+    const { v4: uuidv4 } = require('uuid');
     const ext      = path.extname(f.originalname).toLowerCase();
     const filename = uuidv4() + ext;
     fs.writeFileSync(path.join(UPLOAD_DIR, filename), f.buffer);
@@ -41,6 +41,7 @@ function flushFilesToDisk(files = []) {
   });
 }
 
+// ── Dashboard ────────────────────────────────────────────────────────────────
 router.get('/', optionalLogin, async (req, res, next) => {
   try {
     const [gesendet, bestaetigt, erledigt] = await Promise.all([
@@ -61,6 +62,7 @@ router.get('/', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Neue Störung ─────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireRole('user', 'admin'), (req, res) => {
   res.render('stoerung-neu', { VEHICLES, errors: null, old: {} });
 });
@@ -75,11 +77,11 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
       if (!melderName || melderName.trim().length < 3)
         errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
       if ((!melderHandy || melderHandy.trim().length < 5) && (!melderMail || melderMail.trim().length < 5))
-        errors.push('Handy oder E‑Mail muss ausgefüllt sein.');
+        errors.push('Handy oder E\u2011Mail muss ausgef\u00fcllt sein.');
       if (!VEHICLES.includes(fahrzeug))
-        errors.push('Ungültiges Fahrzeug.');
+        errors.push('Ung\u00fcltiges Fahrzeug.');
       if (!['klein','normal','schwer','totalausfall'].includes(schwere))
-        errors.push('Ungültiger Schweregrad.');
+        errors.push('Ung\u00fcltiger Schweregrad.');
       if (!fehlerBeschreibung || fehlerBeschreibung.trim().length < 3)
         errors.push('Fehlerbeschreibung zu kurz (mind. 3 Zeichen).');
 
@@ -100,7 +102,7 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
       }
 
       const storung = await db.createStorung({
-        id: uuidv4(), fahrzeug: sanitize(fahrzeug), schwere: sanitize(schwere),
+        fahrzeug: sanitize(fahrzeug), schwere: sanitize(schwere),
         fehlerBeschreibung: sanitize(fehlerBeschreibung), beschreibung: sanitize(beschreibung),
         createdBy: req.session.user.username,
         melderName: sanitize(melderName), melderKontakt: sanitize(melderKontakt),
@@ -113,7 +115,8 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
   }
 );
 
-router.get('/stoerung/:id', optionalLogin, async (req, res, next) => {
+// ── Detail ───────────────────────────────────────────────────────────────────
+router.get('/stoerung/:id(*)', optionalLogin, async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).render('error', { title: '404', message: 'Nicht gefunden.' });
@@ -127,11 +130,12 @@ router.get('/stoerung/:id', optionalLogin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
+// ── Status ändern ────────────────────────────────────────────────────────────
+router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
     const { newStatus, note } = req.body;
     if (!['gesendet','bestaetigt','erledigt'].includes(newStatus))
-      return res.status(400).json({ error: 'Ungültiger Status.' });
+      return res.status(400).json({ error: 'Ung\u00fcltiger Status.' });
 
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
@@ -145,7 +149,8 @@ router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/stoerung/:id', requireRole('admin'), async (req, res, next) => {
+// ── Löschen ──────────────────────────────────────────────────────────────────
+router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
@@ -159,12 +164,25 @@ router.delete('/stoerung/:id', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── API: Ähnliche Fehler ─────────────────────────────────────────────────────
 router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim();
     if (q.length < 2) return res.json([]);
     const results = await db.searchSimilarFehler(q);
     res.json(results.map(s => ({ id: s.id, fahrzeug: s.fahrzeug, fehler: s.fehlerBeschreibung, schwere: s.schwere })));
+  } catch (err) { next(err); }
+});
+
+// ── API: Suche nach Fahrzeug + Monat ─────────────────────────────────────────
+router.get('/api/suche', optionalLogin, async (req, res, next) => {
+  try {
+    const fahrzeug = String(req.query.fahrzeug || '').trim();
+    const monat    = String(req.query.monat    || '').trim(); // YYYY-MM oder leer
+    if (!VEHICLES.includes(fahrzeug))
+      return res.status(400).json({ error: 'Ung\u00fcltiges Fahrzeug.' });
+    const results = await db.searchByFahrzeugMonat(fahrzeug, monat || null);
+    res.json(results);
   } catch (err) { next(err); }
 });
 

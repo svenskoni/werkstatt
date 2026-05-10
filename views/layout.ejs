@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
-  <title>Störungsmelder – LZ Frechen</title>
+  <title>St&ouml;rungsmelder &ndash; LZ Frechen</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F692;</text></svg>">
   <link rel="stylesheet" href="/css/main.css">
 </head>
@@ -20,7 +20,7 @@
           <rect x="13" y="17" width="6" height="5" rx="1" fill="#c0392b"/>
           <circle cx="16" cy="13" r="2" fill="#c0392b"/>
         </svg>
-        <span class="logo-text">Störungsmelder LZ Frechen</span>
+        <span class="logo-text">St&ouml;rungsmelder LZ Frechen</span>
       </a>
 
       <nav class="header-nav" aria-label="Hauptnavigation">
@@ -28,9 +28,17 @@
 
         <% if (user && (user.role === 'user' || user.role === 'admin')) { %>
           <a href="/stoerung/neu" class="nav-link <%= path === '/stoerung/neu' ? 'active' : '' %>">
-            + Neue Störung
+            + Neue St&ouml;rung
           </a>
         <% } %>
+
+        <!-- Suche-Button (immer sichtbar) -->
+        <button class="btn btn-ghost btn-sm" id="searchBtn" aria-label="Störung suchen" title="Störung suchen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Suchen
+        </button>
 
         <button class="theme-toggle" data-theme-toggle aria-label="Theme wechseln" title="Hell/Dunkel">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -65,25 +73,124 @@
   </main>
 
   <footer class="site-footer">
-    <p>Feuerwehr LZ Frechen &middot; Störungsmelder &middot; Intern</p>
+    <p>Feuerwehr LZ Frechen &middot; St&ouml;rungsmelder &middot; Intern</p>
   </footer>
 
   <!-- Status-Änderungs-Modal -->
   <div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="modal">
-      <h3 id="modalTitle">Status ändern</h3>
-      <p id="modalDesc">Bitte bestätigen Sie die Statusänderung.</p>
+      <h3 id="modalTitle">Status &auml;ndern</h3>
+      <p id="modalDesc">Bitte best&auml;tigen Sie die Status&auml;nderung.</p>
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label" for="statusNote">Notiz (optional)</label>
         <input type="text" class="form-control" id="statusNote" placeholder="z.B. Werkstatt informiert..." maxlength="200">
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="modalCancel">Abbrechen</button>
-        <button class="btn btn-primary" id="modalConfirm">Bestätigen</button>
+        <button class="btn btn-primary" id="modalConfirm">Best&auml;tigen</button>
       </div>
     </div>
   </div>
 
+  <!-- Such-Modal -->
+  <div class="modal-backdrop" id="searchModal" hidden role="dialog" aria-modal="true" aria-labelledby="searchModalTitle" tabindex="-1">
+    <div class="modal">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
+        <h3 id="searchModalTitle" style="margin:0">St&ouml;rung suchen</h3>
+        <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="searchFahrzeug">Fahrzeug</label>
+        <select class="form-control" id="searchFahrzeug">
+          <option value="">-- Fahrzeug w&auml;hlen --</option>
+          <% VEHICLES.forEach(v => { %>
+            <option value="<%= v %>"><%= v %></option>
+          <% }); %>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="searchMonat">Monat <span style="font-weight:400;color:var(--color-text-muted)">(optional)</span></label>
+        <input type="month" class="form-control" id="searchMonat">
+      </div>
+
+      <button class="btn btn-primary" id="searchSubmit" style="width:100%">Suchen</button>
+
+      <div id="searchResults" style="margin-top:var(--space-4)" aria-live="polite"></div>
+    </div>
+  </div>
+
   <script src="/js/main.js"></script>
+  <script>
+  // Such-Modal
+  (function () {
+    const VEHICLES = <%- JSON.stringify(VEHICLES) %>;
+    const btn    = document.getElementById('searchBtn');
+    const modal  = document.getElementById('searchModal');
+    const close  = document.getElementById('searchModalClose');
+    const submit = document.getElementById('searchSubmit');
+    const results = document.getElementById('searchResults');
+
+    function openModal() {
+      modal.hidden = false;
+      modal.focus();
+    }
+    function closeModal() {
+      modal.hidden = true;
+      results.innerHTML = '';
+    }
+
+    btn.addEventListener('click', openModal);
+    close.addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+    const SCHWERE_ICON = { klein: '\uD83D\uDFE2', normal: '\uD83D\uDFE1', schwer: '\uD83D\uDFE0', totalausfall: '\uD83D\uDD34' };
+    const STATUS_LABEL = { gesendet: 'Eingegangen', bestaetigt: 'In Bearbeitung', erledigt: 'Erledigt' };
+
+    submit.addEventListener('click', async () => {
+      const fahrzeug = document.getElementById('searchFahrzeug').value.trim();
+      const monat    = document.getElementById('searchMonat').value.trim();
+
+      if (!fahrzeug) {
+        results.innerHTML = '<p style="color:var(--color-error)">Bitte ein Fahrzeug w&auml;hlen.</p>';
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = 'Suche...';
+      results.innerHTML = '';
+
+      try {
+        const params = new URLSearchParams({ fahrzeug });
+        if (monat) params.set('monat', monat);
+        const res  = await fetch('/api/suche?' + params);
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          results.innerHTML = '<p style="color:var(--color-text-muted);text-align:center;padding:var(--space-4) 0">F&uuml;r diesen Zeitraum keine Meldung.</p>';
+        } else {
+          const rows = data.map(s => {
+            const icon   = SCHWERE_ICON[s.schwere] || '';
+            const status = STATUS_LABEL[s.status]  || s.status;
+            const datum  = new Date(s.createdAt).toLocaleDateString('de-DE');
+            return `<a href="/stoerung/${encodeURIComponent(s.id)}" class="search-result-item">
+              <span class="search-result-id">${s.id}</span>
+              <span class="search-result-fehler">${s.fehlerBeschreibung}</span>
+              <span class="search-result-meta">${icon} &nbsp;${datum} &nbsp;&middot;&nbsp; ${status}</span>
+            </a>`;
+          });
+          results.innerHTML = '<div class="search-result-list">' + rows.join('') + '</div>';
+        }
+      } catch (e) {
+        results.innerHTML = '<p style="color:var(--color-error)">Fehler bei der Suche.</p>';
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'Suchen';
+      }
+    });
+  })();
+  </script>
 </body>
 </html>

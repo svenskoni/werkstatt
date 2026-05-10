@@ -26,6 +26,8 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
+
 const app = express();
 
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
@@ -67,10 +69,12 @@ app.set('views', path.join(__dirname, '..', 'views'));
 app.use(ejsLayouts);
 app.set('layout', 'layout');
 
+// Globale Template-Variablen – auf jeder Seite verfügbar
 app.use((req, res, next) => {
   res.locals.user        = req.session.user || null;
   res.locals.currentPath = req.path;
   res.locals.path        = req.path;
+  res.locals.VEHICLES    = VEHICLES;
   next();
 });
 

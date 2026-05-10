@@ -12,16 +12,17 @@ const db = createClient({ url: 'file:' + DB_FILE });
 async function initDb() {
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS stoerungen (
-      id                 TEXT PRIMARY KEY,
-      fahrzeug           TEXT NOT NULL,
-      schwere            TEXT NOT NULL,
-      fehlerBeschreibung TEXT NOT NULL,
-      beschreibung       TEXT,
-      status             TEXT NOT NULL DEFAULT 'gesendet',
-      createdBy          TEXT NOT NULL,
-      createdAt          TEXT NOT NULL,
-      melderName         TEXT NOT NULL,
-      melderKontakt      TEXT NOT NULL
+      id                     TEXT PRIMARY KEY,
+      fahrzeug               TEXT NOT NULL,
+      schwere                TEXT NOT NULL,
+      fehlerBeschreibung     TEXT NOT NULL,
+      beschreibung           TEXT,
+      status                 TEXT NOT NULL DEFAULT 'gesendet',
+      createdBy              TEXT NOT NULL,
+      createdAt              TEXT NOT NULL,
+      melderName             TEXT NOT NULL,
+      melderKontakt          TEXT NOT NULL,
+      melderBenachrichtigung INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS stoerung_history (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,35 +45,33 @@ async function initDb() {
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
   `);
+  // Migration: Spalte nachrüsten falls DB bereits existiert
+  try {
+    await db.execute(`ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`);
+  } catch { /* Spalte existiert bereits – kein Fehler */ }
 }
 
 async function run(sql, args = []) { return db.execute({ sql, args }); }
 async function all(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows; }
 async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
-/**
- * Erzeugt die lesbare Ticket-ID: <Fahrzeug>-<YYYY>-<MM>-<NNN>
- */
 async function generateTicketId(fahrzeug, isoDate) {
   const d     = new Date(isoDate);
   const year  = d.getUTCFullYear();
   const month = String(d.getUTCMonth() + 1).padStart(2, '0');
   const prefix = `${fahrzeug}-${year}-${month}-`;
-  const row = await get(
-    `SELECT COUNT(*) as cnt FROM stoerungen WHERE id LIKE ?`,
-    [prefix + '%']
-  );
+  const row = await get(`SELECT COUNT(*) as cnt FROM stoerungen WHERE id LIKE ?`, [prefix + '%']);
   const next = (row ? Number(row.cnt) : 0) + 1;
   return prefix + String(next).padStart(3, '0');
 }
 
 // ── CRUD ─────────────────────────────────────────────────────────────────────
-async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, attachments = [] }) {
+async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
   const now = new Date().toISOString();
   const id  = await generateTicketId(fahrzeug, now);
   await run(
-    `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt]
+    `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt, melderBenachrichtigung ? 1 : 0]
   );
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
@@ -123,28 +122,17 @@ async function updateStatus(id, newStatus, changedBy, note) {
   return getStorungById(id);
 }
 
-/**
- * Suche: Fahrzeug (exakt) + optionaler Monat (YYYY-MM) + optionaler Status-Filter (Array)
- * statuses = [] oder null → alle Status
- */
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
     : validStatuses;
-
   const placeholders = filtered.map(() => '?').join(',');
   const args = [fahrzeug, ...filtered];
-
   let sql = `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
              FROM stoerungen
              WHERE fahrzeug = ? AND status IN (${placeholders})`;
-
-  if (monat) {
-    sql += ` AND strftime('%Y-%m', createdAt) = ?`;
-    args.push(monat);
-  }
-
+  if (monat) { sql += ` AND strftime('%Y-%m', createdAt) = ?`; args.push(monat); }
   sql += ` ORDER BY createdAt DESC`;
   return all(sql, args);
 }
@@ -156,32 +144,17 @@ async function searchSimilarFehler(query) {
   );
 }
 
-// ── Cleanup-Hilfsfunktionen ──────────────────────────────────────────────────
 async function getAttachmentsForCompression(cutoffIso) {
   return all(`
     SELECT a.* FROM stoerung_attachments a
     JOIN stoerungen s ON s.id = a.stoerungId
-    WHERE s.status = 'erledigt'
-      AND s.createdAt < ?
-      AND a.compressed = 0
+    WHERE s.status = 'erledigt' AND s.createdAt < ? AND a.compressed = 0
   `, [cutoffIso]);
 }
-
-async function markAttachmentCompressed(id) {
-  return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]);
-}
-
-async function getOldestAttachments() {
-  return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`);
-}
-
-async function deleteAttachment(id) {
-  return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]);
-}
-
-async function deleteStorung(id) {
-  return run(`DELETE FROM stoerungen WHERE id = ?`, [id]);
-}
+async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]); }
+async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
+async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
+async function deleteStorung(id) { return run(`DELETE FROM stoerungen WHERE id = ?`, [id]); }
 
 module.exports = {
   initDb,

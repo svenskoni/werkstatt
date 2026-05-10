@@ -71,7 +71,7 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
   upload.array('attachments', 6),
   async (req, res, next) => {
     try {
-      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
+      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail, melderBenachrichtigung } = req.body;
       const errors = [];
 
       if (!melderName || melderName.trim().length < 3)
@@ -101,15 +101,21 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         melderKontakt += 'Mail: ' + melderMail.trim();
       }
 
+      const benachrichtigung = melderBenachrichtigung === '1' ? 1 : 0;
+
       const storung = await db.createStorung({
         fahrzeug: sanitize(fahrzeug), schwere: sanitize(schwere),
         fehlerBeschreibung: sanitize(fehlerBeschreibung), beschreibung: sanitize(beschreibung),
         createdBy: req.session.user.username,
         melderName: sanitize(melderName), melderKontakt: sanitize(melderKontakt),
+        melderBenachrichtigung: benachrichtigung,
         attachments: savedFiles,
       });
 
-      mailer.sendStorungMail(storung).catch(err => console.error('[Mailer] Fehler:', err.message));
+      // Admin-Info + Melder-Bestätigung parallel senden
+      mailer.sendStorungMail(storung).catch(err => console.error('[Mailer]', err.message));
+      mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Mailer Melder]', err.message));
+
       res.redirect('/?success=created');
     } catch (err) { next(err); }
   }
@@ -141,7 +147,7 @@ router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
     const updated = await db.updateStatus(req.params.id, newStatus, req.session.user.username, note);
-    mailer.sendStatusMail(updated, req.session.user.username)
+    mailer.sendStatusMail(updated, req.session.user.username, note)
       .catch(err => console.error('[Mailer] Status-Mail Fehler:', err.message));
 
     if (req.accepts('json')) return res.json({ ok: true });
@@ -149,22 +155,23 @@ router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Löschen (mit Begründung + Mail) ───────────────────────────────────────────────
+// ── Löschen ──────────────────────────────────────────────────────────────────
 router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
-    const grund = sanitize(req.body?.grund || '');
-    if (!grund) return res.status(400).json({ error: 'Bitte eine Begr\u00fcndung angeben.' });
-
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
-    // Anhänge vom Dateisystem löschen
+    // Bei erledigt: kein Grund nötig
+    let grund = sanitize(req.body?.grund || '');
+    if (!grund && storung.status !== 'erledigt')
+      return res.status(400).json({ error: 'Bitte eine Begr\u00fcndung angeben.' });
+    if (!grund) grund = 'Erledigt – automatisch bereinigt';
+
     for (const att of storung.attachments || []) {
       const filePath = path.join(UPLOAD_DIR, att.filename);
       try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
     }
 
-    // Mail vor dem Löschen senden (storung-Daten sind danach weg)
     mailer.sendDeleteMail(storung, req.session.user.username, grund)
       .catch(err => console.error('[Mailer] Lösch-Mail Fehler:', err.message));
 
@@ -183,17 +190,15 @@ router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) 
   } catch (err) { next(err); }
 });
 
-// ── API: Suche nach Fahrzeug + Monat + Status ────────────────────────────────
+// ── API: Suche ──────────────────────────────────────────────────────────────────
 router.get('/api/suche', optionalLogin, async (req, res, next) => {
   try {
-    const fahrzeug = String(req.query.fahrzeug || '').trim();
-    const monat    = String(req.query.monat    || '').trim();
-    const statusParam = String(req.query.status || '').trim();
-    const statuses = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : [];
-
+    const fahrzeug    = String(req.query.fahrzeug || '').trim();
+    const monat       = String(req.query.monat    || '').trim();
+    const statusParam = String(req.query.status   || '').trim();
+    const statuses    = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : [];
     if (!VEHICLES.includes(fahrzeug))
       return res.status(400).json({ error: 'Ung\u00fcltiges Fahrzeug.' });
-
     const results = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statuses);
     res.json(results);
   } catch (err) { next(err); }

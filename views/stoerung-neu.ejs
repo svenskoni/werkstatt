@@ -17,48 +17,38 @@
     <!-- Melderdaten -->
     <div class="form-group">
       <label class="form-label required" for="melderName">Name des Melders</label>
-      <input
-        type="text"
-        id="melderName"
-        name="melderName"
-        class="form-control"
-        placeholder="Vor- und Nachname"
-        value="<%= old.melderName || '' %>"
-        required
-        minlength="3"
-        maxlength="100"
-        autocomplete="name"
-      >
+      <input type="text" id="melderName" name="melderName" class="form-control"
+        placeholder="Vor- und Nachname" value="<%= old.melderName || '' %>"
+        required minlength="3" maxlength="100" autocomplete="name">
     </div>
 
     <div class="form-group">
       <label class="form-label required" for="melderHandy">Handy</label>
-      <input
-        type="tel"
-        id="melderHandy"
-        name="melderHandy"
-        class="form-control"
-        placeholder="Mobilnummer"
-        value="<%= old.melderHandy || '' %>"
-        minlength="5"
-        maxlength="40"
-        autocomplete="tel"
-      >
+      <input type="tel" id="melderHandy" name="melderHandy" class="form-control"
+        placeholder="Mobilnummer" value="<%= old.melderHandy || '' %>"
+        minlength="5" maxlength="40" autocomplete="tel">
       <span class="form-hint">Handy oder E‑Mail muss ausgefüllt sein.</span>
     </div>
 
     <div class="form-group">
       <label class="form-label" for="melderMail">E‑Mail</label>
-      <input
-        type="email"
-        id="melderMail"
-        name="melderMail"
-        class="form-control"
-        placeholder="E‑Mailadresse"
-        value="<%= old.melderMail || '' %>"
-        maxlength="120"
-        autocomplete="email"
-      >
+      <input type="email" id="melderMail" name="melderMail" class="form-control"
+        placeholder="E‑Mailadresse" value="<%= old.melderMail || '' %>"
+        maxlength="120" autocomplete="email">
+    </div>
+
+    <!-- Benachrichtigung opt-in -->
+    <div class="form-group" id="benachrichtigungGroup" style="display:none">
+      <div class="toggle-card" id="benachrichtigungToggle" role="checkbox" aria-checked="false" tabindex="0"
+        style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4);border-radius:var(--radius-md);border:2px solid var(--color-border);cursor:pointer;background:var(--color-surface);transition:border-color var(--transition-interactive),background var(--transition-interactive)">
+        <div class="toggle-icon" style="font-size:22px;line-height:1">🔔</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:var(--text-sm)">Ich möchte bei Statusänderungen informiert werden</div>
+          <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px">Sie erhalten eine E-Mail wenn sich der Status ändert (z. B. „In Bearbeitung“, „Erledigt“)</div>
+        </div>
+        <div class="toggle-check" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--color-border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0"></div>
+      </div>
+      <input type="hidden" name="melderBenachrichtigung" id="melderBenachrichtigungInput" value="0">
     </div>
 
     <!-- Fahrzeug -->
@@ -92,21 +82,13 @@
     <!-- Fehlerbeschreibung -->
     <div class="form-group">
       <label class="form-label required" for="fehlerBeschreibung">Fehlerbeschreibung</label>
-      <input
-        type="text"
-        id="fehlerBeschreibung"
-        name="fehlerBeschreibung"
-        class="form-control"
+      <input type="text" id="fehlerBeschreibung" name="fehlerBeschreibung" class="form-control"
         placeholder="Kurze, prägnante Beschreibung des Fehlers…"
         value="<%= old.fehlerBeschreibung || '' %>"
-        required
-        minlength="3"
-        maxlength="200"
-        autocomplete="off"
-      >
+        required minlength="3" maxlength="200" autocomplete="off">
       <div id="similarWarning" class="similar-warning" hidden>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span id="similarText">Es gibt ähnliche offene Störungen.</span>
+        <span id="similarText">Ähnliche offene Störungen gefunden.</span>
       </div>
       <span class="form-hint">Wird automatisch mit offenen Störungen abgeglichen.</span>
     </div>
@@ -114,14 +96,9 @@
     <!-- Detailbeschreibung -->
     <div class="form-group">
       <label class="form-label" for="beschreibung">Detailbeschreibung</label>
-      <textarea
-        id="beschreibung"
-        name="beschreibung"
-        class="form-control"
-        rows="4"
-        placeholder="Wann aufgetreten? Unter welchen Umständen? Bereits bekanntes Problem?…"
-        maxlength="2000"
-      ><%= old.beschreibung || '' %></textarea>
+      <textarea id="beschreibung" name="beschreibung" class="form-control" rows="4"
+        placeholder="Wann aufgetreten? Unter welchen Umständen?…"
+        maxlength="2000"><%= old.beschreibung || '' %></textarea>
     </div>
 
     <!-- Upload -->
@@ -164,25 +141,16 @@ const input = document.getElementById('attachments');
 const preview = document.getElementById('filePreview');
 const placeholder = document.getElementById('uploadPlaceholder');
 const uploadButton = document.getElementById('uploadButton');
-
-if (uploadButton) {
-  uploadButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    input.click();
-  });
-}
-
+if (uploadButton) uploadButton.addEventListener('click', e => { e.stopPropagation(); input.click(); });
 area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('drag-over'); });
 area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
 area.addEventListener('drop', e => {
   e.preventDefault(); area.classList.remove('drag-over');
   const dt = new DataTransfer();
   [...e.dataTransfer.files].forEach(f => dt.items.add(f));
-  input.files = dt.files;
-  showPreview(input.files);
+  input.files = dt.files; showPreview(input.files);
 });
 input.addEventListener('change', () => showPreview(input.files));
-
 function showPreview(files) {
   preview.innerHTML = '';
   if (!files.length) { preview.hidden = true; placeholder.hidden = false; return; }
@@ -193,18 +161,15 @@ function showPreview(files) {
     if (f.type.startsWith('image/')) {
       const img = document.createElement('img');
       img.className = 'file-thumb'; img.alt = f.name; img.width = 100; img.height = 75;
-      img.src = URL.createObjectURL(f);
-      item.appendChild(img);
+      img.src = URL.createObjectURL(f); item.appendChild(img);
     } else {
-      const icon = document.createElement('div'); icon.className = 'file-icon'; icon.textContent = '🎬';
-      item.appendChild(icon);
+      const icon = document.createElement('div'); icon.className = 'file-icon'; icon.textContent = '🎬'; item.appendChild(icon);
     }
     const name = document.createElement('span'); name.className = 'file-name'; name.textContent = f.name; item.appendChild(name);
     const size = document.createElement('span'); size.className = 'file-size';
-    size.textContent = f.size > MAX ? '⚠️ zu groß' : (f.size / 1024).toFixed(0) + ' KB';
+    size.textContent = f.size > MAX ? '⚠️ zu groß' : (f.size/1024).toFixed(0)+' KB';
     if (f.size > MAX) size.style.color = 'var(--color-primary)';
-    item.appendChild(size);
-    preview.appendChild(item);
+    item.appendChild(size); preview.appendChild(item);
   });
 }
 
@@ -222,12 +187,58 @@ fehlerInput.addEventListener('input', () => {
       const r = await fetch('/api/similar?q=' + encodeURIComponent(q));
       const data = await r.json();
       if (data.length > 0) {
-        warningText.textContent = data.length + ' ähnliche offene Störung(en) gefunden: ' + data.map(d => d.fahrzeug + ' – ' + d.fehler).join(' | ');
+        warningText.textContent = data.length + ' ähnliche offene Störung(en): ' + data.map(d => d.fahrzeug + ' – ' + d.fehler).join(' | ');
         warning.hidden = false;
-      } else {
-        warning.hidden = true;
-      }
+      } else { warning.hidden = true; }
     } catch { warning.hidden = true; }
   }, 400);
 });
+
+// Benachrichtigungs-Toggle – nur anzeigen wenn E-Mail ausgefüllt
+const mailInput   = document.getElementById('melderMail');
+const benGrp      = document.getElementById('benachrichtigungGroup');
+const benToggle   = document.getElementById('benachrichtigungToggle');
+const benInput    = document.getElementById('melderBenachrichtigungInput');
+const benCheck    = benToggle.querySelector('.toggle-check');
+let benActive     = false;
+
+function updateBenVisible() {
+  const hasMail = mailInput.value.trim().includes('@');
+  benGrp.style.display = hasMail ? 'block' : 'none';
+  if (!hasMail) {
+    benActive = false;
+    benInput.value = '0';
+    applyBenState();
+  }
+}
+
+function applyBenState() {
+  if (benActive) {
+    benToggle.style.borderColor = 'var(--color-primary)';
+    benToggle.style.background  = 'oklch(from var(--color-primary) l c h / 0.07)';
+    benCheck.textContent = '✓';
+    benCheck.style.borderColor = 'var(--color-primary)';
+    benCheck.style.color = 'var(--color-primary)';
+    benCheck.style.fontWeight = 'bold';
+    benToggle.setAttribute('aria-checked', 'true');
+  } else {
+    benToggle.style.borderColor = 'var(--color-border)';
+    benToggle.style.background  = 'var(--color-surface)';
+    benCheck.textContent = '';
+    benCheck.style.borderColor = 'var(--color-border)';
+    benToggle.setAttribute('aria-checked', 'false');
+  }
+}
+
+benToggle.addEventListener('click', () => {
+  benActive = !benActive;
+  benInput.value = benActive ? '1' : '0';
+  applyBenState();
+});
+benToggle.addEventListener('keydown', e => {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); benToggle.click(); }
+});
+
+mailInput.addEventListener('input', updateBenVisible);
+updateBenVisible();
 </script>

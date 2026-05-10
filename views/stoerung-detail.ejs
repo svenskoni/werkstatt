@@ -20,6 +20,13 @@ function formatDate(iso) {
         <tr><th>Erfasst von</th><td><%= storung.createdBy %></td></tr>
         <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
+        <tr><th>Statusupdates</th><td>
+          <% if (storung.melderBenachrichtigung) { %>
+            <span style="color:var(--color-success);font-size:var(--text-sm)">✅ Melder wird benachrichtigt</span>
+          <% } else { %>
+            <span style="color:var(--color-text-muted);font-size:var(--text-sm)">— keine Benachrichtigung</span>
+          <% } %>
+        </td></tr>
       </table>
       <% if (storung.beschreibung) { %>
         <div class="detail-beschreibung"><%= storung.beschreibung %></div>
@@ -61,10 +68,14 @@ function formatDate(iso) {
     <div class="detail-card" style="border-color:var(--color-primary)">
       <h3 style="margin-bottom:var(--space-2);color:var(--color-primary)">⚠️ Gefahrenbereich (Admin)</h3>
       <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-        Löscht diese Störung <strong>vollständig</strong>: alle Anhänge vom Server, alle
-        Datenbankeinträge inkl. Verlauf. Diese Aktion ist <strong>nicht rükgängig</strong> zu machen.
+        Löscht diese Störung <strong>vollständig</strong>: alle Anhänge vom Server und alle Datenbankeinträge.
+        <% if (storung.status === 'erledigt') { %>
+          <br><span style="color:var(--color-success)">&#10003; Status ist „Erledigt“ – keine Begründung erforderlich.</span>
+        <% } else { %>
+          <br>Bei nicht-erledigten Störungen ist eine Begründung erforderlich.
+        <% } %>
       </p>
-      <button class="btn btn-primary" id="deleteBtn" data-id="<%= storung.id %>"
+      <button class="btn btn-primary" id="deleteBtn" data-id="<%= storung.id %>" data-erledigt="<%= storung.status === 'erledigt' ? '1' : '0' %>"
         style="background:var(--color-primary);border-color:var(--color-primary)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         Störung endgültig löschen
@@ -74,66 +85,66 @@ function formatDate(iso) {
   </div>
 </div>
 
-<!-- Lösch-Bestätigungs-Modal -->
 <% if (user && user.role === 'admin') { %>
+<!-- Lösch-Modal (nur bei nicht-erledigten Störungen) -->
 <div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">⚠️ Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Diese Aktion ist <strong>nicht rükgängig</strong>. Alle Anhänge und Datenbankeinträge werden gelöscht.
+      Diese Aktion ist <strong>nicht rükgängig</strong>. Bitte gib eine Begründung an – diese wird per E-Mail an die Admins gesendet.
     </p>
-
     <div class="form-group">
-      <label class="form-label required" for="deleteGrund">Begründung / Nachricht an Melder</label>
+      <label class="form-label required" for="deleteGrund">Begründung</label>
       <textarea class="form-control" id="deleteGrund" rows="3"
-        placeholder="z.B. Doppelmeldung – wurde bereits unter ID XY erfasst."
-        maxlength="500"
-        style="resize:vertical"></textarea>
-      <span class="form-hint">Wird per E-Mail an die Admins gesendet.<% if (storung.melderKontakt && storung.melderKontakt.includes('Mail:')) { %> Falls eine E-Mail-Adresse hinterlegt ist, erhält auch der Melder eine Kopie.<% } %></span>
+        placeholder="z. B. Doppelmeldung – wurde bereits unter ID XY erfasst."
+        maxlength="500" style="resize:vertical"></textarea>
     </div>
-
     <div class="modal-actions">
       <button class="btn btn-ghost" id="deleteCancelBtn">Abbrechen</button>
       <button class="btn btn-primary" id="deleteConfirmBtn"
-        style="background:var(--color-primary);border-color:var(--color-primary)">
-        Endgültig löschen
-      </button>
+        style="background:var(--color-primary);border-color:var(--color-primary)">Endgültig löschen</button>
     </div>
   </div>
 </div>
 
 <script>
 (function() {
-  const deleteBtn     = document.getElementById('deleteBtn');
-  const deleteModal   = document.getElementById('deleteModal');
-  const cancelBtn     = document.getElementById('deleteCancelBtn');
-  const confirmBtn    = document.getElementById('deleteConfirmBtn');
-  const grundField    = document.getElementById('deleteGrund');
-  const stoerungId    = deleteBtn.dataset.id;
+  const deleteBtn   = document.getElementById('deleteBtn');
+  const deleteModal = document.getElementById('deleteModal');
+  const cancelBtn   = document.getElementById('deleteCancelBtn');
+  const confirmBtn  = document.getElementById('deleteConfirmBtn');
+  const grundField  = document.getElementById('deleteGrund');
+  const stoerungId  = deleteBtn.dataset.id;
+  const erledigt    = deleteBtn.dataset.erledigt === '1';
 
   deleteBtn.addEventListener('click', () => {
-    grundField.value = '';
-    deleteModal.hidden = false;
-    deleteModal.focus();
-    grundField.focus();
+    if (erledigt) {
+      // Direkt löschen ohne Modal
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = 'Lösche…';
+      doDelete('Erledigt – automatisch bereinigt');
+    } else {
+      grundField.value = '';
+      deleteModal.hidden = false;
+      deleteModal.focus();
+      grundField.focus();
+    }
   });
 
   cancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
   deleteModal.addEventListener('click', e => { if (e.target === deleteModal) deleteModal.hidden = true; });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
 
-  confirmBtn.addEventListener('click', async () => {
+  confirmBtn.addEventListener('click', () => {
     const grund = grundField.value.trim();
-    if (!grund) {
-      grundField.style.borderColor = 'var(--color-primary)';
-      grundField.focus();
-      return;
-    }
+    if (!grund) { grundField.style.borderColor = 'var(--color-primary)'; grundField.focus(); return; }
     grundField.style.borderColor = '';
-
     confirmBtn.disabled = true;
     confirmBtn.textContent = 'Lösche…';
+    doDelete(grund);
+  });
 
+  async function doDelete(grund) {
     try {
       const r = await fetch('/stoerung/' + stoerungId, {
         method: 'DELETE',
@@ -145,15 +156,15 @@ function formatDate(iso) {
         window.location.href = '/?success=deleted';
       } else {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Endgültig löschen';
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg> Störung endgültig löschen';
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Endgültig löschen'; }
       }
     } catch (e) {
       alert('Netzwerkfehler.');
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Endgültig löschen';
+      deleteBtn.disabled = false;
     }
-  });
+  }
 })();
 </script>
 <% } %>

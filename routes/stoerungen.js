@@ -2,40 +2,48 @@
 const express        = require('express');
 const multer         = require('multer');
 const path           = require('path');
+const fs             = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const sanitizeHtml   = require('sanitize-html');
-const db             = require('../src/database');   // async SQLite
+const db             = require('../src/database');
 const mailer         = require('../src/mailer');
-const { requireLogin, requireRole, optionalLogin } = require('../middleware/auth');
+const { requireRole, optionalLogin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// --- Upload-Konfiguration ------------------------------------------------
-const MAX_MB     = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
+// --- Upload-Konfiguration (memoryStorage – Dateien erst nach Validierung speichern) ---
+const MAX_MB      = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const ALLOWED_MIME = new Set([
   'image/jpeg','image/png','image/gif','image/webp',
   'video/mp4','video/quicktime','video/x-msvideo','video/webm',
 ]);
 
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, '..', 'public', 'uploads'),
-  filename: (_req, file, cb) => {
-    const ext  = path.extname(file.originalname).toLowerCase();
-    cb(null, uuidv4() + ext);
-  },
-});
-
+// Multer hält Dateien IM RAM – wird erst nach Validierung auf die Platte geschrieben
 const upload = multer({
-  storage,
-  limits: { fileSize: MAX_MB * 1024 * 1024, files: 6 },
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: MAX_MB * 1024 * 1024, files: 6 },
   fileFilter: (_req, file, cb) => cb(null, ALLOWED_MIME.has(file.mimetype)),
 });
+
+const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const VEHICLES = (process.env.VEHICLES || 'LF10,HLF20,TLF3000,DLA23,ELW1,MTF')
   .split(',').map(v => v.trim());
 
 function sanitize(str) {
   return sanitizeHtml(String(str || ''), { allowedTags: [], allowedAttributes: {} }).trim();
+}
+
+// Schreibt die im RAM gepufferten Dateien auf die Platte
+// Gibt Array mit { filename, originalname, mimetype, size } zurück
+function flushFilesToDisk(files = []) {
+  return files.map(f => {
+    const ext      = path.extname(f.originalname).toLowerCase();
+    const filename = uuidv4() + ext;
+    fs.writeFileSync(path.join(UPLOAD_DIR, filename), f.buffer);
+    return { filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size };
+  });
 }
 
 // ========================================================================
@@ -82,7 +90,6 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
       if ((!melderHandy || melderHandy.trim().length < 5) && (!melderMail || melderMail.trim().length < 5))
         errors.push('Handy oder E‑Mail muss ausgefüllt sein.');
-
       if (!VEHICLES.includes(fahrzeug))
         errors.push('Ungültiges Fahrzeug.');
       if (!['klein','normal','schwer','totalausfall'].includes(schwere))
@@ -91,15 +98,19 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         errors.push('Fehlerbeschreibung zu kurz (mind. 3 Zeichen).');
 
       if (errors.length > 0) {
+        // Dateien sind noch im RAM – nichts auf Platte, keine Karteileichen
         return res.status(400).render('stoerung-neu', {
           VEHICLES, errors,
           old: { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail },
         });
       }
 
+      // Erst JETZT auf Platte schreiben – Validierung war erfolgreich
+      const savedFiles = flushFilesToDisk(req.files || []);
+
       let melderKontakt = '';
       if (melderHandy && melderHandy.trim()) melderKontakt += 'Handy: ' + melderHandy.trim();
-      if (melderMail && melderMail.trim()) {
+      if (melderMail  && melderMail.trim())  {
         if (melderKontakt) melderKontakt += ' | ';
         melderKontakt += 'Mail: ' + melderMail.trim();
       }
@@ -113,12 +124,7 @@ router.post('/stoerung/neu', requireRole('user', 'admin'),
         createdBy:          req.session.user.username,
         melderName:         sanitize(melderName),
         melderKontakt:      sanitize(melderKontakt),
-        attachments:        (req.files || []).map(f => ({
-          filename:     f.filename,
-          originalname: f.originalname,
-          mimetype:     f.mimetype,
-          size:         f.size,
-        })),
+        attachments:        savedFiles,
       });
 
       mailer.sendStorungMail(storung).catch(err =>
@@ -159,9 +165,8 @@ router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
     const { newStatus, note } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt'];
 
-    if (!allowed.includes(newStatus)) {
+    if (!allowed.includes(newStatus))
       return res.status(400).json({ error: 'Ungültiger Status.' });
-    }
 
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
@@ -178,7 +183,7 @@ router.post('/status/:id', requireRole('admin'), async (req, res, next) => {
 });
 
 // ========================================================================
-// GET /api/similar – Ähnliche Fehler (Autovervollständigung)
+// GET /api/similar – Ähnliche Fehler
 // ========================================================================
 router.get('/api/similar', requireRole('user', 'admin'), async (req, res, next) => {
   try {

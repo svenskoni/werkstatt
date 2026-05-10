@@ -62,9 +62,10 @@ function formatDate(iso) {
       <h3 style="margin-bottom:var(--space-2);color:var(--color-primary)">⚠️ Gefahrenbereich (Admin)</h3>
       <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
         Löscht diese Störung <strong>vollständig</strong>: alle Anhänge vom Server, alle
-        Datenbankeinträge inkl. Verlauf. Diese Aktion ist <strong>nicht rückgängig</strong> zu machen.
+        Datenbankeinträge inkl. Verlauf. Diese Aktion ist <strong>nicht rükgängig</strong> zu machen.
       </p>
-      <button class="btn btn-danger" id="deleteBtn" data-id="<%= storung.id %>">
+      <button class="btn btn-primary" id="deleteBtn" data-id="<%= storung.id %>"
+        style="background:var(--color-primary);border-color:var(--color-primary)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         Störung endgültig löschen
       </button>
@@ -73,27 +74,86 @@ function formatDate(iso) {
   </div>
 </div>
 
+<!-- Lösch-Bestätigungs-Modal -->
 <% if (user && user.role === 'admin') { %>
+<div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
+  <div class="modal" style="max-width:500px">
+    <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">⚠️ Störung löschen</h3>
+    <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
+      Diese Aktion ist <strong>nicht rükgängig</strong>. Alle Anhänge und Datenbankeinträge werden gelöscht.
+    </p>
+
+    <div class="form-group">
+      <label class="form-label required" for="deleteGrund">Begründung / Nachricht an Melder</label>
+      <textarea class="form-control" id="deleteGrund" rows="3"
+        placeholder="z.B. Doppelmeldung – wurde bereits unter ID XY erfasst."
+        maxlength="500"
+        style="resize:vertical"></textarea>
+      <span class="form-hint">Wird per E-Mail an die Admins gesendet.<% if (storung.melderKontakt && storung.melderKontakt.includes('Mail:')) { %> Falls eine E-Mail-Adresse hinterlegt ist, erhält auch der Melder eine Kopie.<% } %></span>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="deleteCancelBtn">Abbrechen</button>
+      <button class="btn btn-primary" id="deleteConfirmBtn"
+        style="background:var(--color-primary);border-color:var(--color-primary)">
+        Endgültig löschen
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
-document.getElementById('deleteBtn').addEventListener('click', async function() {
-  const id = this.dataset.id;
-  if (!confirm('Störung wirklich ENDGÜLTIG löschen?\nAlle Anhänge und Datenbankeinträge werden gelöscht.')) return;
-  this.disabled = true;
-  this.textContent = 'Lösche…';
-  try {
-    const r = await fetch('/stoerung/' + id, { method: 'DELETE' });
-    const data = await r.json();
-    if (data.ok) {
-      window.location.href = '/?success=deleted';
-    } else {
-      alert('Fehler: ' + (data.error || 'Unbekannt'));
-      this.disabled = false;
-      this.textContent = 'Störung endgültig löschen';
+(function() {
+  const deleteBtn     = document.getElementById('deleteBtn');
+  const deleteModal   = document.getElementById('deleteModal');
+  const cancelBtn     = document.getElementById('deleteCancelBtn');
+  const confirmBtn    = document.getElementById('deleteConfirmBtn');
+  const grundField    = document.getElementById('deleteGrund');
+  const stoerungId    = deleteBtn.dataset.id;
+
+  deleteBtn.addEventListener('click', () => {
+    grundField.value = '';
+    deleteModal.hidden = false;
+    deleteModal.focus();
+    grundField.focus();
+  });
+
+  cancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
+  deleteModal.addEventListener('click', e => { if (e.target === deleteModal) deleteModal.hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
+
+  confirmBtn.addEventListener('click', async () => {
+    const grund = grundField.value.trim();
+    if (!grund) {
+      grundField.style.borderColor = 'var(--color-primary)';
+      grundField.focus();
+      return;
     }
-  } catch (e) {
-    alert('Netzwerkfehler.');
-    this.disabled = false;
-  }
-});
+    grundField.style.borderColor = '';
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Lösche…';
+
+    try {
+      const r = await fetch('/stoerung/' + stoerungId, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grund }),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        window.location.href = '/?success=deleted';
+      } else {
+        alert('Fehler: ' + (data.error || 'Unbekannt'));
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Endgültig löschen';
+      }
+    } catch (e) {
+      alert('Netzwerkfehler.');
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Endgültig löschen';
+    }
+  });
+})();
 </script>
 <% } %>

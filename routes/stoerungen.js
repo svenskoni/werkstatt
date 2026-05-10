@@ -149,16 +149,25 @@ router.post('/status/:id(*)', requireRole('admin'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Löschen ──────────────────────────────────────────────────────────────────
+// ── Löschen (mit Begründung + Mail) ───────────────────────────────────────────────
 router.delete('/stoerung/:id(*)', requireRole('admin'), async (req, res, next) => {
   try {
+    const grund = sanitize(req.body?.grund || '');
+    if (!grund) return res.status(400).json({ error: 'Bitte eine Begr\u00fcndung angeben.' });
+
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
+    // Anhänge vom Dateisystem löschen
     for (const att of storung.attachments || []) {
       const filePath = path.join(UPLOAD_DIR, att.filename);
       try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
     }
+
+    // Mail vor dem Löschen senden (storung-Daten sind danach weg)
+    mailer.sendDeleteMail(storung, req.session.user.username, grund)
+      .catch(err => console.error('[Mailer] Lösch-Mail Fehler:', err.message));
+
     await db.deleteStorung(req.params.id);
     return res.json({ ok: true });
   } catch (err) { next(err); }
@@ -179,7 +188,6 @@ router.get('/api/suche', optionalLogin, async (req, res, next) => {
   try {
     const fahrzeug = String(req.query.fahrzeug || '').trim();
     const monat    = String(req.query.monat    || '').trim();
-    // status kann komma-getrennt übergeben werden: ?status=gesendet,bestaetigt
     const statusParam = String(req.query.status || '').trim();
     const statuses = statusParam ? statusParam.split(',').map(s => s.trim()).filter(Boolean) : [];
 

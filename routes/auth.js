@@ -1,31 +1,8 @@
 'use strict';
-const express    = require('express');
-const bcrypt     = require('bcryptjs');
-const router     = express.Router();
+const express = require('express');
+const { verifyUser } = require('../middleware/auth');
 
-// Nutzer aus .env laden
-function getUsers() {
-  return [
-    {
-      username: 'viewer',
-      passwordHash: process.env.VIEWER_PASSWORD_HASH || '',
-      role: 'view',
-      displayName: process.env.VIEWER_DISPLAY || 'Betrachter',
-    },
-    {
-      username: 'benutzer',
-      passwordHash: process.env.USER_PASSWORD_HASH || '',
-      role: 'user',
-      displayName: process.env.USER_DISPLAY || 'Benutzer',
-    },
-    {
-      username: 'admin',
-      passwordHash: process.env.ADMIN_PASSWORD_HASH || '',
-      role: 'admin',
-      displayName: process.env.ADMIN_DISPLAY || 'Administrator',
-    },
-  ];
-}
+const router = express.Router();
 
 // GET /login
 router.get('/login', (req, res) => {
@@ -37,25 +14,21 @@ router.get('/login', (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const users = getUsers();
-    const user  = users.find(u => u.username === (username || '').trim().toLowerCase());
+    const user = await verifyUser((username || '').trim(), password || '');
 
-    if (!user || !user.passwordHash) {
-      return res.status(401).render('login', { error: 'Benutzername oder Passwort falsch.' });
-    }
-
-    const valid = await bcrypt.compare(password || '', user.passwordHash);
-    if (!valid) {
+    if (!user) {
       return res.status(401).render('login', { error: 'Benutzername oder Passwort falsch.' });
     }
 
     // Session regenerieren (Session-Fixation-Schutz)
     req.session.regenerate(err => {
-      if (err) return res.status(500).render('login', { error: 'Session-Fehler.' });
+      if (err) {
+        console.error('[Login] Session-Fehler:', err);
+        return res.status(500).render('login', { error: 'Session-Fehler.' });
+      }
       req.session.user = {
-        username:    user.username,
-        role:        user.role,
-        displayName: user.displayName,
+        username: user.username,
+        role:     user.role,
       };
       res.redirect('/');
     });

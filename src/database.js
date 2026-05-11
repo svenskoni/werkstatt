@@ -71,9 +71,10 @@ async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibu
     `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt, melderBenachrichtigung ? 1 : 0]
   );
+  // Erster History-Eintrag: changedBy = melderName (wer hat gemeldet), NICHT der eingeloggte User
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
-    [id, 'gesendet', createdBy, now, null]
+    [id, 'gesendet', melderName, now, null]
   );
   for (const a of attachments) {
     await run(
@@ -135,12 +136,6 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
   return all(sql, args);
 }
 
-/**
- * Ähnliche Fehler im selben Fahrzeug.
- * @param {string} query
- * @param {string|null} fahrzeug
- * @param {boolean} includeErledigt – wenn true, werden auch erledigte Einträge zurückgegeben
- */
 async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
   const like = '%' + query.toLowerCase() + '%';
   const orderBy = `ORDER BY CASE status WHEN 'erledigt' THEN 1 ELSE 0 END ASC, createdAt DESC`;

@@ -31,7 +31,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          Suchen
+          <span class="nav-text">Suchen</span>
         </button>
         <% } %>
 
@@ -47,16 +47,24 @@
           <div class="user-menu">
             <button class="user-btn" id="userMenuBtn" aria-expanded="false" aria-haspopup="true">
               <% if (user.role === 'admin') { %>
-                <span><%= user.username %></span>
+                <span class="user-name"><%= user.username %></span>
                 <span class="role-badge role-admin">Admin</span>
               <% } else { %>
-                <span>Mannschaft</span>
+                <span class="user-name"><%= user.username %></span>
+                <span class="role-badge role-user">Mann.</span>
               <% } %>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="user-dropdown" id="userDropdown" hidden role="menu">
+              <div class="dropdown-item" style="font-weight:600;color:var(--color-text);border-bottom:1px solid var(--color-divider);margin-bottom:var(--space-1);padding-bottom:var(--space-2)">
+                <%= user.username %>
+                <% if (user.role === 'admin') { %><span class="role-badge role-admin" style="margin-left:auto">Admin</span><% } %>
+              </div>
               <form action="/logout" method="POST">
-                <button type="submit" class="dropdown-item logout-btn" role="menuitem">Abmelden</button>
+                <button type="submit" class="dropdown-item logout-btn" role="menuitem">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  Abmelden
+                </button>
               </form>
             </div>
           </div>
@@ -159,9 +167,10 @@
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
 
-    const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
-    const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt' };
-    const STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)' };
+    const SCHWERE_ICON  = { niedrig:'\uD83D\uDFE2', mittel:'\uD83D\uDFE1', hoch:'\uD83D\uDFE0', kritisch:'\uD83D\uDD34',
+                            klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
+    const STATUS_LABEL  = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt' };
+    const STATUS_COLOR  = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)' };
 
     submit.addEventListener('click', async () => {
       const fahrzeug = document.getElementById('searchFahrzeug').value.trim();

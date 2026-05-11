@@ -12,7 +12,7 @@ const stoerungRoutes = require('../routes/stoerungen');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
 
-// Pflicht-Variablen prüfen – App startet nicht wenn etwas fehlt
+// Pflicht-Variablen prüfen
 const REQUIRED_ENV = [
   'NODE_ENV', 'SESSION_SECRET', 'APP_BASE_URL',
   'VEHICLES',
@@ -27,6 +27,14 @@ if (missing.length > 0) {
 }
 
 const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
+
+// Schweregrade – zentral definiert, in jeder View als SCHWERE verfügbar
+const SCHWERE = {
+  kritisch: { label: 'Kritisch',  icon: '🔴' },
+  hoch:     { label: 'Hoch',      icon: '🟠' },
+  mittel:   { label: 'Mittel',    icon: '🟡' },
+  niedrig:  { label: 'Niedrig',   icon: '🟢' },
+};
 
 const app = express();
 
@@ -75,6 +83,7 @@ app.use((req, res, next) => {
   res.locals.currentPath = req.path;
   res.locals.path        = req.path;
   res.locals.VEHICLES    = VEHICLES;
+  res.locals.SCHWERE     = SCHWERE;
   next();
 });
 

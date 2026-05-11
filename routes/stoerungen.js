@@ -33,18 +33,21 @@ function renderNeu(res, errors, old, user) {
 // ── Dashboard ────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
-    const [gesendet, bestaetigt, erledigt] = await Promise.all([
+    // zurueckgewiesen wird in eigener Spalte angezeigt (wie erledigt)
+    const [gesendet, bestaetigt, erledigt, zurueckgewiesen] = await Promise.all([
       db.getByStatus('gesendet'),
       db.getByStatus('bestaetigt'),
       db.getByStatus('erledigt'),
+      db.getByStatus('zurueckgewiesen'),
     ]);
     const stats = {
-      total:    gesendet.length + bestaetigt.length + erledigt.length,
-      offen:    gesendet.length,
-      aktiv:    bestaetigt.length,
-      erledigt: erledigt.length,
+      total:            gesendet.length + bestaetigt.length + erledigt.length + zurueckgewiesen.length,
+      offen:            gesendet.length,
+      aktiv:            bestaetigt.length,
+      erledigt:         erledigt.length,
+      zurueckgewiesen:  zurueckgewiesen.length,
     };
-    res.render('dashboard', { gesendet, bestaetigt, erledigt, stats, user: req.session.user });
+    res.render('dashboard', { gesendet, bestaetigt, erledigt, zurueckgewiesen, stats, user: req.session.user });
   } catch (err) {
     console.error('[Dashboard]', err);
     res.status(500).render('error', { title: 'Fehler', message: 'Dashboard konnte nicht geladen werden.' });
@@ -115,18 +118,26 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ──────────────────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ─────────────────────────────────────────────────────────────────────
+// Erlaubte Übergänge:
+//   gesendet   → bestaetigt | zurueckgewiesen
+//   bestaetigt → erledigt   | gesendet (zurück)
+//   erledigt / zurueckgewiesen → gesendet (wiedereröffnen)
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz } = req.body;
-    const allowed = ['gesendet', 'bestaetigt', 'erledigt'];
+    const allowed = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
+
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+
     const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null);
-    // Status-Mail asynchron
+
+    // Status-Mail asynchron – nur wenn Melder benachrichtigt werden möchte
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
+
     res.json({ ok: true, newStatus: status });
   } catch (err) {
     console.error('[Status]', err);
@@ -134,7 +145,7 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ───────────────────────────────────────────────────────────────────────────────
+// ── Störung löschen (nur Admin) ───────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -157,7 +168,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
     const { fahrzeug, monat, status } = req.query;
     if (!fahrzeug) return res.status(400).json({ error: 'Fahrzeug fehlt.' });
     const statusList = status
-      ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt'].includes(s))
+      ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
     const rows = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statusList);
     res.json(rows);

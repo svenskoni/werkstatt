@@ -44,11 +44,13 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!-- Avatar-Kreis: zeigt immer nur den ersten Buchstaben -->
-          <span class="user-avatar" aria-hidden="true"><%= user.username.charAt(0).toUpperCase() %></span>
-          <!-- Voller Name + Rolle: nur ab 480px sichtbar -->
-          <span class="user-name-full">
-            <%= user.username %>
+          <!--
+            user-info:
+            - < 480px: nur Rolle-Badge (z.B. "Mann." oder "Admin")
+            - >= 480px: Username + Rolle-Badge
+          -->
+          <span class="user-info">
+            <span class="user-name-short"><%= user.username.charAt(0).toUpperCase() %><%= user.username.slice(1) %></span>
             <% if (user.role === 'admin') { %>
               <span class="role-badge role-admin">Admin</span>
             <% } else { %>

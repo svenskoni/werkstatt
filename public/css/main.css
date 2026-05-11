@@ -94,49 +94,17 @@ ul[role="list"],ol[role="list"]{list-style:none}
 .theme-toggle{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--radius-full);color:var(--color-text-muted);border:1px solid var(--color-border);flex-shrink:0}
 .theme-toggle:hover{color:var(--color-text);background:var(--color-surface-offset)}
 
-/* ─── User-Bereich im Header ─────────────────────────────────────────────────── */
-/*
-  .user-info: einziger Container – enthält Name + Badge.
-  - < 480px: Name auf 1 Buchstabe kürzen via .user-name-short (CSS-Trick)
-  - >= 480px: voller Name sichtbar
-*/
-.user-info{
-  display:flex;align-items:center;gap:var(--space-2);
-  font-size:var(--text-sm);white-space:nowrap;
-  flex-shrink:0;
-  overflow:hidden;
-  max-width:120px;
-}
-@media(min-width:480px){
-  .user-info{max-width:200px}
-}
-
-/* Name: unter 480px nur 1 Zeichen (Anfangsbuchstabe sichtbar, Rest verborgen) */
-.user-name-short{
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  max-width:1.2em;    /* nur Platz für 1 Buchstaben */
+/* ─── User-Label im Header ───────────────────────────────────────────────────── */
+.user-label{
+  font-size:var(--text-sm);
   font-weight:600;
-}
-@media(min-width:480px){
-  .user-name-short{
-    max-width:120px;   /* voller Name */
-  }
+  color:var(--color-text-muted);
+  white-space:nowrap;
+  flex-shrink:0;
 }
 
-.role-badge{font-size:var(--text-xs);padding:1px 6px;border-radius:var(--radius-full);font-weight:600;white-space:nowrap;flex-shrink:0}
-.role-admin{background:var(--color-primary);color:#fff}
-.role-user{background:var(--color-success);color:#fff}
-.role-view{background:var(--color-surface-offset);color:var(--color-text-muted)}
-
-/* Logout-Button: Icon immer, Text nur ab 560px */
+/* Logout-Button: nur Icon */
 .logout-btn{padding:var(--space-1) var(--space-2);flex-shrink:0}
-.logout-text{display:none}
-@media(min-width:560px){
-  .logout-btn{padding:var(--space-1) var(--space-3)}
-  .logout-text{display:inline}
-}
 
 /* ─── Buttons ───────────────────────────────────────────────────────────────────── */
 .btn{display:inline-flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);border-radius:var(--radius-md);font-size:var(--text-sm);font-weight:500;text-decoration:none;cursor:pointer;border:1px solid transparent;line-height:1.4;white-space:nowrap}

@@ -3,11 +3,12 @@ const express  = require('express');
 const path     = require('path');
 const multer   = require('multer');
 const db       = require('../src/database');
+const mailer   = require('../src/mailer');
 const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer ───────────────────────────────────────────────────────────────────
+// ── Multer ────────────────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
@@ -29,7 +30,7 @@ function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ───────────────────────────────────────────────────────────────────
+// ── Dashboard ────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
     const [gesendet, bestaetigt, erledigt] = await Promise.all([
@@ -50,7 +51,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung ───────────────────────────────────────────────────────────────────
+// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -60,7 +61,7 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
 
-    // Benachrichtigung: nur aktiv wenn explizit '1' – der String '0' ist truthy in JS!
+    // Benachrichtigung: nur aktiv wenn explizit '1'
     const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
 
     // Kontakt aus Handy + Mail zusammensetzen
@@ -80,7 +81,8 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
     const attachments = (req.files || []).map(f => ({
       filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
     }));
-    await db.createStorung({
+
+    const storung = await db.createStorung({
       fahrzeug, schwere, fehlerBeschreibung,
       beschreibung: beschreibung || '',
       createdBy: req.session.user.username,
@@ -89,6 +91,11 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
       melderBenachrichtigung,
       attachments,
     });
+
+    // Mails asynchron senden (ohne await, damit die Weiterleitung nicht blockiert)
+    mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
+    mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
+
     res.redirect('/');
   } catch (err) {
     console.error('[Neu]', err);
@@ -96,22 +103,19 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   }
 });
 
-// ── Störung-Detail ───────────────────────────────────────────────────────────────────
+// ── Störung-Detail ──────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).render('error', { title: '404', message: 'Störung nicht gefunden.' });
-    res.render('stoerung-detail', {
-      storung,
-      user: req.session.user,
-    });
+    res.render('stoerung-detail', { storung, user: req.session.user });
   } catch (err) {
     console.error('[Detail]', err);
     res.status(500).render('error', { title: 'Fehler', message: 'Störung konnte nicht geladen werden.' });
   }
 });
 
-// ── Status ändern (nur Admin) ───────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ──────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz } = req.body;
@@ -119,7 +123,10 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-    await db.updateStatus(storung.id, status, req.session.user.username, notiz || null);
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null);
+    // Status-Mail asynchron
+    mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
+      .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
   } catch (err) {
     console.error('[Status]', err);
@@ -127,12 +134,15 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ───────────────────────────────────────────────────────────────
-// POST (kein DELETE) – HTML-Forms unterstützen nur GET/POST
+// ── Störung löschen (nur Admin) ───────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
+    const { grund } = req.body;
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+    // Lösch-Mail vor dem tatsächlichen Löschen senden
+    mailer.sendDeleteMail(storung, req.session.user.username, grund || 'Kein Grund angegeben')
+      .catch(err => console.error('[Route] sendDeleteMail:', err.message));
     await db.deleteStorung(storung.id);
     res.json({ ok: true });
   } catch (err) {
@@ -141,7 +151,7 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API ───────────────────────────────────────────────────────────────────
+// ── Such-API ────────────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status } = req.query;
@@ -157,7 +167,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ──────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ──────────────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

@@ -31,7 +31,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <span class="nav-text">Suchen</span>
         </button>
         <% } %>
 
@@ -45,9 +44,11 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!-- Benutzername + Rolle (nur Anzeige) -->
-          <span class="header-user-info">
-            <span class="user-name-text"><%= user.username %></span>
+          <!-- Avatar-Kreis: zeigt immer nur den ersten Buchstaben -->
+          <span class="user-avatar" aria-hidden="true"><%= user.username.charAt(0).toUpperCase() %></span>
+          <!-- Voller Name + Rolle: nur ab 480px sichtbar -->
+          <span class="user-name-full">
+            <%= user.username %>
             <% if (user.role === 'admin') { %>
               <span class="role-badge role-admin">Admin</span>
             <% } else { %>
@@ -56,13 +57,13 @@
           </span>
           <!-- Direkter Logout-Button -->
           <form action="/logout" method="POST" style="margin:0">
-            <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden">
+            <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden" aria-label="Abmelden">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
-              <span class="nav-text">Abmelden</span>
+              <span class="logout-text">Abmelden</span>
             </button>
           </form>
         <% } %>
@@ -102,7 +103,6 @@
         <h3 id="searchModalTitle" style="margin:0">St&ouml;rung suchen</h3>
         <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
       </div>
-
       <div class="form-group">
         <label class="form-label" for="searchFahrzeug">Fahrzeug</label>
         <select class="form-control" id="searchFahrzeug">
@@ -112,12 +112,10 @@
           <% }); %>
         </select>
       </div>
-
       <div class="form-group">
         <label class="form-label" for="searchMonat">Monat <span style="font-weight:400;color:var(--color-text-muted)">(optional)</span></label>
         <input type="month" class="form-control" id="searchMonat">
       </div>
-
       <div class="form-group" style="margin-bottom:var(--space-5)">
         <span class="form-label" style="display:block;margin-bottom:var(--space-2)">Status</span>
         <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
@@ -138,7 +136,6 @@
           </label>
         </div>
       </div>
-
       <button class="btn btn-primary" id="searchSubmit" style="width:100%">Suchen</button>
       <div id="searchResults" style="margin-top:var(--space-4)" aria-live="polite"></div>
     </div>
@@ -147,7 +144,6 @@
 
   <script src="/js/main.js"></script>
   <script>
-  // ── Theme Toggle ──────────────────────────────────────────────────────────
   (function(){
     const t = document.querySelector('[data-theme-toggle]');
     const r = document.documentElement;
@@ -158,39 +154,31 @@
       r.setAttribute('data-theme', d);
     });
   })();
-
   <% if (user) { %>
-  // ── Such-Modal ────────────────────────────────────────────────────────────
   (function () {
     const btn     = document.getElementById('searchBtn');
     const modal   = document.getElementById('searchModal');
     const close   = document.getElementById('searchModalClose');
     const submit  = document.getElementById('searchSubmit');
     const results = document.getElementById('searchResults');
-
     function openModal()  { modal.hidden = false; modal.focus(); }
     function closeModal() { modal.hidden = true;  results.innerHTML = ''; }
-
     btn.addEventListener('click', openModal);
     close.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
-
     const SCHWERE_ICON  = { niedrig:'\uD83D\uDFE2', mittel:'\uD83D\uDFE1', hoch:'\uD83D\uDFE0', kritisch:'\uD83D\uDD34',
                             klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
     const STATUS_LABEL  = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt' };
     const STATUS_COLOR  = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)' };
-
     submit.addEventListener('click', async () => {
       const fahrzeug = document.getElementById('searchFahrzeug').value.trim();
       const monat    = document.getElementById('searchMonat').value.trim();
       const checkedStatuses = ['statusGesendet','statusBestaetigt','statusErledigt']
         .filter(id => document.getElementById(id).checked)
         .map(id => document.getElementById(id).value);
-
       if (!fahrzeug) { results.innerHTML = '<p style="color:var(--color-error)">Bitte ein Fahrzeug w&auml;hlen.</p>'; return; }
       if (checkedStatuses.length === 0) { results.innerHTML = '<p style="color:var(--color-error)">Bitte mindestens einen Status ausw&auml;hlen.</p>'; return; }
-
       submit.disabled = true; submit.textContent = 'Suche...';
       results.innerHTML = '';
       try {

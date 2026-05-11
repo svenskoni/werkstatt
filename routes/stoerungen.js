@@ -39,7 +39,7 @@ router.get('/', requireLogin, async (req, res) => {
       aktiv:    bestaetigt.length,
       erledigt: erledigt.length,
     };
-    res.render('index', { gesendet, bestaetigt, erledigt, stats, user: req.session.user });
+    res.render('dashboard', { gesendet, bestaetigt, erledigt, stats, user: req.session.user });
   } catch (err) {
     console.error('[Dashboard]', err);
     res.status(500).render('error', { title: 'Fehler', message: 'Dashboard konnte nicht geladen werden.' });

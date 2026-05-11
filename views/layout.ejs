@@ -44,20 +44,10 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!--
-            user-info:
-            - < 480px: nur Rolle-Badge (z.B. "Mann." oder "Admin")
-            - >= 480px: Username + Rolle-Badge
-          -->
-          <span class="user-info">
-            <span class="user-name-short"><%= user.username.charAt(0).toUpperCase() %><%= user.username.slice(1) %></span>
-            <% if (user.role === 'admin') { %>
-              <span class="role-badge role-admin">Admin</span>
-            <% } else { %>
-              <span class="role-badge role-user">Mann.</span>
-            <% } %>
-          </span>
-          <!-- Direkter Logout-Button -->
+          <!-- Nur Username, kein Badge, kein Avatar-Kreis -->
+          <span class="user-label"><%= user.username %></span>
+
+          <!-- Logout -->
           <form action="/logout" method="POST" style="margin:0">
             <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden" aria-label="Abmelden">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -65,7 +55,6 @@
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
-              <span class="logout-text">Abmelden</span>
             </button>
           </form>
         <% } %>

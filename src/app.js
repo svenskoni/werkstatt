@@ -28,12 +28,13 @@ if (missing.length > 0) {
 
 const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
 
-// Schweregrade – zentral definiert, in jeder View als SCHWERE verfügbar
+// Schweregrade – Keys müssen exakt den Formular-Werten entsprechen
+// Formular speichert: klein | normal | schwer | totalausfall
 const SCHWERE = {
-  kritisch: { label: 'Kritisch',  icon: '🔴' },
-  hoch:     { label: 'Hoch',      icon: '🟠' },
-  mittel:   { label: 'Mittel',    icon: '🟡' },
-  niedrig:  { label: 'Niedrig',   icon: '🟢' },
+  klein:        { label: 'Klein',        icon: '🟢' },
+  normal:       { label: 'Normal',       icon: '🟡' },
+  schwer:       { label: 'Schwer',       icon: '🟠' },
+  totalausfall: { label: 'Totalausfall', icon: '🔴' },
 };
 
 const app = express();

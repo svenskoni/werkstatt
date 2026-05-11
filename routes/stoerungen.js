@@ -7,12 +7,12 @@ const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer-Konfiguration ──────────────────────────────────────────────────────
+// ── Multer ───────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
   filename:    (req, file, cb) => {
-    const ext  = path.extname(file.originalname).toLowerCase();
+    const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
   }
 });
@@ -25,16 +25,11 @@ const upload = multer({
   }
 });
 
-// Hilfsfunktion für Formular-Fehlerantwort
 function renderNeu(res, errors, old, user) {
-  res.status(errors.length ? 400 : 200).render('stoerung-neu', {
-    errors: errors || [],
-    old:    old    || {},
-    user,
-  });
+  res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ───────────────────────────────────────────────────────────────
+// ── Dashboard ───────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
     const [gesendet, bestaetigt, erledigt] = await Promise.all([
@@ -55,37 +50,31 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung – Formular ────────────────────────────────────────────────
+// ── Neue Störung ───────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
 
-// ── Neue Störung – Speichern ────────────────────────────────────────────────
 router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async (req, res) => {
   const old = req.body || {};
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt } = req.body;
     const melderBenachrichtigung = req.body.melderBenachrichtigung ? 1 : 0;
-
     const errors = [];
-    if (!melderName)          errors.push('Name des Melders ist erforderlich.');
-    if (!fahrzeug)            errors.push('Bitte ein Fahrzeug auswählen.');
-    if (!schwere)             errors.push('Bitte einen Schweregrad auswählen.');
-    if (!fehlerBeschreibung)  errors.push('Fehlerbeschreibung ist erforderlich.');
+    if (!melderName)         errors.push('Name des Melders ist erforderlich.');
+    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
+    if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
+    if (!fehlerBeschreibung) errors.push('Fehlerbeschreibung ist erforderlich.');
     if (errors.length) return renderNeu(res, errors, old, req.session.user);
-
     const attachments = (req.files || []).map(f => ({
-      filename:     f.filename,
-      originalname: f.originalname,
-      mimetype:     f.mimetype,
-      size:         f.size,
+      filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
     }));
     await db.createStorung({
       fahrzeug, schwere, fehlerBeschreibung,
-      beschreibung:         beschreibung || '',
-      createdBy:            req.session.user.username,
-      melderName:           melderName || '',
-      melderKontakt:        melderKontakt || '',
+      beschreibung: beschreibung || '',
+      createdBy: req.session.user.username,
+      melderName: melderName || '',
+      melderKontakt: melderKontakt || '',
       melderBenachrichtigung,
       attachments,
     });
@@ -96,16 +85,14 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   }
 });
 
-// ── Störung-Detail ──────────────────────────────────────────────────────────
+// ── Störung-Detail ───────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
-    const s = await db.getStorungById(req.params.id);
-    if (!s) return res.status(404).render('error', { title: '404', message: 'Störung nicht gefunden.' });
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).render('error', { title: '404', message: 'Störung nicht gefunden.' });
     res.render('stoerung-detail', {
-      s,
-      attachments: s.attachments || [],
-      history:     s.history     || [],
-      user:        req.session.user,
+      storung,
+      user: req.session.user,
     });
   } catch (err) {
     console.error('[Detail]', err);
@@ -113,15 +100,15 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ─────────────────────────────────────────────
+// ── Status ändern (nur Admin) ───────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt'];
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
-    const s = await db.getStorungById(req.params.id);
-    if (!s) return res.status(404).json({ error: 'Nicht gefunden.' });
-    await db.updateStatus(s.id, status, req.session.user.username, notiz || null);
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+    await db.updateStatus(storung.id, status, req.session.user.username, notiz || null);
     res.json({ ok: true, newStatus: status });
   } catch (err) {
     console.error('[Status]', err);
@@ -129,20 +116,21 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ───────────────────────────────────────────
+// ── Störung löschen (nur Admin) ───────────────────────────────────────────────────────────────
+// POST (kein DELETE) – HTML-Forms unterstützen nur GET/POST
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
-    const s = await db.getStorungById(req.params.id);
-    if (!s) return res.status(404).render('error', { title: '404', message: 'Nicht gefunden.' });
-    await db.deleteStorung(s.id);
-    res.redirect('/');
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+    await db.deleteStorung(storung.id);
+    res.json({ ok: true });
   } catch (err) {
     console.error('[Löschen]', err);
-    res.status(500).render('error', { title: 'Fehler', message: 'Löschen fehlgeschlagen.' });
+    res.status(500).json({ error: 'Löschen fehlgeschlagen.' });
   }
 });
 
-// ── Such-API ──────────────────────────────────────────────────────────────
+// ── Such-API ───────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status } = req.query;
@@ -154,6 +142,19 @@ router.get('/api/suche', requireLogin, async (req, res) => {
     res.json(rows);
   } catch (err) {
     console.error('[API Suche]', err);
+    res.status(500).json({ error: 'Fehler.' });
+  }
+});
+
+// ── Ähnliche Fehler API ──────────────────────────────────────────────────────────────
+router.get('/api/similar', requireLogin, async (req, res) => {
+  try {
+    const { q, fahrzeug, includeErledigt } = req.query;
+    if (!q || q.length < 3) return res.json([]);
+    const rows = await db.searchSimilarFehler(q, fahrzeug || null, includeErledigt === '1');
+    res.json(rows.map(r => ({ id: r.id, fehler: r.fehlerBeschreibung, status: r.status })));
+  } catch (err) {
+    console.error('[API Similar]', err);
     res.status(500).json({ error: 'Fehler.' });
   }
 });

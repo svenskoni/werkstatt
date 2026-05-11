@@ -1,5 +1,6 @@
 <div class="auth-container">
   <div class="auth-card">
+
     <div class="auth-logo">
       <svg width="56" height="56" viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <rect width="32" height="32" rx="6" fill="#c0392b"/>
@@ -7,59 +8,130 @@
         <rect x="13" y="17" width="6" height="5" rx="1" fill="#c0392b"/>
       </svg>
       <h1 class="auth-title">Störungsmelder</h1>
+      <p class="auth-subtitle">Feuerwehr LZ Frechen</p>
     </div>
 
     <% if (error) { %>
       <div class="alert alert-error" role="alert"><%= error %></div>
     <% } %>
 
-    <form action="/login" method="POST" autocomplete="on" novalidate>
-      <div class="form-group">
-        <label class="form-label required" for="username">Benutzername</label>
-        <input
-          type="text"
-          id="username"
-          name="username"
-          class="form-control"
-          autocomplete="username"
-          required
-          autofocus
-          maxlength="80"
-          spellcheck="false"
-        >
-      </div>
-
-      <div class="form-group">
-        <label class="form-label required" for="password">Passwort</label>
-        <div class="password-wrap">
-          <input
-            type="password"
-            id="password"
-            name="password"
-            class="form-control"
-            autocomplete="current-password"
-            required
-            maxlength="200"
-          >
-          <button type="button" class="pw-toggle" onclick="togglePw()" aria-label="Passwort anzeigen">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)">
-        Anmelden
+    <!-- Tabs -->
+    <div class="login-tabs" role="tablist">
+      <button type="button" class="login-tab <%= tab !== 'admin' ? 'active' : '' %>" role="tab"
+              aria-selected="<%= tab !== 'admin' %>" data-tab="crew" id="tab-crew" aria-controls="panel-crew">
+        🚒 Mannschaft
       </button>
-    </form>
+      <button type="button" class="login-tab <%= tab === 'admin' ? 'active' : '' %>" role="tab"
+              aria-selected="<%= tab === 'admin' %>" data-tab="admin" id="tab-admin" aria-controls="panel-admin">
+        🔑 Admin
+      </button>
+    </div>
+
+    <!-- Panel: Mannschaft -->
+    <div class="login-panel <%= tab !== 'admin' ? '' : 'hidden' %>" id="panel-crew" role="tabpanel" aria-labelledby="tab-crew">
+      <form action="/login" method="POST" autocomplete="on" novalidate>
+        <input type="hidden" name="type" value="crew">
+        <div class="form-group">
+          <label class="form-label required" for="pw-crew">Passwort</label>
+          <div class="password-wrap">
+            <input type="password" id="pw-crew" name="password" class="form-control"
+                   autocomplete="current-password" required maxlength="200"
+                   <% if (tab !== 'admin') { %>autofocus<% } %>>
+            <button type="button" class="pw-toggle" onclick="togglePw('pw-crew')" aria-label="Passwort anzeigen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)">
+          Anmelden
+        </button>
+      </form>
+    </div>
+
+    <!-- Panel: Admin -->
+    <div class="login-panel <%= tab === 'admin' ? '' : 'hidden' %>" id="panel-admin" role="tabpanel" aria-labelledby="tab-admin">
+      <form action="/login" method="POST" autocomplete="on" novalidate>
+        <input type="hidden" name="type" value="admin">
+        <div class="form-group">
+          <label class="form-label required" for="username">Benutzername</label>
+          <input type="text" id="username" name="username" class="form-control"
+                 autocomplete="username" required maxlength="80" spellcheck="false"
+                 <% if (tab === 'admin') { %>autofocus<% } %>>
+        </div>
+        <div class="form-group">
+          <label class="form-label required" for="pw-admin">Passwort</label>
+          <div class="password-wrap">
+            <input type="password" id="pw-admin" name="password" class="form-control"
+                   autocomplete="current-password" required maxlength="200">
+            <button type="button" class="pw-toggle" onclick="togglePw('pw-admin')" aria-label="Passwort anzeigen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)">
+          Als Admin anmelden
+        </button>
+      </form>
+    </div>
+
     <p class="auth-note">Nur für autorisierte Mitglieder der Feuerwehr LZ Frechen.</p>
   </div>
 </div>
+
+<style>
+.auth-subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+.login-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--color-divider);
+  margin-bottom: var(--space-5);
+  gap: 0;
+}
+.login-tab {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color var(--transition-interactive), border-color var(--transition-interactive);
+}
+.login-tab:hover { color: var(--color-text); }
+.login-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+.login-panel.hidden { display: none; }
+</style>
+
 <script>
-function togglePw() {
-  const i = document.getElementById('password');
+function togglePw(id) {
+  const i = document.getElementById(id);
   i.type = i.type === 'password' ? 'text' : 'password';
 }
+document.querySelectorAll('.login-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.login-tab').forEach(b => {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    btn.classList.add('active');
+    btn.setAttribute('aria-selected', 'true');
+    const target = btn.dataset.tab;
+    document.querySelectorAll('.login-panel').forEach(p => p.classList.add('hidden'));
+    document.getElementById('panel-' + target).classList.remove('hidden');
+  });
+});
 </script>

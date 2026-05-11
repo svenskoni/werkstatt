@@ -24,21 +24,16 @@
       </a>
 
       <nav class="header-nav" aria-label="Hauptnavigation">
-        <a href="/" class="nav-link <%= path === '/' ? 'active' : '' %>">Dashboard</a>
 
-        <% if (user && (user.role === 'user' || user.role === 'admin')) { %>
-          <a href="/stoerung/neu" class="nav-link <%= path === '/stoerung/neu' ? 'active' : '' %>">
-            + Neue St&ouml;rung
-          </a>
-        <% } %>
-
-        <!-- Suche-Button -->
+        <!-- Suche-Button (immer sichtbar wenn eingeloggt) -->
+        <% if (user) { %>
         <button class="btn btn-ghost btn-sm" id="searchBtn" aria-label="St&ouml;rung suchen" title="St&ouml;rung suchen">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
           Suchen
         </button>
+        <% } %>
 
         <button class="theme-toggle" data-theme-toggle aria-label="Theme wechseln" title="Hell/Dunkel">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -51,10 +46,12 @@
         <% } else { %>
           <div class="user-menu">
             <button class="user-btn" id="userMenuBtn" aria-expanded="false" aria-haspopup="true">
-              <span><%= user.username %></span>
-              <span class="role-badge role-<%= user.role %>">
-                <%= user.role === 'admin' ? 'Admin' : 'Benutzer' %>
-              </span>
+              <% if (user.role === 'admin') { %>
+                <span><%= user.username %></span>
+                <span class="role-badge role-admin">Admin</span>
+              <% } else { %>
+                <span>Mannschaft</span>
+              <% } %>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
             <div class="user-dropdown" id="userDropdown" hidden role="menu">
@@ -93,6 +90,7 @@
   </div>
 
   <!-- Such-Modal -->
+  <% if (user) { %>
   <div class="modal-backdrop" id="searchModal" hidden role="dialog" aria-modal="true" aria-labelledby="searchModalTitle" tabindex="-1">
     <div class="modal">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
@@ -100,7 +98,6 @@
         <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
       </div>
 
-      <!-- Fahrzeug -->
       <div class="form-group">
         <label class="form-label" for="searchFahrzeug">Fahrzeug</label>
         <select class="form-control" id="searchFahrzeug">
@@ -111,13 +108,11 @@
         </select>
       </div>
 
-      <!-- Monat -->
       <div class="form-group">
         <label class="form-label" for="searchMonat">Monat <span style="font-weight:400;color:var(--color-text-muted)">(optional)</span></label>
         <input type="month" class="form-control" id="searchMonat">
       </div>
 
-      <!-- Status-Filter -->
       <div class="form-group" style="margin-bottom:var(--space-5)">
         <span class="form-label" style="display:block;margin-bottom:var(--space-2)">Status</span>
         <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
@@ -140,14 +135,14 @@
       </div>
 
       <button class="btn btn-primary" id="searchSubmit" style="width:100%">Suchen</button>
-
       <div id="searchResults" style="margin-top:var(--space-4)" aria-live="polite"></div>
     </div>
   </div>
+  <% } %>
 
   <script src="/js/main.js"></script>
   <script>
-  // Such-Modal
+  <% if (user) { %>
   (function () {
     const VEHICLES = <%- JSON.stringify(VEHICLES) %>;
     const btn     = document.getElementById('searchBtn');
@@ -156,48 +151,36 @@
     const submit  = document.getElementById('searchSubmit');
     const results = document.getElementById('searchResults');
 
-    function openModal() { modal.hidden = false; modal.focus(); }
-    function closeModal() { modal.hidden = true; results.innerHTML = ''; }
+    function openModal()  { modal.hidden = false; modal.focus(); }
+    function closeModal() { modal.hidden = true;  results.innerHTML = ''; }
 
     btn.addEventListener('click', openModal);
     close.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
 
-    const SCHWERE_ICON = { klein: '\uD83D\uDFE2', normal: '\uD83D\uDFE1', schwer: '\uD83D\uDFE0', totalausfall: '\uD83D\uDD34' };
-    const STATUS_LABEL = { gesendet: 'Eingegangen', bestaetigt: 'In Bearbeitung', erledigt: 'Erledigt' };
-    const STATUS_COLOR = { gesendet: 'var(--color-new)', bestaetigt: 'var(--color-active)', erledigt: 'var(--color-done)' };
+    const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
+    const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt' };
+    const STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)' };
 
     submit.addEventListener('click', async () => {
       const fahrzeug = document.getElementById('searchFahrzeug').value.trim();
       const monat    = document.getElementById('searchMonat').value.trim();
-
-      // Gewählte Status sammeln
       const checkedStatuses = ['statusGesendet','statusBestaetigt','statusErledigt']
         .filter(id => document.getElementById(id).checked)
         .map(id => document.getElementById(id).value);
 
-      if (!fahrzeug) {
-        results.innerHTML = '<p style="color:var(--color-error)">Bitte ein Fahrzeug w&auml;hlen.</p>';
-        return;
-      }
-      if (checkedStatuses.length === 0) {
-        results.innerHTML = '<p style="color:var(--color-error)">Bitte mindestens einen Status ausw&auml;hlen.</p>';
-        return;
-      }
+      if (!fahrzeug) { results.innerHTML = '<p style="color:var(--color-error)">Bitte ein Fahrzeug w&auml;hlen.</p>'; return; }
+      if (checkedStatuses.length === 0) { results.innerHTML = '<p style="color:var(--color-error)">Bitte mindestens einen Status ausw&auml;hlen.</p>'; return; }
 
-      submit.disabled = true;
-      submit.textContent = 'Suche...';
+      submit.disabled = true; submit.textContent = 'Suche...';
       results.innerHTML = '';
-
       try {
         const params = new URLSearchParams({ fahrzeug });
         if (monat) params.set('monat', monat);
         params.set('status', checkedStatuses.join(','));
-
         const res  = await fetch('/api/suche?' + params);
         const data = await res.json();
-
         if (!Array.isArray(data) || data.length === 0) {
           results.innerHTML = '<p style="color:var(--color-text-muted);text-align:center;padding:var(--space-4) 0">F&uuml;r diesen Zeitraum keine Meldung.</p>';
         } else {
@@ -209,22 +192,19 @@
             return `<a href="/stoerung/${encodeURIComponent(s.id)}" class="search-result-item">
               <span class="search-result-id">${s.id}</span>
               <span class="search-result-fehler">${s.fehlerBeschreibung}</span>
-              <span class="search-result-meta">
-                ${icon}&nbsp;${datum}&nbsp;&middot;&nbsp;
-                <span style="color:${color};font-weight:600">${status}</span>
-              </span>
+              <span class="search-result-meta">${icon}&nbsp;${datum}&nbsp;&middot;&nbsp;<span style="color:${color};font-weight:600">${status}</span></span>
             </a>`;
           });
           results.innerHTML = '<div class="search-result-list">' + rows.join('') + '</div>';
         }
-      } catch (e) {
+      } catch(e) {
         results.innerHTML = '<p style="color:var(--color-error)">Fehler bei der Suche.</p>';
       } finally {
-        submit.disabled = false;
-        submit.textContent = 'Suchen';
+        submit.disabled = false; submit.textContent = 'Suchen';
       }
     });
   })();
+  <% } %>
   </script>
 </body>
 </html>

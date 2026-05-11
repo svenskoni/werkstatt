@@ -1,28 +1,47 @@
 'use strict';
 const bcrypt = require('bcryptjs');
 
-function getUsers() {
-  return [
-    {
-      username: process.env.USER_USER_NAME  || 'benutzer',
-      passHash: process.env.USER_USER_PASS_HASH,
-      role: 'user'
-    },
-    {
-      username: process.env.USER_ADMIN_NAME || 'admin',
-      passHash: process.env.USER_ADMIN_PASS_HASH,
-      role: 'admin'
-    },
-  ].filter(u => u.passHash);
+/**
+ * Admins: ADMIN_1_NAME / ADMIN_1_PASS_HASH
+ *         ADMIN_2_NAME / ADMIN_2_PASS_HASH  … beliebig viele
+ * Mannschaft: CREW_PASS_HASH  (kein Name nötig)
+ */
+function getAdmins() {
+  const admins = [];
+  let i = 1;
+  while (true) {
+    const name = process.env[`ADMIN_${i}_NAME`];
+    const hash = process.env[`ADMIN_${i}_PASS_HASH`];
+    if (!name || !hash) break;
+    admins.push({ username: name.trim(), passHash: hash, role: 'admin' });
+    i++;
+  }
+  // Rückwärtskompatibilität: alter USER_ADMIN_NAME
+  const legacyName = process.env.USER_ADMIN_NAME;
+  const legacyHash = process.env.USER_ADMIN_PASS_HASH;
+  if (legacyName && legacyHash && !admins.find(a => a.username.toLowerCase() === legacyName.toLowerCase())) {
+    admins.push({ username: legacyName.trim(), passHash: legacyHash, role: 'admin' });
+  }
+  return admins;
 }
 
-async function verifyUser(username, password) {
-  const users = getUsers();
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-  if (!user || !user.passHash) return null;
-  const ok = await bcrypt.compare(password, user.passHash);
+/** Login für Admins: Name + Passwort */
+async function verifyAdmin(username, password) {
+  const admins = getAdmins();
+  const admin  = admins.find(a => a.username.toLowerCase() === username.toLowerCase());
+  if (!admin) return null;
+  const ok = await bcrypt.compare(password, admin.passHash);
   if (!ok) return null;
-  return { username: user.username, role: user.role };
+  return { username: admin.username, role: 'admin' };
+}
+
+/** Login für Mannschaft: nur Passwort */
+async function verifyCrewPassword(password) {
+  const hash = process.env.CREW_PASS_HASH;
+  if (!hash) return null;
+  const ok = await bcrypt.compare(password, hash);
+  if (!ok) return null;
+  return { username: 'Mannschaft', role: 'crew' };
 }
 
 function requireLogin(req, res, next) {
@@ -53,4 +72,4 @@ function optionalLogin(req, res, next) {
   next();
 }
 
-module.exports = { verifyUser, requireLogin, requireRole, optionalLogin };
+module.exports = { verifyAdmin, verifyCrewPassword, requireLogin, requireRole, optionalLogin };

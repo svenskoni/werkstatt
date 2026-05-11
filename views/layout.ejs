@@ -55,6 +55,7 @@
               <% } %>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
+            <!-- Dropdown AUSSERHALB header-inner, direkt im body via JS positioniert -->
             <div class="user-dropdown" id="userDropdown" hidden role="menu">
               <div class="dropdown-item" style="font-weight:600;color:var(--color-text);border-bottom:1px solid var(--color-divider);margin-bottom:var(--space-1);padding-bottom:var(--space-2)">
                 <%= user.username %>
@@ -150,7 +151,59 @@
 
   <script src="/js/main.js"></script>
   <script>
+  // ── Theme Toggle ──────────────────────────────────────────────────────────
+  (function(){
+    const t = document.querySelector('[data-theme-toggle]');
+    const r = document.documentElement;
+    let d = r.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+    r.setAttribute('data-theme', d);
+    if (t) t.addEventListener('click', () => {
+      d = d === 'dark' ? 'light' : 'dark';
+      r.setAttribute('data-theme', d);
+    });
+  })();
+
+  // ── User-Dropdown – fixed positioniert damit kein Clipping durch overflow:hidden ──
+  (function(){
+    const btn      = document.getElementById('userMenuBtn');
+    const dropdown = document.getElementById('userDropdown');
+    if (!btn || !dropdown) return;
+
+    // Dropdown ans body hängen damit z-index / overflow kein Problem ist
+    document.body.appendChild(dropdown);
+    dropdown.style.cssText = 'position:fixed;z-index:9999;min-width:200px';
+
+    function positionDropdown() {
+      const r = btn.getBoundingClientRect();
+      dropdown.style.top  = (r.bottom + 6) + 'px';
+      dropdown.style.right = (window.innerWidth - r.right) + 'px';
+      dropdown.style.left  = 'auto';
+    }
+
+    function open() {
+      positionDropdown();
+      dropdown.hidden = false;
+      btn.setAttribute('aria-expanded', 'true');
+    }
+    function close() {
+      dropdown.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    }
+
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      dropdown.hidden ? open() : close();
+    });
+    document.addEventListener('click', e => {
+      if (!dropdown.hidden && !dropdown.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !dropdown.hidden) close();
+    });
+    window.addEventListener('resize', () => { if (!dropdown.hidden) positionDropdown(); });
+  })();
   <% if (user) { %>
+  // ── Such-Modal ────────────────────────────────────────────────────────────
   (function () {
     const VEHICLES = <%- JSON.stringify(VEHICLES) %>;
     const btn     = document.getElementById('searchBtn');

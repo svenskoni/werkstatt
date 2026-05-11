@@ -53,18 +53,19 @@ ul[role="list"],ol[role="list"]{list-style:none}
 :focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;border-radius:var(--radius-sm)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 
-/* ─── Skip Link ────────────────────────────────────────────────────────────────── */
+/* ─── Skip Link ───────────────────────────────────────────────────────────────── */
 .skip-link{position:absolute;top:-100%;left:var(--space-4);z-index:1000;padding:var(--space-2) var(--space-4);background:var(--color-primary);color:#fff;border-radius:var(--radius-md);font-size:var(--text-sm);text-decoration:none}
 .skip-link:focus{top:var(--space-4)}
 
 /* ─── Header ───────────────────────────────────────────────────────────────────── */
 .site-header{background:var(--color-surface);border-bottom:1px solid var(--color-divider);position:sticky;top:0;z-index:100;box-shadow:var(--shadow-sm)}
+/* overflow:visible damit das fixed-dropdown nicht geclipt wird */
+.site-header,.header-inner{overflow:visible}
 .header-inner{
   max-width:1400px;margin:0 auto;
   padding:0 var(--space-4);
   display:flex;align-items:center;justify-content:space-between;
   height:56px;gap:var(--space-2);
-  overflow:hidden;
 }
 .logo{display:flex;align-items:center;gap:var(--space-2);text-decoration:none;color:var(--color-text);flex-shrink:0;min-width:0}
 .logo svg{flex-shrink:0}
@@ -91,7 +92,7 @@ ul[role="list"],ol[role="list"]{list-style:none}
 .btn-lg{padding:var(--space-3) var(--space-8);font-size:var(--text-base)}
 .btn-full{width:100%;justify-content:center}
 
-/* ─── User Menu ────────────────────────────────────────────────────────────────── */
+/* ─── User Menu ───────────────────────────────────────────────────────────────── */
 .user-menu{position:relative;flex-shrink:0}
 .user-btn{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--color-text-muted);border:1px solid var(--color-border)}
 .user-btn:hover{background:var(--color-surface-offset)}
@@ -101,7 +102,15 @@ ul[role="list"],ol[role="list"]{list-style:none}
 .role-admin{background:var(--color-primary);color:#fff}
 .role-user{background:var(--color-success);color:#fff}
 .role-view{background:var(--color-surface-offset);color:var(--color-text-muted)}
-.user-dropdown{position:absolute;right:0;top:calc(100% + 6px);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);min-width:180px;z-index:200;padding:var(--space-2)}
+/* Dropdown wird via JS als fixed-positioniertes Element ans body angehängt */
+.user-dropdown{
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);
+  min-width:180px;
+  padding:var(--space-2);
+}
 .dropdown-item{display:flex;align-items:center;gap:var(--space-2);width:100%;padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);font-size:var(--text-sm);color:var(--color-text-muted);text-align:left}
 .dropdown-item:hover{background:var(--color-surface-offset);color:var(--color-text)}
 .logout-btn{color:var(--color-primary)}
@@ -135,9 +144,16 @@ ul[role="list"],ol[role="list"]{list-style:none}
   margin-bottom:var(--space-4);
   box-shadow:var(--shadow-sm);
 }
+/* "Neue Störung" Button – volle Breite, zentriert unter den Zahlen */
 .stats-bar .stats-action{
   grid-column: 1 / -1;
   display:flex;
+  justify-content:center;
+  width:100%;
+}
+.stats-bar .stats-action .btn{
+  width:100%;
+  max-width:320px;
   justify-content:center;
 }
 @media(min-width:640px){
@@ -151,8 +167,11 @@ ul[role="list"],ol[role="list"]{list-style:none}
   .stats-bar .stats-action{
     grid-column:auto;
     margin-left:auto;
-    display:flex;
-    justify-content:flex-end;
+    width:auto;
+  }
+  .stats-bar .stats-action .btn{
+    width:auto;
+    max-width:none;
   }
 }
 .stat-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:var(--space-2)}

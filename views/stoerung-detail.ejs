@@ -114,12 +114,12 @@ function formatDate(iso) {
   const cancelBtn   = document.getElementById('deleteCancelBtn');
   const confirmBtn  = document.getElementById('deleteConfirmBtn');
   const grundField  = document.getElementById('deleteGrund');
+  if (!deleteBtn) return;
   const stoerungId  = deleteBtn.dataset.id;
   const erledigt    = deleteBtn.dataset.erledigt === '1';
 
   deleteBtn.addEventListener('click', () => {
     if (erledigt) {
-      // Direkt löschen ohne Modal
       deleteBtn.disabled = true;
       deleteBtn.textContent = 'Lösche…';
       doDelete('Erledigt – automatisch bereinigt');
@@ -146,8 +146,8 @@ function formatDate(iso) {
 
   async function doDelete(grund) {
     try {
-      const r = await fetch('/stoerung/' + stoerungId, {
-        method: 'DELETE',
+      const r = await fetch('/stoerung/' + stoerungId + '/loeschen', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grund }),
       });

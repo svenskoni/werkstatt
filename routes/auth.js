@@ -4,6 +4,18 @@ const { verifyAdmin, verifyCrewPassword } = require('../middleware/auth');
 
 const router = express.Router();
 
+/**
+ * S3-FIX: Open-Redirect-Schutz.
+ * returnTo muss ein relativer Pfad sein (beginnt mit /) und darf kein Protokoll enthalten.
+ */
+function isSafeReturnPath(url) {
+  if (!url || typeof url !== 'string') return false;
+  if (!url.startsWith('/'))            return false;   // Kein https://evil.com
+  if (url.startsWith('//'))            return false;   // Kein //evil.com (protocol-relative)
+  if (/[\r\n]/.test(url))             return false;   // Kein Header-Injection
+  return true;
+}
+
 // GET /login
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
@@ -40,7 +52,9 @@ router.post('/login', async (req, res) => {
         return res.status(500).render('login', { error: 'Session-Fehler.', tab: type });
       }
       req.session.user = { username: user.username, role: user.role };
-      const returnTo = req.session.returnTo || '/';
+
+      // S3-FIX: returnTo nur wenn sicherer relativer Pfad
+      const returnTo = isSafeReturnPath(req.session.returnTo) ? req.session.returnTo : '/';
       delete req.session.returnTo;
       res.redirect(returnTo);
     });

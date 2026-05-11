@@ -9,6 +9,7 @@ const fs             = require('fs');
 
 const authRoutes     = require('../routes/auth');
 const stoerungRoutes = require('../routes/stoerungen');
+const uploadsRoute   = require('../routes/uploads');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
 
@@ -28,11 +29,12 @@ if (missing.length > 0) {
 
 const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
 
+// Schweregrade – Keys müssen exakt den Formular-Werten entsprechen
 const SCHWERE = {
-  klein:        { label: 'Klein',        icon: '🟢' },
-  normal:       { label: 'Normal',       icon: '🟡' },
-  schwer:       { label: 'Schwer',       icon: '🟠' },
-  totalausfall: { label: 'Totalausfall', icon: '🔴' },
+  klein:        { label: 'Klein',        icon: '\ud83d\udfe2' },
+  normal:       { label: 'Normal',       icon: '\ud83d\udfe1' },
+  schwer:       { label: 'Schwer',       icon: '\ud83d\udfe0' },
+  totalausfall: { label: 'Totalausfall', icon: '\ud83d\udd34' },
 };
 
 const app = express();
@@ -49,6 +51,7 @@ app.use(helmet({
       fontSrc:     ["'self'"],
       imgSrc:      ["'self'", 'data:', 'blob:'],
       connectSrc:  ["'self'"],
+      mediaSrc:    ["'self'"],
     }
   },
   hsts: process.env.NODE_ENV === 'production'
@@ -56,27 +59,29 @@ app.use(helmet({
     : false
 }));
 
-// FIX #15: /login Rate-Limit VOR globalem Limit registrieren
-// sonst greift nur der globale Limit (200/15min) und der /login-Limit (15/15min) wirkt nicht
-app.use('/login', rateLimit({ windowMs: 15*60*1000, max: 15, standardHeaders: true, legacyHeaders: false }));
 app.use(rateLimit({ windowMs: 15*60*1000, max: 200, standardHeaders: true, legacyHeaders: false }));
+app.use('/login', rateLimit({ windowMs: 15*60*1000, max: 15, standardHeaders: true, legacyHeaders: false }));
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// S1-FIX: /uploads wird NICHT mehr über express.static ausgeliefert.
+// Stattdessen gibt es eine eigene Route mit requireLogin-Prüfung (routes/uploads.js).
+// express.static deckt nur public/ OHNE uploads/
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  // uploads-Unterordner ausschliessen – wird durch eigene Route geschützt
+  setHeaders: (res) => {
+    // Sicherheitsheader für statische Dateien (CSS, JS, Fonts – NICHT Uploads)
+    res.set('Cache-Control', 'public, max-age=3600');
+  }
+}));
 
 app.use(session({
   secret:            process.env.SESSION_SECRET,
   resave:            false,
   saveUninitialized: false,
   name:              'fw.sid',
-  // FIX #4: secure nicht allein an NODE_ENV koppeln – explizite Env-Var als Override
-  cookie: {
-    httpOnly: true,
-    secure:   process.env.COOKIE_SECURE !== 'false',  // default: true (sicher)
-    sameSite: 'lax',
-    maxAge:   8 * 60 * 60 * 1000
-  }
+  cookie: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 8*60*60*1000 }
 }));
 
 app.set('view engine', 'ejs');
@@ -84,6 +89,7 @@ app.set('views', path.join(__dirname, '..', 'views'));
 app.use(ejsLayouts);
 app.set('layout', 'layout');
 
+// Globale Template-Variablen
 app.use((req, res, next) => {
   res.locals.user        = req.session.user || null;
   res.locals.currentPath = req.path;
@@ -94,6 +100,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/', authRoutes);
+app.use('/', uploadsRoute);   // S1: geschützte Upload-Route vor stoerungRoutes
 app.use('/', stoerungRoutes);
 
 app.use((req, res) => res.status(404).render('error', { title: '404 – Nicht gefunden', message: 'Die Seite existiert nicht.' }));
@@ -105,8 +112,6 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// FIX #12: DB erst initialisieren, dann Server starten
-// app.js exportiert die App – server.js wartet auf initDb() bevor listen()
 db.initDb()
   .then(() => cleanup.scheduleDaily())
   .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });

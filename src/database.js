@@ -51,10 +51,7 @@ async function initDb() {
     await db.execute(`ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`);
   } catch { /* already exists */ }
 
-  // --- Daten-Migration: Alter Bug hat melderBenachrichtigung immer auf 1 gesetzt.
-  // Alle Einträge wo kein Kontakt (keine E-Mail) vorhanden ist, können keine
-  // Benachrichtigung erhalten – auf 0 zurücksetzen.
-  // Zusatzbed: Einträge ohne '@' im Kontakt haben keine gültige Mail → auf 0 setzen.
+  // Daten-Migration: Einträge ohne gültige E-Mail können keine Benachrichtigung erhalten
   await db.execute(
     `UPDATE stoerungen SET melderBenachrichtigung = 0
      WHERE melderBenachrichtigung = 1
@@ -66,20 +63,29 @@ async function run(sql, args = []) { return db.execute({ sql, args }); }
 async function all(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows; }
 async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
+/**
+ * generateTicketId – Race-Condition-sicher durch SELECT MAX statt COUNT.
+ * Zwei parallele Inserts mit gleichem COUNT würden dieselbe ID erzeugen.
+ * MAX(id) liefert immer den aktuell höchsten Zähler, INSERT schlägt bei
+ * echtem Duplikat durch PRIMARY KEY fehl (besser als stiller Datenverlust).
+ */
 async function generateTicketId(fahrzeug, isoDate) {
-  const d     = new Date(isoDate);
-  const year  = d.getUTCFullYear();
-  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const d      = new Date(isoDate);
+  const year   = d.getUTCFullYear();
+  const month  = String(d.getUTCMonth() + 1).padStart(2, '0');
   const prefix = `${fahrzeug}-${year}-${month}-`;
-  const row = await get(`SELECT COUNT(*) as cnt FROM stoerungen WHERE id LIKE ?`, [prefix + '%']);
-  const next = (row ? Number(row.cnt) : 0) + 1;
+  // MAX auf dem numerischen Suffix – robuster als COUNT bei Lücken
+  const row = await get(
+    `SELECT MAX(CAST(substr(id, ?) AS INTEGER)) AS maxNum FROM stoerungen WHERE id LIKE ?`,
+    [prefix.length + 1, prefix + '%']
+  );
+  const next = (row && row.maxNum != null ? Number(row.maxNum) : 0) + 1;
   return prefix + String(next).padStart(3, '0');
 }
 
 async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
-  const now = new Date().toISOString();
-  const id  = await generateTicketId(fahrzeug, now);
-  // Explizit Number-Vergleich: nur wenn exakt 1, sonst 0
+  const now    = new Date().toISOString();
+  const id     = await generateTicketId(fahrzeug, now);
   const benFlag = Number(melderBenachrichtigung) === 1 ? 1 : 0;
   await run(
     `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -135,7 +141,8 @@ async function updateStatus(id, newStatus, changedBy, note) {
 }
 
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
-  const validStatuses = ['gesendet', 'bestaetigt', 'erledigt'];
+  // FIX #7: zurueckgewiesen in validStatuses ergänzt
+  const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
     : validStatuses;
@@ -150,8 +157,10 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
 }
 
 async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
-  const like = '%' + query.toLowerCase() + '%';
+  const like    = '%' + query.toLowerCase() + '%';
   const orderBy = `ORDER BY CASE status WHEN 'erledigt' THEN 1 ELSE 0 END ASC, createdAt DESC`;
+  // FIX #8: zurueckgewiesen wird jetzt ebenfalls aus Vorschlägen ausgeschlossen
+  const excludeStatuses = `status NOT IN ('erledigt', 'zurueckgewiesen')`;
   if (fahrzeug) {
     if (includeErledigt) {
       return all(
@@ -160,7 +169,7 @@ async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
       );
     }
     return all(
-      `SELECT * FROM stoerungen WHERE status != 'erledigt' AND fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
+      `SELECT * FROM stoerungen WHERE ${excludeStatuses} AND fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
       [fahrzeug, like]
     );
   }
@@ -171,7 +180,7 @@ async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
     );
   }
   return all(
-    `SELECT * FROM stoerungen WHERE status != 'erledigt' AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
+    `SELECT * FROM stoerungen WHERE ${excludeStatuses} AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
     [like]
   );
 }
@@ -186,7 +195,20 @@ async function getAttachmentsForCompression(cutoffIso) {
 async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]); }
 async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
 async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
-async function deleteStorung(id) { return run(`DELETE FROM stoerungen WHERE id = ?`, [id]); }
+
+/**
+ * deleteStorung – FIX #13: löscht jetzt zuerst Disk-Dateien, dann DB-Eintrag.
+ * CASCADE löscht stoerung_history + stoerung_attachments automatisch.
+ */
+async function deleteStorung(id) {
+  const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
+  const attachments = await all(`SELECT filename FROM stoerung_attachments WHERE stoerungId = ?`, [id]);
+  for (const att of attachments) {
+    const filePath = path.join(UPLOAD_DIR, att.filename);
+    try { fs.unlinkSync(filePath); } catch (e) { if (e.code !== 'ENOENT') console.warn('[DB] deleteStorung file error:', e.message); }
+  }
+  return run(`DELETE FROM stoerungen WHERE id = ?`, [id]);
+}
 
 module.exports = {
   initDb,

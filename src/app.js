@@ -28,8 +28,6 @@ if (missing.length > 0) {
 
 const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
 
-// Schweregrade – Keys müssen exakt den Formular-Werten entsprechen
-// Formular speichert: klein | normal | schwer | totalausfall
 const SCHWERE = {
   klein:        { label: 'Klein',        icon: '🟢' },
   normal:       { label: 'Normal',       icon: '🟡' },
@@ -58,8 +56,10 @@ app.use(helmet({
     : false
 }));
 
-app.use(rateLimit({ windowMs: 15*60*1000, max: 200, standardHeaders: true, legacyHeaders: false }));
+// FIX #15: /login Rate-Limit VOR globalem Limit registrieren
+// sonst greift nur der globale Limit (200/15min) und der /login-Limit (15/15min) wirkt nicht
 app.use('/login', rateLimit({ windowMs: 15*60*1000, max: 15, standardHeaders: true, legacyHeaders: false }));
+app.use(rateLimit({ windowMs: 15*60*1000, max: 200, standardHeaders: true, legacyHeaders: false }));
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.json({ limit: '10mb' }));
@@ -70,7 +70,13 @@ app.use(session({
   resave:            false,
   saveUninitialized: false,
   name:              'fw.sid',
-  cookie: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 8*60*60*1000 }
+  // FIX #4: secure nicht allein an NODE_ENV koppeln – explizite Env-Var als Override
+  cookie: {
+    httpOnly: true,
+    secure:   process.env.COOKIE_SECURE !== 'false',  // default: true (sicher)
+    sameSite: 'lax',
+    maxAge:   8 * 60 * 60 * 1000
+  }
 }));
 
 app.set('view engine', 'ejs');
@@ -78,7 +84,6 @@ app.set('views', path.join(__dirname, '..', 'views'));
 app.use(ejsLayouts);
 app.set('layout', 'layout');
 
-// Globale Template-Variablen – auf jeder Seite verfügbar
 app.use((req, res, next) => {
   res.locals.user        = req.session.user || null;
   res.locals.currentPath = req.path;
@@ -100,6 +105,8 @@ app.use((err, req, res, _next) => {
   });
 });
 
+// FIX #12: DB erst initialisieren, dann Server starten
+// app.js exportiert die App – server.js wartet auf initDb() bevor listen()
 db.initDb()
   .then(() => cleanup.scheduleDaily())
   .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });

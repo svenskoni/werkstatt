@@ -1,6 +1,7 @@
 'use strict';
 const express  = require('express');
 const path     = require('path');
+const fs       = require('fs');
 const multer   = require('multer');
 const db       = require('../src/database');
 const mailer   = require('../src/mailer');
@@ -10,21 +11,54 @@ const router = express.Router();
 
 // ── Multer ────────────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
+if (isNaN(MAX_MB) || MAX_MB <= 0) { throw new Error('MAX_UPLOAD_MB ist keine gültige Zahl'); }
+
+const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
+
+// FIX: Whitelist der erlaubten MIME-Types (explizit, kein startsWith-Wildcard)
+const ALLOWED_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm',
+]);
+
+// FIX: Whitelist der erlaubten Extensions
+const ALLOWED_EXT = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp',
+  '.mp4', '.mov', '.avi', '.webm',
+]);
+
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename:    (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
+    // FIX: Extension muss in Whitelist sein, sonst kein Upload
+    if (!ALLOWED_EXT.has(ext)) {
+      return cb(new Error(`Dateityp nicht erlaubt: ${ext}`));
+    }
     cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
   }
 });
+
 const upload = multer({
   storage,
   limits: { fileSize: MAX_MB * 1024 * 1024, files: 6 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) cb(null, true);
-    else cb(new Error('Nur Bild- und Videodateien erlaubt.'));
+    const ext = path.extname(file.originalname).toLowerCase();
+    // FIX: MIME + Extension beide prüfen
+    if (!ALLOWED_MIME.has(file.mimetype) || !ALLOWED_EXT.has(ext)) {
+      return cb(new Error('Nur Bild- und Videodateien erlaubt (jpg/png/gif/webp/mp4/mov/avi/webm).'));
+    }
+    cb(null, true);
   }
 });
+
+// FIX: Hilfsfunktion – bereits gespeicherte Upload-Dateien bei Fehler löschen
+function cleanupUploads(files) {
+  if (!files || !files.length) return;
+  for (const f of files) {
+    try { fs.unlinkSync(f.path); } catch {}
+  }
+}
 
 function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
@@ -57,51 +91,75 @@ router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
 
-router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async (req, res) => {
-  const old = req.body || {};
-  try {
-    const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
-
-    // Benachrichtigung: nur aktiv wenn explizit '1'
-    const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
-
-    // Kontakt aus Handy + Mail zusammensetzen
-    const kontaktTeile = [];
-    if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
-    if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
-    const melderKontakt = kontaktTeile.join(' / ');
-
-    const errors = [];
-    if (!melderName)         errors.push('Name des Melders ist erforderlich.');
-    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
-    if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
-    if (!fehlerBeschreibung) errors.push('Fehlerbeschreibung ist erforderlich.');
-    if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
-    if (errors.length) return renderNeu(res, errors, old, req.session.user);
-
-    const attachments = (req.files || []).map(f => ({
-      filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
-    }));
-
-    const storung = await db.createStorung({
-      fahrzeug, schwere, fehlerBeschreibung,
-      beschreibung: beschreibung || '',
-      createdBy: req.session.user.username,
-      melderName: melderName || '',
-      melderKontakt,
-      melderBenachrichtigung,
-      attachments,
+router.post('/stoerung/neu', requireLogin,
+  // FIX: Multer-Fehler abfangen bevor Route-Handler läuft
+  (req, res, next) => {
+    upload.array('attachments', 6)(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return renderNeu(res, [`Datei zu groß. Maximal ${MAX_MB} MB pro Datei.`], req.body || {}, req.session.user);
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return renderNeu(res, ['Maximal 6 Dateien erlaubt.'], req.body || {}, req.session.user);
+        }
+        return renderNeu(res, [`Upload-Fehler: ${err.message}`], req.body || {}, req.session.user);
+      }
+      if (err) {
+        return renderNeu(res, [`Upload abgelehnt: ${err.message}`], req.body || {}, req.session.user);
+      }
+      next();
     });
+  },
+  async (req, res) => {
+    const old = req.body || {};
+    try {
+      const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
 
-    mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
-    mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
+      const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
 
-    res.redirect('/');
-  } catch (err) {
-    console.error('[Neu]', err);
-    renderNeu(res, ['Speichern fehlgeschlagen. Bitte erneut versuchen.'], old, req.session.user);
+      const kontaktTeile = [];
+      if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
+      if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
+      const melderKontakt = kontaktTeile.join(' / ');
+
+      const errors = [];
+      if (!melderName)         errors.push('Name des Melders ist erforderlich.');
+      if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
+      if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
+      if (!fehlerBeschreibung) errors.push('Fehlerbeschreibung ist erforderlich.');
+      if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
+      if (errors.length) {
+        // FIX: Uploads löschen wenn Validierung fehlschlägt
+        cleanupUploads(req.files);
+        return renderNeu(res, errors, old, req.session.user);
+      }
+
+      const attachments = (req.files || []).map(f => ({
+        filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
+      }));
+
+      const storung = await db.createStorung({
+        fahrzeug, schwere, fehlerBeschreibung,
+        beschreibung: beschreibung || '',
+        createdBy: req.session.user.username,
+        melderName: melderName || '',
+        melderKontakt,
+        melderBenachrichtigung,
+        attachments,
+      });
+
+      mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
+      mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
+
+      res.redirect('/');
+    } catch (err) {
+      // FIX: Uploads löschen wenn DB-Insert fehlschlägt
+      cleanupUploads(req.files);
+      console.error('[Neu]', err);
+      renderNeu(res, ['Speichern fehlgeschlagen. Bitte erneut versuchen.'], old, req.session.user);
+    }
   }
-});
+);
 
 // ── Störung-Detail ──────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {

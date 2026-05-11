@@ -1,12 +1,8 @@
 <%
-function ago(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1)  return 'gerade eben';
-  if (m < 60) return m + ' Min.';
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + ' Std.';
-  return Math.floor(h / 24) + ' Tagen';
+function formatCardDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
+    + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
 }
 
 const SCHWERE = {
@@ -27,15 +23,15 @@ const SCHWERE = {
   <p class="card-fehler"><%= s.fehlerBeschreibung %></p>
 
   <% if (s.beschreibung) { %>
-    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '&hellip;' : '' %></p>
+    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '…' : '' %></p>
   <% } %>
 
   <div class="card-bottom">
-    <span class="card-meta"><%= s.createdBy %></span>
+    <span class="card-meta"><%= s.melderName %></span>
     <span class="card-meta">&middot;</span>
-    <span class="card-meta"><%= ago(s.createdAt) %></span>
+    <span class="card-meta"><%= formatCardDate(s.createdAt) %></span>
     <% if (s.attachments.length > 0) { %>
-      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anhänge">&#128204; <%= s.attachments.length %></span>
+      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anhänge">📌 <%= s.attachments.length %></span>
     <% } %>
   </div>
 
@@ -47,6 +43,11 @@ const SCHWERE = {
           style="background:var(--color-active);color:#fff;border:none"
           data-id="<%= s.id %>" data-target="bestaetigt">
           ✓ Bestätigen
+        </button>
+        <button class="btn btn-sm status-change-btn"
+          style="background:var(--color-primary);color:#fff;border:none"
+          data-id="<%= s.id %>" data-target="zurueckgewiesen">
+          ✕ Zurückweisen
         </button>
       <% } %>
       <% if (s.status === 'bestaetigt') { %>
@@ -60,9 +61,9 @@ const SCHWERE = {
           ↩ Zurück
         </button>
       <% } %>
-      <% if (s.status === 'erledigt') { %>
+      <% if (s.status === 'erledigt' || s.status === 'zurueckgewiesen') { %>
         <button class="btn btn-xs btn-ghost status-change-btn"
-          data-id="<%= s.id %>" data-target="bestaetigt">
+          data-id="<%= s.id %>" data-target="gesendet">
           ↩ Wiederöffnen
         </button>
       <% } %>

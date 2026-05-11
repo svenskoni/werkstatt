@@ -67,14 +67,19 @@ ul[role="list"],ol[role="list"]{list-style:none}
 .header-inner{
   max-width:1400px;margin:0 auto;
   padding:0 var(--space-4);
-  display:flex;align-items:center;justify-content:space-between;
-  height:56px;gap:var(--space-2);
-  overflow:visible;
+  display:flex;align-items:center;
+  height:56px;
+  gap:var(--space-2);
+  /* Kein overflow:hidden – Logo links wächst, Nav rechts schrumpft */
+  min-width:0;
 }
+
+/* Logo: wächst so viel wie nötig, aber nie so viel, dass die Nav verdrängt wird */
 .logo{
   display:flex;align-items:center;gap:var(--space-2);
   text-decoration:none;color:var(--color-text);
-  min-width:0;flex:1 1 auto;
+  flex:1 1 0;          /* wächst, schrumpft, Basis 0 */
+  min-width:0;         /* darf auch sehr schmal werden */
   overflow:hidden;
 }
 .logo svg{flex-shrink:0}
@@ -84,26 +89,50 @@ ul[role="list"],ol[role="list"]{list-style:none}
 }
 @media(max-width:520px){.logo-text{display:none}}
 
+/*
+  Nav: darf schrumpfen (flex-shrink:1), aber NICHT wachsen.
+  Dadurch rutscht sie automatisch nach links, wenn der Username länger ist –
+  ohne dass irgendetwas aus dem Bild fällt.
+*/
 .header-nav{
   display:flex;align-items:center;
   gap:var(--space-1);
-  flex-shrink:0;
+  flex:0 1 auto;   /* <- schrumpfbar, aber kein Grow */
+  min-width:0;
+  overflow:hidden;
 }
+
 .nav-link{display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);font-weight:500;color:var(--color-text-muted);text-decoration:none;padding:var(--space-2) var(--space-3);border-radius:var(--radius-md)}
 .nav-link:hover,.nav-link.active{color:var(--color-text);background:var(--color-surface-offset)}
-.theme-toggle{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--radius-full);color:var(--color-text-muted);border:1px solid var(--color-border);flex-shrink:0}
+.theme-toggle{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;
+  border-radius:var(--radius-full);
+  color:var(--color-text-muted);
+  border:1px solid var(--color-border);
+  flex-shrink:0;   /* Icon-Buttons schrumpfen nie */
+}
 .theme-toggle:hover{color:var(--color-text);background:var(--color-surface-offset)}
 
 /* ─── User-Label im Header ───────────────────────────────────────────────────── */
+/*
+  Schrumpft als letztes: feste Icon-Buttons (Suche, Moon) behalten Platz,
+  der Username wird bei Platzmangel mit … abgeschnitten.
+*/
 .user-label{
   font-size:var(--text-sm);
   font-weight:600;
   color:var(--color-text-muted);
   white-space:nowrap;
-  flex-shrink:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  /* Maximal 160px, minimal so schmal wie nötig */
+  max-width:160px;
+  min-width:0;
+  flex-shrink:1;
 }
 
-/* Logout-Button: nur Icon */
+/* Logout-Button: nur Icon, schrumpft nie */
 .logout-btn{padding:var(--space-1) var(--space-2);flex-shrink:0}
 
 /* ─── Buttons ───────────────────────────────────────────────────────────────────── */

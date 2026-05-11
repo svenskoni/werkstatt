@@ -8,7 +8,7 @@ const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer ────────────────────────────────────────────────────────────────────────────
+// ── Multer ────────────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
@@ -33,7 +33,6 @@ function renderNeu(res, errors, old, user) {
 // ── Dashboard ────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
-    // zurueckgewiesen wird in eigener Spalte angezeigt (wie erledigt)
     const [gesendet, bestaetigt, erledigt, zurueckgewiesen] = await Promise.all([
       db.getByStatus('gesendet'),
       db.getByStatus('bestaetigt'),
@@ -41,11 +40,10 @@ router.get('/', requireLogin, async (req, res) => {
       db.getByStatus('zurueckgewiesen'),
     ]);
     const stats = {
-      total:            gesendet.length + bestaetigt.length + erledigt.length + zurueckgewiesen.length,
-      offen:            gesendet.length,
-      aktiv:            bestaetigt.length,
-      erledigt:         erledigt.length,
-      zurueckgewiesen:  zurueckgewiesen.length,
+      total:    gesendet.length + bestaetigt.length + erledigt.length + zurueckgewiesen.length,
+      offen:    gesendet.length,
+      aktiv:    bestaetigt.length,
+      erledigt: erledigt.length + zurueckgewiesen.length,
     };
     res.render('dashboard', { gesendet, bestaetigt, erledigt, zurueckgewiesen, stats, user: req.session.user });
   } catch (err) {
@@ -95,7 +93,6 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
       attachments,
     });
 
-    // Mails asynchron senden (ohne await, damit die Weiterleitung nicht blockiert)
     mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
     mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
 
@@ -118,11 +115,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ─────────────────────────────────────────────────────────────────────
-// Erlaubte Übergänge:
-//   gesendet   → bestaetigt | zurueckgewiesen
-//   bestaetigt → erledigt   | gesendet (zurück)
-//   erledigt / zurueckgewiesen → gesendet (wiedereröffnen)
+// ── Status ändern (nur Admin) ────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz } = req.body;
@@ -134,7 +127,6 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
 
     const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null);
 
-    // Status-Mail asynchron – nur wenn Melder benachrichtigt werden möchte
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
 
@@ -145,13 +137,12 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ───────────────────────────────────────────────────────────────────
+// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-    // Lösch-Mail vor dem tatsächlichen Löschen senden
     mailer.sendDeleteMail(storung, req.session.user.username, grund || 'Kein Grund angegeben')
       .catch(err => console.error('[Route] sendDeleteMail:', err.message));
     await db.deleteStorung(storung.id);
@@ -162,7 +153,7 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API ────────────────────────────────────────────────────────────────────────────────
+// ── Such-API ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status } = req.query;
@@ -178,7 +169,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ──────────────────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

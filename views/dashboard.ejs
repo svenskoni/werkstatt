@@ -17,7 +17,7 @@
     </div>
     <div class="stat-divider" aria-hidden="true"></div>
     <div class="stat-item">
-      <span class="stat-num" style="color:var(--color-done)"><%= stats.erledigt + stats.zurueckgewiesen %></span>
+      <span class="stat-num" style="color:var(--color-done)"><%= stats.erledigt %></span>
       <span class="stat-label">Erledigt</span>
     </div>
     <% if (user) { %>
@@ -94,23 +94,30 @@
       <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für dieses Fahrzeug</div>
     </section>
 
-    <!-- SPALTE: Erledigt (inkl. Zurückgewiesen) -->
-    <section class="kanban-col" aria-label="Erledigte Störungen">
+    <!-- SPALTE: Erledigt + Zurückgewiesen -->
+    <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
       <div class="kanban-header kanban-header-done">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-done" aria-hidden="true"></span>
           <h2 class="kanban-title">Erledigt</h2>
           <span class="kanban-count" id="cnt-erledigt"><%= erledigt.length + zurueckgewiesen.length %></span>
         </div>
-        <p class="kanban-subtitle">Abgeschlossen oder zurückgewiesen</p>
+        <p class="kanban-subtitle">Abgeschlossen &amp; Zurückgewiesen</p>
       </div>
       <div class="kanban-cards" id="col-erledigt">
-        <% const erledigtAlle = [...erledigt, ...zurueckgewiesen].sort((a,b) => b.createdAt.localeCompare(a.createdAt)); %>
-        <% if (erledigtAlle.length === 0) { %>
+        <% if (erledigt.length === 0 && zurueckgewiesen.length === 0) { %>
           <div class="empty-state-card">&mdash; Noch nichts erledigt</div>
         <% } %>
-        <% erledigtAlle.forEach(s => { %>
+        <% erledigt.forEach(s => { %>
           <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>">
+            <%- include('partials/stoerung-card', { s, user }) %>
+          </div>
+        <% }); %>
+        <% zurueckgewiesen.forEach(s => { %>
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>">
+            <div style="margin-bottom:var(--space-1)">
+              <span style="display:inline-block;font-size:var(--text-xs);font-weight:600;padding:2px 8px;border-radius:var(--radius-full);background:var(--color-primary-highlight);color:var(--color-primary);letter-spacing:0.02em">✕ Ticket zurückgewiesen</span>
+            </div>
             <%- include('partials/stoerung-card', { s, user }) %>
           </div>
         <% }); %>

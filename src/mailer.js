@@ -19,7 +19,10 @@ const SCHWERE_LABEL = {
   klein: '🟢 Klein', normal: '🟡 Normal', schwer: '🟠 Schwer', totalausfall: '🔴 Totalausfall',
 };
 const STATUS_LABEL = {
-  gesendet: 'Eingegangen', bestaetigt: 'In Bearbeitung', erledigt: 'Erledigt',
+  gesendet:        'Eingegangen',
+  bestaetigt:      'In Bearbeitung',
+  erledigt:        'Erledigt',
+  zurueckgewiesen: 'Zurückgewiesen',
 };
 
 function escHtml(str) {
@@ -42,10 +45,6 @@ th{background:#f7f7f7;width:38%}
 
 /**
  * Extrahiert die erste gültige E-Mail-Adresse aus melderKontakt.
- * Unterstützt:
- *   - "0151... / max@ffw.de"  (neues Format: Handy + Mail per / getrennt)
- *   - "max@ffw.de"            (nur Mail)
- *   - "Mail: max@ffw.de"      (altes Format mit Prefix)
  */
 function extractMelderMail(kontakt) {
   const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
@@ -106,7 +105,11 @@ function buildMelderBestaetigung(storung) {
 /** Statusänderungs-Mail an Melder */
 function buildMelderStatusHtml(storung, note) {
   const status = STATUS_LABEL[storung.status] || storung.status;
-  const statusColor = storung.status === 'erledigt' ? '#27ae60' : storung.status === 'bestaetigt' ? '#e67e22' : '#2980b9';
+  const isZurueck = storung.status === 'zurueckgewiesen';
+  const statusColor = storung.status === 'erledigt' ? '#27ae60'
+    : storung.status === 'bestaetigt' ? '#e67e22'
+    : isZurueck ? '#c0392b'
+    : '#2980b9';
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
   .status-badge{display:inline-block;padding:6px 16px;border-radius:20px;font-weight:bold;font-size:16px;color:#fff;background:${statusColor}}
   </style></head><body><div class="wrap">
@@ -123,6 +126,7 @@ function buildMelderStatusHtml(storung, note) {
     </table>
     ${note ? `<div class="desc" style="margin-top:12px"><strong>Hinweis:</strong> ${escHtml(note)}</div>` : ''}
     ${storung.status === 'erledigt' ? '<p style="font-size:13px;color:#27ae60;margin-top:12px">✅ Ihre Meldung wurde abgeschlossen. Vielen Dank!</p>' : ''}
+    ${isZurueck ? '<p style="font-size:13px;color:#c0392b;margin-top:12px">✕ Ihr Ticket wurde zurückgewiesen. Bei Fragen wenden Sie sich bitte direkt an die Werkstatt.</p>' : ''}
   </div>
   <div class="footer">Feuerwehr LZ Frechen – Störungsmelder</div>
 </div></body></html>`;
@@ -139,7 +143,7 @@ async function sendStorungMail(storung) {
       from: process.env.MAIL_FROM, to: recipients.join(', '),
       subject: `[Störung] ${storung.fahrzeug} – ${schwere} – ${storung.fehlerBeschreibung.slice(0,50)}`,
       html: buildAdminHtml(storung),
-      text: `Störung: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
+      text: `Störung: ${storung.fahrzeug}\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
     });
     console.log(`[Mailer] Admin-Mail gesendet an: ${recipients.join(', ')}`);
   } catch (err) {
@@ -159,7 +163,7 @@ async function sendMelderBestaetigung(storung) {
       from: process.env.MAIL_FROM, to: melderMail,
       subject: `✅ Störungsmeldung eingegangen – Ticket ${storung.id}`,
       html: buildMelderBestaetigung(storung),
-      text: `Ihre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}`,
+      text: `Hallo ${storung.melderName},\nIhre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}`,
     });
     console.log(`[Mailer] Bestätigung an Melder: ${melderMail}`);
   } catch (err) {
@@ -175,9 +179,9 @@ async function sendStatusMail(storung, changedBy, note) {
     try {
       await getTransport().sendMail({
         from: process.env.MAIL_FROM, to: recipients.join(', '),
-        subject: `[Status] ${storung.fahrzeug} → ${status}`,
+        subject: `[Status] ${storung.fahrzeug} → ${status} (Melder: ${storung.melderName})`,
         html: buildAdminHtml(storung),
-        text: `Statuswechsel: ${storung.fahrzeug} → ${status}\nGeändert von: ${changedBy}`,
+        text: `Statuswechsel: ${storung.fahrzeug} → ${status}\nMelder: ${storung.melderName}\nGeändert von: ${changedBy}`,
       });
       console.log(`[Mailer] Status-Mail Admin gesendet`);
     } catch (err) {
@@ -194,7 +198,7 @@ async function sendStatusMail(storung, changedBy, note) {
           from: process.env.MAIL_FROM, to: melderMail,
           subject: `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
           html: buildMelderStatusHtml(storung, note),
-          text: `Status Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}`,
+          text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}`,
         });
         console.log(`[Mailer] Status-Mail an Melder: ${melderMail}`);
       } catch (err) {
@@ -207,7 +211,7 @@ async function sendStatusMail(storung, changedBy, note) {
 async function sendDeleteMail(storung, deletedBy, grund) {
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
   const datum   = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-  const subject = `[Gelöscht] Störung ${storung.id} – ${storung.fahrzeug}`;
+  const subject = `[Gelöscht] Störung ${storung.id} – ${storung.fahrzeug} (Melder: ${storung.melderName})`;
   const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
   .grund{background:#fff3f3;border-left:3px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:14px;white-space:pre-wrap;margin-top:12px}
   </style></head><body><div class="wrap">

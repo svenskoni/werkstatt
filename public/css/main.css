@@ -69,10 +69,8 @@ ul[role="list"],ol[role="list"]{list-style:none}
   padding:0 var(--space-4);
   display:flex;align-items:center;justify-content:space-between;
   height:56px;gap:var(--space-2);
-  /* Logo darf schrumpfen, Nav nie */
   overflow:visible;
 }
-/* Logo: nimmt verfügbaren Platz, aber nie mehr als nötig */
 .logo{
   display:flex;align-items:center;gap:var(--space-2);
   text-decoration:none;color:var(--color-text);
@@ -84,10 +82,8 @@ ul[role="list"],ol[role="list"]{list-style:none}
   font-size:var(--text-sm);font-weight:700;letter-spacing:-.01em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-/* Logo-Text schrittweise ausblenden */
 @media(max-width:520px){.logo-text{display:none}}
 
-/* Nav: nie schrumpfen, immer komplett sichtbar */
 .header-nav{
   display:flex;align-items:center;
   gap:var(--space-1);
@@ -99,25 +95,37 @@ ul[role="list"],ol[role="list"]{list-style:none}
 .theme-toggle:hover{color:var(--color-text);background:var(--color-surface-offset)}
 
 /* ─── User-Bereich im Header ─────────────────────────────────────────────────── */
-/* Avatar-Kreis: immer sichtbar */
-.user-avatar{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:30px;height:30px;border-radius:var(--radius-full);
-  background:var(--color-primary);color:#fff;
-  font-size:var(--text-xs);font-weight:700;
-  flex-shrink:0;
-  user-select:none;
-}
-/* Voller Name + Rolle: ab 480px einblenden */
-.user-name-full{
-  display:none;
-  align-items:center;gap:var(--space-2);
+/*
+  .user-info: einziger Container – enthält Name + Badge.
+  - < 480px: Name auf 1 Buchstabe kürzen via .user-name-short (CSS-Trick)
+  - >= 480px: voller Name sichtbar
+*/
+.user-info{
+  display:flex;align-items:center;gap:var(--space-2);
   font-size:var(--text-sm);white-space:nowrap;
+  flex-shrink:0;
+  overflow:hidden;
+  max-width:120px;
 }
 @media(min-width:480px){
-  .user-name-full{display:flex}
+  .user-info{max-width:200px}
 }
-.role-badge{font-size:var(--text-xs);padding:1px 6px;border-radius:var(--radius-full);font-weight:600;white-space:nowrap}
+
+/* Name: unter 480px nur 1 Zeichen (Anfangsbuchstabe sichtbar, Rest verborgen) */
+.user-name-short{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  max-width:1.2em;    /* nur Platz für 1 Buchstaben */
+  font-weight:600;
+}
+@media(min-width:480px){
+  .user-name-short{
+    max-width:120px;   /* voller Name */
+  }
+}
+
+.role-badge{font-size:var(--text-xs);padding:1px 6px;border-radius:var(--radius-full);font-weight:600;white-space:nowrap;flex-shrink:0}
 .role-admin{background:var(--color-primary);color:#fff}
 .role-user{background:var(--color-success);color:#fff}
 .role-view{background:var(--color-surface-offset);color:var(--color-text-muted)}

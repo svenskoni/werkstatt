@@ -45,9 +45,21 @@ async function initDb() {
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
   `);
+
+  // Spalte nachrüsten falls noch nicht vorhanden
   try {
     await db.execute(`ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`);
   } catch { /* already exists */ }
+
+  // --- Daten-Migration: Alter Bug hat melderBenachrichtigung immer auf 1 gesetzt.
+  // Alle Einträge wo kein Kontakt (keine E-Mail) vorhanden ist, können keine
+  // Benachrichtigung erhalten – auf 0 zurücksetzen.
+  // Zusatzbed: Einträge ohne '@' im Kontakt haben keine gültige Mail → auf 0 setzen.
+  await db.execute(
+    `UPDATE stoerungen SET melderBenachrichtigung = 0
+     WHERE melderBenachrichtigung = 1
+       AND (melderKontakt NOT LIKE '%@%' OR melderKontakt IS NULL OR melderKontakt = '')`
+  );
 }
 
 async function run(sql, args = []) { return db.execute({ sql, args }); }
@@ -67,11 +79,12 @@ async function generateTicketId(fahrzeug, isoDate) {
 async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
   const now = new Date().toISOString();
   const id  = await generateTicketId(fahrzeug, now);
+  // Explizit Number-Vergleich: nur wenn exakt 1, sonst 0
+  const benFlag = Number(melderBenachrichtigung) === 1 ? 1 : 0;
   await run(
     `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt, melderBenachrichtigung ? 1 : 0]
+    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, melderName, melderKontakt, benFlag]
   );
-  // Erster History-Eintrag: changedBy = melderName (wer hat gemeldet), NICHT der eingeloggte User
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
     [id, 'gesendet', melderName, now, null]

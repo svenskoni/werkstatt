@@ -2,8 +2,13 @@
 function formatDate(iso) {
   return new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'});
 }
-// libsql liefert Integer-Felder manchmal als String – explizit casten
 const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
+const STATUS_LABEL = {
+  gesendet:        'Eingegangen',
+  bestaetigt:      'In Bearbeitung',
+  erledigt:        'Erledigt',
+  zurueckgewiesen: 'Zurückgewiesen',
+};
 %>
 <div class="form-container">
   <div class="form-header">
@@ -24,7 +29,7 @@ const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
           <% } %>
         </td></tr>
         <tr><th>Fehler</th><td><%= storung.fehlerBeschreibung %></td></tr>
-        <tr><th>Status</th><td><strong><%= storung.status === 'gesendet' ? 'Eingegangen' : storung.status === 'bestaetigt' ? 'In Bearbeitung' : 'Erledigt' %></strong></td></tr>
+        <tr><th>Status</th><td><strong><%= STATUS_LABEL[storung.status] || storung.status %></strong></td></tr>
         <tr><th>Gemeldet von</th><td><%= storung.melderName %> &ndash; <%= storung.melderKontakt %></td></tr>
         <tr><th>Erfasst von</th><td><%= storung.createdBy %></td></tr>
         <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
@@ -64,10 +69,10 @@ const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
       <ol class="history-list" style="list-style:none">
         <% storung.history.forEach(h => { %>
           <li class="history-item">
-            <span class="history-status"><%= h.status === 'gesendet' ? 'Eingegangen' : h.status === 'bestaetigt' ? 'In Bearbeitung' : 'Erledigt' %></span>
+            <span class="history-status"><%= STATUS_LABEL[h.status] || h.status %></span>
             <span class="history-by">von <%= h.changedBy %></span>
             <span class="history-date"><%= formatDate(h.changedAt) %></span>
-            <% if (h.note) { %><span class="history-note">„<%= h.note %>“</span><% } %>
+            <% if (h.note) { %><span class="history-note">„<%= h.note %>"</span><% } %>
           </li>
         <% }); %>
       </ol>
@@ -75,16 +80,30 @@ const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
 
     <% if (user && user.role === 'admin') { %>
     <div class="detail-card" style="border-color:var(--color-primary)">
-      <h3 style="margin-bottom:var(--space-2);color:var(--color-primary)">⚠️ Gefahrenbereich (Admin)</h3>
-      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-        Löscht diese Störung <strong>vollständig</strong>: alle Anhänge vom Server und alle Datenbankeinträge.
-        <% if (storung.status === 'erledigt') { %>
-          <br><span style="color:var(--color-success)">&#10003; Status ist „Erledigt“ – keine Begründung erforderlich.</span>
-        <% } else { %>
-          <br>Bei nicht-erledigten Störungen ist eine Begründung erforderlich.
-        <% } %>
+      <h3 style="margin-bottom:var(--space-3);color:var(--color-primary)">Admin-Aktionen</h3>
+
+      <% if (storung.status === 'gesendet') { %>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+        <button class="btn btn-sm" id="bestaetigenBtn"
+          style="background:var(--color-active);color:#fff;border:none">✓ Bestätigen</button>
+        <button class="btn btn-sm" id="zurueckweisenBtn"
+          style="background:var(--color-primary);color:#fff;border:none">✕ Zurückweisen</button>
+      </div>
+      <% } %>
+      <% if (storung.status === 'bestaetigt') { %>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+        <button class="btn btn-sm" id="erledigtBtn"
+          style="background:var(--color-done);color:#fff;border:none">✓ Erledigt</button>
+        <button class="btn btn-xs btn-ghost" id="zurueckBtn">↩ Zurück zu Eingegangen</button>
+      </div>
+      <% } %>
+
+      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-3)">
+        Löscht diese Störung <strong>vollständig</strong>: alle Anhänge und alle Datenbankeinträge.
       </p>
-      <button class="btn btn-primary" id="deleteBtn" data-id="<%= storung.id %>" data-erledigt="<%= storung.status === 'erledigt' ? '1' : '0' %>"
+      <button class="btn btn-primary" id="deleteBtn"
+        data-id="<%= storung.id %>"
+        data-erledigt="<%= (storung.status === 'erledigt' || storung.status === 'zurueckgewiesen') ? '1' : '0' %>"
         style="background:var(--color-primary);border-color:var(--color-primary)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         Störung endgültig löschen
@@ -95,11 +114,30 @@ const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
 </div>
 
 <% if (user && user.role === 'admin') { %>
+<!-- Status-Modal -->
+<div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" tabindex="-1">
+  <div class="modal" style="max-width:500px">
+    <h3 id="statusModalTitle" style="margin-bottom:var(--space-2)"></h3>
+    <p id="statusModalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
+    <div class="form-group">
+      <label class="form-label" for="statusNotiz">Notiz <span style="color:var(--color-text-faint)">(optional)</span></label>
+      <textarea class="form-control" id="statusNotiz" rows="3"
+        placeholder="z. B. Fahrzeug kommt diese Woche in die Werkstatt."
+        maxlength="500" style="resize:vertical"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="statusCancelBtn">Abbrechen</button>
+      <button class="btn btn-primary" id="statusConfirmBtn">Bestätigen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Löschen-Modal -->
 <div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">⚠️ Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Diese Aktion ist <strong>nicht rükgängig</strong>. Bitte gib eine Begründung an.
+      Diese Aktion ist <strong>nicht rückgängig</strong>. Bitte gib eine Begründung an.
     </p>
     <div class="form-group">
       <label class="form-label required" for="deleteGrund">Begründung</label>
@@ -117,14 +155,90 @@ const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
 
 <script>
 (function() {
-  const deleteBtn   = document.getElementById('deleteBtn');
-  const deleteModal = document.getElementById('deleteModal');
-  const cancelBtn   = document.getElementById('deleteCancelBtn');
-  const confirmBtn  = document.getElementById('deleteConfirmBtn');
-  const grundField  = document.getElementById('deleteGrund');
+  const STOERUNG_ID = '<%= storung.id %>';
+
+  // Status-Modal
+  const statusModal   = document.getElementById('statusModal');
+  const statusTitle   = document.getElementById('statusModalTitle');
+  const statusDesc    = document.getElementById('statusModalDesc');
+  const statusNotiz   = document.getElementById('statusNotiz');
+  const statusCancel  = document.getElementById('statusCancelBtn');
+  const statusConfirm = document.getElementById('statusConfirmBtn');
+  let pendingTarget   = null;
+
+  function openStatusModal(target, title, desc, confirmLabel, confirmStyle) {
+    pendingTarget = target;
+    statusTitle.textContent   = title;
+    statusDesc.textContent    = desc;
+    statusConfirm.textContent = confirmLabel;
+    statusConfirm.style.cssText = confirmStyle || '';
+    statusNotiz.value = '';
+    statusModal.hidden = false;
+    setTimeout(() => statusNotiz.focus(), 50);
+  }
+
+  statusCancel.addEventListener('click', () => { statusModal.hidden = true; });
+  statusModal.addEventListener('click', e => { if (e.target === statusModal) statusModal.hidden = true; });
+
+  statusConfirm.addEventListener('click', async () => {
+    if (!pendingTarget) return;
+    statusConfirm.disabled = true;
+    statusConfirm.textContent = 'Wird gespeichert…';
+    try {
+      const r = await fetch('/stoerung/' + STOERUNG_ID + '/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: pendingTarget, notiz: statusNotiz.value.trim() || null }),
+      });
+      const data = await r.json();
+      if (data.ok) { window.location.reload(); }
+      else { alert('Fehler: ' + (data.error || 'Unbekannt')); statusConfirm.disabled = false; }
+    } catch(e) {
+      alert('Netzwerkfehler.');
+      statusConfirm.disabled = false;
+    }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (!statusModal.hidden) statusModal.hidden = true;
+      if (!deleteModal.hidden) deleteModal.hidden = true;
+    }
+  });
+
+  const bestaetigenBtn   = document.getElementById('bestaetigenBtn');
+  const zurueckweisenBtn = document.getElementById('zurueckweisenBtn');
+  const erledigtBtn      = document.getElementById('erledigtBtn');
+  const zurueckBtn       = document.getElementById('zurueckBtn');
+
+  if (bestaetigenBtn) bestaetigenBtn.addEventListener('click', () =>
+    openStatusModal('bestaetigt', '✓ Störung bestätigen',
+      'Die Störung wird als „In Bearbeitung" markiert.',
+      'Bestätigen', 'background:var(--color-active);color:#fff;border:none'));
+
+  if (zurueckweisenBtn) zurueckweisenBtn.addEventListener('click', () =>
+    openStatusModal('zurueckgewiesen', '✕ Ticket zurückweisen',
+      'Das Ticket wird als „Zurückgewiesen" geschlossen. Optional eine Begründung angeben.',
+      'Zurückweisen', 'background:var(--color-primary);color:#fff;border:none'));
+
+  if (erledigtBtn) erledigtBtn.addEventListener('click', () =>
+    openStatusModal('erledigt', '✓ Störung erledigen',
+      'Die Störung wird als „Erledigt" markiert.',
+      'Erledigt setzen', 'background:var(--color-done);color:#fff;border:none'));
+
+  if (zurueckBtn) zurueckBtn.addEventListener('click', () =>
+    openStatusModal('gesendet', '↩ Zurück zu Eingegangen',
+      'Der Status wird auf „Eingegangen" zurückgesetzt.',
+      'Zurücksetzen', ''));
+
+  // Löschen-Modal
+  const deleteBtn        = document.getElementById('deleteBtn');
+  const deleteModal      = document.getElementById('deleteModal');
+  const deleteCancelBtn  = document.getElementById('deleteCancelBtn');
+  const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
+  const grundField       = document.getElementById('deleteGrund');
   if (!deleteBtn) return;
-  const stoerungId  = deleteBtn.dataset.id;
-  const erledigt    = deleteBtn.dataset.erledigt === '1';
+  const erledigt = deleteBtn.dataset.erledigt === '1';
 
   deleteBtn.addEventListener('click', () => {
     if (erledigt) {
@@ -134,39 +248,35 @@ const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
     } else {
       grundField.value = '';
       deleteModal.hidden = false;
-      deleteModal.focus();
-      grundField.focus();
+      setTimeout(() => grundField.focus(), 50);
     }
   });
 
-  cancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
+  deleteCancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
   deleteModal.addEventListener('click', e => { if (e.target === deleteModal) deleteModal.hidden = true; });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
 
-  confirmBtn.addEventListener('click', () => {
+  deleteConfirmBtn.addEventListener('click', () => {
     const grund = grundField.value.trim();
     if (!grund) { grundField.style.borderColor = 'var(--color-primary)'; grundField.focus(); return; }
     grundField.style.borderColor = '';
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Lösche…';
+    deleteConfirmBtn.disabled = true;
+    deleteConfirmBtn.textContent = 'Lösche…';
     doDelete(grund);
   });
 
   async function doDelete(grund) {
     try {
-      const r = await fetch('/stoerung/' + stoerungId + '/loeschen', {
+      const r = await fetch('/stoerung/' + STOERUNG_ID + '/loeschen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grund }),
       });
       const data = await r.json();
-      if (data.ok) {
-        window.location.href = '/?success=deleted';
-      } else {
+      if (data.ok) { window.location.href = '/?success=deleted'; }
+      else {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
         deleteBtn.disabled = false;
-        deleteBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg> Störung endgültig löschen';
-        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Endgültig löschen'; }
+        if (deleteConfirmBtn) { deleteConfirmBtn.disabled = false; deleteConfirmBtn.textContent = 'Endgültig löschen'; }
       }
     } catch (e) {
       alert('Netzwerkfehler.');

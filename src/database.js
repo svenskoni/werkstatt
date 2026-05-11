@@ -46,12 +46,10 @@ async function initDb() {
     );
   `);
 
-  // Spalte nachrüsten falls noch nicht vorhanden
   try {
     await db.execute(`ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`);
   } catch { /* already exists */ }
 
-  // Daten-Migration: Einträge ohne gültige E-Mail können keine Benachrichtigung erhalten
   await db.execute(
     `UPDATE stoerungen SET melderBenachrichtigung = 0
      WHERE melderBenachrichtigung = 1
@@ -64,17 +62,13 @@ async function all(sql, args = []) { const r = await db.execute({ sql, args }); 
 async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
 /**
- * generateTicketId – Race-Condition-sicher durch SELECT MAX statt COUNT.
- * Zwei parallele Inserts mit gleichem COUNT würden dieselbe ID erzeugen.
- * MAX(id) liefert immer den aktuell höchsten Zähler, INSERT schlägt bei
- * echtem Duplikat durch PRIMARY KEY fehl (besser als stiller Datenverlust).
+ * generateTicketId – Race-Condition-sicher durch MAX statt COUNT.
  */
 async function generateTicketId(fahrzeug, isoDate) {
   const d      = new Date(isoDate);
   const year   = d.getUTCFullYear();
   const month  = String(d.getUTCMonth() + 1).padStart(2, '0');
   const prefix = `${fahrzeug}-${year}-${month}-`;
-  // MAX auf dem numerischen Suffix – robuster als COUNT bei Lücken
   const row = await get(
     `SELECT MAX(CAST(substr(id, ?) AS INTEGER)) AS maxNum FROM stoerungen WHERE id LIKE ?`,
     [prefix.length + 1, prefix + '%']
@@ -84,8 +78,8 @@ async function generateTicketId(fahrzeug, isoDate) {
 }
 
 async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
-  const now    = new Date().toISOString();
-  const id     = await generateTicketId(fahrzeug, now);
+  const now     = new Date().toISOString();
+  const id      = await generateTicketId(fahrzeug, now);
   const benFlag = Number(melderBenachrichtigung) === 1 ? 1 : 0;
   await run(
     `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -141,7 +135,6 @@ async function updateStatus(id, newStatus, changedBy, note) {
 }
 
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
-  // FIX #7: zurueckgewiesen in validStatuses ergänzt
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
@@ -159,7 +152,6 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
 async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
   const like    = '%' + query.toLowerCase() + '%';
   const orderBy = `ORDER BY CASE status WHEN 'erledigt' THEN 1 ELSE 0 END ASC, createdAt DESC`;
-  // FIX #8: zurueckgewiesen wird jetzt ebenfalls aus Vorschlägen ausgeschlossen
   const excludeStatuses = `status NOT IN ('erledigt', 'zurueckgewiesen')`;
   if (fahrzeug) {
     if (includeErledigt) {
@@ -192,12 +184,35 @@ async function getAttachmentsForCompression(cutoffIso) {
     WHERE s.status = 'erledigt' AND s.createdAt < ? AND a.compressed = 0
   `, [cutoffIso]);
 }
+
 async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]); }
+
+/**
+ * U4-FIX: Anhänge für Purge – erledigte/zurückgewiesene Tickets zuerst,
+ * dann nach Erstellungsdatum sortiert. Aktive Tickets werden so zuletzt berührt.
+ */
+async function getOldestAttachmentsForPurge() {
+  return all(`
+    SELECT a.*, s.status AS storungStatus
+    FROM stoerung_attachments a
+    JOIN stoerungen s ON s.id = a.stoerungId
+    ORDER BY
+      CASE s.status
+        WHEN 'erledigt'        THEN 0
+        WHEN 'zurueckgewiesen' THEN 0
+        ELSE                        1
+      END ASC,
+      a.createdAt ASC
+  `);
+}
+
+/** Legacy-Alias – wird intern durch getOldestAttachmentsForPurge ersetzt */
 async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
+
 async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
 
 /**
- * deleteStorung – FIX #13: löscht jetzt zuerst Disk-Dateien, dann DB-Eintrag.
+ * deleteStorung – löscht zuerst Disk-Dateien, dann DB-Eintrag.
  * CASCADE löscht stoerung_history + stoerung_attachments automatisch.
  */
 async function deleteStorung(id) {
@@ -215,6 +230,6 @@ module.exports = {
   createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
   searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
-  getOldestAttachments, deleteAttachment,
+  getOldestAttachments, getOldestAttachmentsForPurge, deleteAttachment,
   deleteStorung,
 };

@@ -12,7 +12,7 @@ const STATUS_LABEL = {
 %>
 <div class="form-container">
   <div class="form-header">
-    <a href="/" class="back-link">← Dashboard</a>
+    <a href="/" class="back-link">&larr; Dashboard</a>
     <h1 class="page-title">Störung: <%= storung.fahrzeug %></h1>
   </div>
 
@@ -36,7 +36,7 @@ const STATUS_LABEL = {
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
         <tr><th>Statusupdates</th><td>
           <% if (benachrichtigt) { %>
-            <span style="color:var(--color-success);font-size:var(--text-sm)">✅ Melder wird benachrichtigt</span>
+            <span style="color:var(--color-success);font-size:var(--text-sm)">&#10003; Melder wird benachrichtigt</span>
           <% } else { %>
             <span style="color:var(--color-text-muted);font-size:var(--text-sm)">&mdash; keine Benachrichtigung</span>
           <% } %>
@@ -47,17 +47,45 @@ const STATUS_LABEL = {
       <% } %>
     </div>
 
-    <% if (storung.attachments.length > 0) { %>
+    <% if (storung.attachments && storung.attachments.length > 0) { %>
     <div class="detail-card">
       <h3 style="margin-bottom:var(--space-3)">Anhänge (<%= storung.attachments.length %>)</h3>
       <div class="attachment-grid">
-        <% storung.attachments.forEach(a => { %>
-          <% if (a.mimetype.startsWith('image/')) { %>
-            <a href="/uploads/<%= a.filename %>" target="_blank" rel="noopener">
-              <img src="/uploads/<%= a.filename %>" alt="<%= a.originalname %>" loading="lazy" width="200" height="150" style="object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-border)">
+        <% storung.attachments.forEach(function(a) { %>
+          <% if (a.mimetype && a.mimetype.startsWith('image/')) { %>
+            <%
+              /* U5-FIX: originalname und filename kommen aus DB – EJS <%= %> escaped automatisch */
+              /* Kein <%- %> verwenden – das wäre unescaped/XSS-gefährdet */
+            %>
+            <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer">
+              <img
+                src="/uploads/<%= encodeURIComponent(a.filename) %>"
+                alt="<%= a.originalname %>"
+                loading="lazy"
+                width="200" height="150"
+                style="object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-border);max-height:150px;display:block">
             </a>
+          <% } else if (a.mimetype && a.mimetype.startsWith('video/')) { %>
+            <%/* U6-FIX: Video als <video>-Tag mit preload=none – kein auto-buffering */%>
+            <div style="border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-border)">
+              <video
+                src="/uploads/<%= encodeURIComponent(a.filename) %>"
+                controls
+                preload="none"
+                style="width:100%;max-width:320px;max-height:200px;display:block;background:#000"
+                aria-label="<%= a.originalname %>">
+                <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">
+                  &#127910; <%= a.originalname %> herunterladen
+                </a>
+              </video>
+              <p style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-1) var(--space-2);margin:0">
+                <%= a.originalname %>
+              </p>
+            </div>
           <% } else { %>
-            <a href="/uploads/<%= a.filename %>" target="_blank" rel="noopener" class="btn btn-ghost">🎦 <%= a.originalname %></a>
+            <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">
+              &#128206; <%= a.originalname %>
+            </a>
           <% } %>
         <% }); %>
       </div>
@@ -67,12 +95,12 @@ const STATUS_LABEL = {
     <div class="detail-card">
       <h3 style="margin-bottom:var(--space-3)">Statusverlauf</h3>
       <ol class="history-list" style="list-style:none">
-        <% storung.history.forEach(h => { %>
+        <% storung.history.forEach(function(h) { %>
           <li class="history-item">
             <span class="history-status"><%= STATUS_LABEL[h.status] || h.status %></span>
             <span class="history-by">von <%= h.changedBy %></span>
             <span class="history-date"><%= formatDate(h.changedAt) %></span>
-            <% if (h.note) { %><span class="history-note">„<%= h.note %>"</span><% } %>
+            <% if (h.note) { %><span class="history-note">&bdquo;<%= h.note %>&ldquo;</span><% } %>
           </li>
         <% }); %>
       </ol>
@@ -85,16 +113,16 @@ const STATUS_LABEL = {
       <% if (storung.status === 'gesendet') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
         <button class="btn btn-sm" id="bestaetigenBtn"
-          style="background:var(--color-active);color:#fff;border:none">✓ Bestätigen</button>
+          style="background:var(--color-active);color:#fff;border:none">&#10003; Bestätigen</button>
         <button class="btn btn-sm" id="zurueckweisenBtn"
-          style="background:var(--color-primary);color:#fff;border:none">✕ Zurückweisen</button>
+          style="background:var(--color-primary);color:#fff;border:none">&#10007; Zurückweisen</button>
       </div>
       <% } %>
       <% if (storung.status === 'bestaetigt') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
         <button class="btn btn-sm" id="erledigtBtn"
-          style="background:var(--color-done);color:#fff;border:none">✓ Erledigt</button>
-        <button class="btn btn-xs btn-ghost" id="zurueckBtn">↩ Zurück zu Eingegangen</button>
+          style="background:var(--color-done);color:#fff;border:none">&#10003; Erledigt</button>
+        <button class="btn btn-xs btn-ghost" id="zurueckBtn">&larrhk; Zurück zu Eingegangen</button>
       </div>
       <% } %>
 
@@ -135,7 +163,7 @@ const STATUS_LABEL = {
 <!-- Löschen-Modal -->
 <div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
-    <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">⚠️ Störung löschen</h3>
+    <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">&#9888;&#65039; Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
       Diese Aktion ist <strong>nicht rückgängig</strong>. Bitte gib eine Begründung an.
     </p>
@@ -157,7 +185,6 @@ const STATUS_LABEL = {
 (function() {
   const STOERUNG_ID = '<%= storung.id %>';
 
-  // Status-Modal
   const statusModal   = document.getElementById('statusModal');
   const statusTitle   = document.getElementById('statusModalTitle');
   const statusDesc    = document.getElementById('statusModalDesc');
@@ -183,7 +210,7 @@ const STATUS_LABEL = {
   statusConfirm.addEventListener('click', async () => {
     if (!pendingTarget) return;
     statusConfirm.disabled = true;
-    statusConfirm.textContent = 'Wird gespeichert…';
+    statusConfirm.textContent = 'Wird gespeichert\u2026';
     try {
       const r = await fetch('/stoerung/' + STOERUNG_ID + '/status', {
         method: 'POST',
@@ -212,26 +239,25 @@ const STATUS_LABEL = {
   const zurueckBtn       = document.getElementById('zurueckBtn');
 
   if (bestaetigenBtn) bestaetigenBtn.addEventListener('click', () =>
-    openStatusModal('bestaetigt', '✓ Störung bestätigen',
-      'Die Störung wird als „In Bearbeitung" markiert.',
-      'Bestätigen', 'background:var(--color-active);color:#fff;border:none'));
+    openStatusModal('bestaetigt', '\u2713 St\u00f6rung best\u00e4tigen',
+      'Die St\u00f6rung wird als \u201eIn Bearbeitung\u201c markiert.',
+      'Best\u00e4tigen', 'background:var(--color-active);color:#fff;border:none'));
 
   if (zurueckweisenBtn) zurueckweisenBtn.addEventListener('click', () =>
-    openStatusModal('zurueckgewiesen', '✕ Ticket zurückweisen',
-      'Das Ticket wird als „Zurückgewiesen" geschlossen. Optional eine Begründung angeben.',
-      'Zurückweisen', 'background:var(--color-primary);color:#fff;border:none'));
+    openStatusModal('zurueckgewiesen', '\u2715 Ticket zur\u00fcckweisen',
+      'Das Ticket wird als \u201eZur\u00fcckgewiesen\u201c geschlossen. Optional eine Begr\u00fcndung angeben.',
+      'Zur\u00fcckweisen', 'background:var(--color-primary);color:#fff;border:none'));
 
   if (erledigtBtn) erledigtBtn.addEventListener('click', () =>
-    openStatusModal('erledigt', '✓ Störung erledigen',
-      'Die Störung wird als „Erledigt" markiert.',
+    openStatusModal('erledigt', '\u2713 St\u00f6rung erledigen',
+      'Die St\u00f6rung wird als \u201eErledigt\u201c markiert.',
       'Erledigt setzen', 'background:var(--color-done);color:#fff;border:none'));
 
   if (zurueckBtn) zurueckBtn.addEventListener('click', () =>
-    openStatusModal('gesendet', '↩ Zurück zu Eingegangen',
-      'Der Status wird auf „Eingegangen" zurückgesetzt.',
-      'Zurücksetzen', ''));
+    openStatusModal('gesendet', '\u21a9 Zur\u00fcck zu Eingegangen',
+      'Der Status wird auf \u201eEingegangen\u201c zur\u00fcckgesetzt.',
+      'Zur\u00fccksetzen', ''));
 
-  // Löschen-Modal
   const deleteBtn        = document.getElementById('deleteBtn');
   const deleteModal      = document.getElementById('deleteModal');
   const deleteCancelBtn  = document.getElementById('deleteCancelBtn');
@@ -243,8 +269,8 @@ const STATUS_LABEL = {
   deleteBtn.addEventListener('click', () => {
     if (erledigt) {
       deleteBtn.disabled = true;
-      deleteBtn.textContent = 'Lösche…';
-      doDelete('Erledigt – automatisch bereinigt');
+      deleteBtn.textContent = 'L\u00f6sche\u2026';
+      doDelete('Erledigt \u2013 automatisch bereinigt');
     } else {
       grundField.value = '';
       deleteModal.hidden = false;
@@ -260,7 +286,7 @@ const STATUS_LABEL = {
     if (!grund) { grundField.style.borderColor = 'var(--color-primary)'; grundField.focus(); return; }
     grundField.style.borderColor = '';
     deleteConfirmBtn.disabled = true;
-    deleteConfirmBtn.textContent = 'Lösche…';
+    deleteConfirmBtn.textContent = 'L\u00f6sche\u2026';
     doDelete(grund);
   });
 
@@ -276,7 +302,7 @@ const STATUS_LABEL = {
       else {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
         deleteBtn.disabled = false;
-        if (deleteConfirmBtn) { deleteConfirmBtn.disabled = false; deleteConfirmBtn.textContent = 'Endgültig löschen'; }
+        if (deleteConfirmBtn) { deleteConfirmBtn.disabled = false; deleteConfirmBtn.textContent = 'Endg\u00fcltig l\u00f6schen'; }
       }
     } catch (e) {
       alert('Netzwerkfehler.');

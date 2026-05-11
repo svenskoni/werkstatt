@@ -25,6 +25,15 @@ const upload = multer({
   }
 });
 
+// Hilfsfunktion für Formular-Fehlerantwort
+function renderNeu(res, errors, old, user) {
+  res.status(errors.length ? 400 : 200).render('stoerung-neu', {
+    errors: errors || [],
+    old:    old    || {},
+    user,
+  });
+}
+
 // ── Dashboard ───────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
@@ -48,20 +57,23 @@ router.get('/', requireLogin, async (req, res) => {
 
 // ── Neue Störung – Formular ────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
-  res.render('stoerung-neu', { error: null, user: req.session.user });
+  renderNeu(res, [], {}, req.session.user);
 });
 
 // ── Neue Störung – Speichern ────────────────────────────────────────────────
 router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async (req, res) => {
+  const old = req.body || {};
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt } = req.body;
     const melderBenachrichtigung = req.body.melderBenachrichtigung ? 1 : 0;
-    if (!fahrzeug || !schwere || !fehlerBeschreibung || !melderName) {
-      return res.status(400).render('stoerung-neu', {
-        error: 'Bitte alle Pflichtfelder ausfüllen.',
-        user: req.session.user
-      });
-    }
+
+    const errors = [];
+    if (!melderName)          errors.push('Name des Melders ist erforderlich.');
+    if (!fahrzeug)            errors.push('Bitte ein Fahrzeug auswählen.');
+    if (!schwere)             errors.push('Bitte einen Schweregrad auswählen.');
+    if (!fehlerBeschreibung)  errors.push('Fehlerbeschreibung ist erforderlich.');
+    if (errors.length) return renderNeu(res, errors, old, req.session.user);
+
     const attachments = (req.files || []).map(f => ({
       filename:     f.filename,
       originalname: f.originalname,
@@ -80,7 +92,7 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
     res.redirect('/');
   } catch (err) {
     console.error('[Neu]', err);
-    res.status(500).render('stoerung-neu', { error: 'Speichern fehlgeschlagen.', user: req.session.user });
+    renderNeu(res, ['Speichern fehlgeschlagen. Bitte erneut versuchen.'], old, req.session.user);
   }
 });
 

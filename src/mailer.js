@@ -40,6 +40,18 @@ th{background:#f7f7f7;width:38%}
 .ticket{font-size:28px;font-weight:bold;letter-spacing:1px;color:#c0392b;text-align:center;padding:16px;background:#fff5f5;border-radius:6px;margin:16px 0}
 .footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}`;
 
+/**
+ * Extrahiert die erste gültige E-Mail-Adresse aus melderKontakt.
+ * Unterstützt:
+ *   - "0151... / max@ffw.de"  (neues Format: Handy + Mail per / getrennt)
+ *   - "max@ffw.de"            (nur Mail)
+ *   - "Mail: max@ffw.de"      (altes Format mit Prefix)
+ */
+function extractMelderMail(kontakt) {
+  const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  return match ? match[0].trim() : null;
+}
+
 function buildAdminHtml(storung) {
   const baseUrl  = process.env.APP_BASE_URL;
   const schwere  = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
@@ -57,7 +69,7 @@ function buildAdminHtml(storung) {
       <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} – ${escHtml(storung.melderKontakt)}</td></tr>
       <tr><th>Erfasst von</th><td>${escHtml(storung.createdBy)}</td></tr>
       <tr><th>Meldungs-ID</th><td><code>${storung.id}</code></td></tr>
-      <tr><th>Statusupdates</th><td>${storung.melderBenachrichtigung ? '✅ Melder möchte informiert werden' : '❌ Keine Melder-Benachrichtigung'}</td></tr>
+      <tr><th>Statusupdates</th><td>${Number(storung.melderBenachrichtigung) === 1 ? '✅ Melder möchte informiert werden' : '❌ Keine Melder-Benachrichtigung'}</td></tr>
     </table>
     ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
     ${storung.attachments && storung.attachments.length > 0 ? `<p style="font-size:13px;color:#666">📎 ${storung.attachments.length} Anhang/Anhänge</p>` : ''}
@@ -67,9 +79,9 @@ function buildAdminHtml(storung) {
 </div></body></html>`;
 }
 
-/** Bestätigungsmail an Melder nach Eingang (immer, wenn E-Mail vorhanden) */
+/** Bestätigungsmail an Melder nach Eingang */
 function buildMelderBestaetigung(storung) {
-  const benachrichtigt = storung.melderBenachrichtigung ? 1 : 0;
+  const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>✅ Ihre Störungsmeldung ist eingegangen</h1><p>Feuerwehr LZ Frechen – Störungsmelder</p></div>
   <div class="body">
@@ -91,7 +103,7 @@ function buildMelderBestaetigung(storung) {
 </div></body></html>`;
 }
 
-/** Statusänderungs-Mail an Melder (nur wenn melderBenachrichtigung = 1) */
+/** Statusänderungs-Mail an Melder */
 function buildMelderStatusHtml(storung, note) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   const statusColor = storung.status === 'erledigt' ? '#27ae60' : storung.status === 'bestaetigt' ? '#e67e22' : '#2980b9';
@@ -116,36 +128,43 @@ function buildMelderStatusHtml(storung, note) {
 </div></body></html>`;
 }
 
-function extractMelderMail(kontakt) {
-  const m = String(kontakt || '').match(/Mail:\s*([^\s|,]+@[^\s|,]+)/i);
-  return m ? m[1].trim() : null;
-}
-
-// ── Öffentliche Funktionen ────────────────────────────────────────────────────
+// ── Öffentliche Funktionen ───────────────────────────────────────────────────────────────────
 
 async function sendStorungMail(storung) {
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (!recipients.length) { console.warn('[Mailer] Keine Empfänger (MAIL_RECIPIENTS)'); return; }
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
-  await getTransport().sendMail({
-    from: process.env.MAIL_FROM, to: recipients.join(', '),
-    subject: `[Störung] ${storung.fahrzeug} – ${schwere} – ${storung.fehlerBeschreibung.slice(0,50)}`,
-    html: buildAdminHtml(storung),
-    text: `Störung: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
-  });
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM, to: recipients.join(', '),
+      subject: `[Störung] ${storung.fahrzeug} – ${schwere} – ${storung.fehlerBeschreibung.slice(0,50)}`,
+      html: buildAdminHtml(storung),
+      text: `Störung: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
+    });
+    console.log(`[Mailer] Admin-Mail gesendet an: ${recipients.join(', ')}`);
+  } catch (err) {
+    console.error('[Mailer] sendStorungMail FEHLER:', err.message);
+  }
 }
 
 /** Bestätigungs-Mail an Melder – immer senden wenn E-Mail vorhanden */
 async function sendMelderBestaetigung(storung) {
   const melderMail = extractMelderMail(storung.melderKontakt);
-  if (!melderMail) return;
-  await getTransport().sendMail({
-    from: process.env.MAIL_FROM, to: melderMail,
-    subject: `✅ Störungsmeldung eingegangen – Ticket ${storung.id}`,
-    html: buildMelderBestaetigung(storung),
-    text: `Ihre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}`,
-  });
-  console.log(`[Mailer] Bestätigung an Melder: ${melderMail}`);
+  if (!melderMail) {
+    console.log('[Mailer] Keine Melder-Mail im Kontakt gefunden:', storung.melderKontakt);
+    return;
+  }
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM, to: melderMail,
+      subject: `✅ Störungsmeldung eingegangen – Ticket ${storung.id}`,
+      html: buildMelderBestaetigung(storung),
+      text: `Ihre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}`,
+    });
+    console.log(`[Mailer] Bestätigung an Melder: ${melderMail}`);
+  } catch (err) {
+    console.error('[Mailer] sendMelderBestaetigung FEHLER:', err.message);
+  }
 }
 
 async function sendStatusMail(storung, changedBy, note) {
@@ -153,25 +172,34 @@ async function sendStatusMail(storung, changedBy, note) {
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
     const status = STATUS_LABEL[storung.status] || storung.status;
-    await getTransport().sendMail({
-      from: process.env.MAIL_FROM, to: recipients.join(', '),
-      subject: `[Status] ${storung.fahrzeug} → ${status}`,
-      html: buildAdminHtml(storung),
-      text: `Statuswechsel: ${storung.fahrzeug} → ${status}\nGeändert von: ${changedBy}`,
-    });
+    try {
+      await getTransport().sendMail({
+        from: process.env.MAIL_FROM, to: recipients.join(', '),
+        subject: `[Status] ${storung.fahrzeug} → ${status}`,
+        html: buildAdminHtml(storung),
+        text: `Statuswechsel: ${storung.fahrzeug} → ${status}\nGeändert von: ${changedBy}`,
+      });
+      console.log(`[Mailer] Status-Mail Admin gesendet`);
+    } catch (err) {
+      console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message);
+    }
   }
   // Melder nur wenn opt-in UND E-Mail vorhanden
-  if (storung.melderBenachrichtigung) {
+  if (Number(storung.melderBenachrichtigung) === 1) {
     const melderMail = extractMelderMail(storung.melderKontakt);
     if (melderMail) {
       const status = STATUS_LABEL[storung.status] || storung.status;
-      await getTransport().sendMail({
-        from: process.env.MAIL_FROM, to: melderMail,
-        subject: `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
-        html: buildMelderStatusHtml(storung, note),
-        text: `Status Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}`,
-      });
-      console.log(`[Mailer] Status-Mail an Melder: ${melderMail}`);
+      try {
+        await getTransport().sendMail({
+          from: process.env.MAIL_FROM, to: melderMail,
+          subject: `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
+          html: buildMelderStatusHtml(storung, note),
+          text: `Status Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}`,
+        });
+        console.log(`[Mailer] Status-Mail an Melder: ${melderMail}`);
+      } catch (err) {
+        console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message);
+      }
     }
   }
 }
@@ -199,17 +227,26 @@ async function sendDeleteMail(storung, deletedBy, grund) {
 </div></body></html>`;
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
-    await getTransport().sendMail({ from: process.env.MAIL_FROM, to: recipients.join(', '), subject, html, text: `Gelöscht: ${storung.id} – ${grund}` });
+    try {
+      await getTransport().sendMail({ from: process.env.MAIL_FROM, to: recipients.join(', '), subject, html, text: `Gelöscht: ${storung.id} – ${grund}` });
+      console.log(`[Mailer] Lösch-Mail Admin gesendet`);
+    } catch (err) {
+      console.error('[Mailer] sendDeleteMail Admin FEHLER:', err.message);
+    }
   }
-  // Melder nur benachrichtigen wenn opt-in UND nicht bereits erledigt
-  if (storung.melderBenachrichtigung && storung.status !== 'erledigt') {
+  if (Number(storung.melderBenachrichtigung) === 1 && storung.status !== 'erledigt') {
     const melderMail = extractMelderMail(storung.melderKontakt);
     if (melderMail) {
-      await getTransport().sendMail({
-        from: process.env.MAIL_FROM, to: melderMail,
-        subject: `Ihre Störungsmeldung wurde entfernt – ${storung.fahrzeug}`,
-        html, text: `Ihre Meldung ${storung.id} wurde gelöscht.\nBegründung: ${grund}`,
-      });
+      try {
+        await getTransport().sendMail({
+          from: process.env.MAIL_FROM, to: melderMail,
+          subject: `Ihre Störungsmeldung wurde entfernt – ${storung.fahrzeug}`,
+          html, text: `Ihre Meldung ${storung.id} wurde gelöscht.\nBegründung: ${grund}`,
+        });
+        console.log(`[Mailer] Lösch-Mail Melder gesendet: ${melderMail}`);
+      } catch (err) {
+        console.error('[Mailer] sendDeleteMail Melder FEHLER:', err.message);
+      }
     }
   }
 }

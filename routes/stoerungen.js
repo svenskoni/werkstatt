@@ -58,14 +58,25 @@ router.get('/stoerung/neu', requireLogin, (req, res) => {
 router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async (req, res) => {
   const old = req.body || {};
   try {
-    const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderKontakt } = req.body;
-    const melderBenachrichtigung = req.body.melderBenachrichtigung ? 1 : 0;
+    const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
+
+    // Benachrichtigung: nur aktiv wenn explizit '1' – der String '0' ist truthy in JS!
+    const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
+
+    // Kontakt aus Handy + Mail zusammensetzen
+    const kontaktTeile = [];
+    if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
+    if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
+    const melderKontakt = kontaktTeile.join(' / ');
+
     const errors = [];
     if (!melderName)         errors.push('Name des Melders ist erforderlich.');
     if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
     if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
     if (!fehlerBeschreibung) errors.push('Fehlerbeschreibung ist erforderlich.');
+    if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
     if (errors.length) return renderNeu(res, errors, old, req.session.user);
+
     const attachments = (req.files || []).map(f => ({
       filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
     }));
@@ -74,7 +85,7 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
       beschreibung: beschreibung || '',
       createdBy: req.session.user.username,
       melderName: melderName || '',
-      melderKontakt: melderKontakt || '',
+      melderKontakt,
       melderBenachrichtigung,
       attachments,
     });

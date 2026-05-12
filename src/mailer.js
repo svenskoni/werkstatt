@@ -52,10 +52,10 @@ function extractMelderMail(kontakt) {
 }
 
 function buildAdminHtml(storung) {
-  const baseUrl  = process.env.APP_BASE_URL;
-  const schwere  = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
-  const status   = STATUS_LABEL[storung.status]    || storung.status;
-  const datum    = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+  const baseUrl   = process.env.APP_BASE_URL;
+  const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
+  const status    = STATUS_LABEL[storung.status]    || storung.status;
+  const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>🚨 Störungsmeldung – ${escHtml(storung.fahrzeug)}</h1><p>Eingegangen: ${datum}</p></div>
@@ -78,7 +78,7 @@ function buildAdminHtml(storung) {
 </div></body></html>`;
 }
 
-/** Bestätigungsmail an Melder nach Eingang */
+/** Bestätigungsmail an Melder nach Eingang – IMMER wenn Mail vorhanden */
 function buildMelderBestaetigung(storung) {
   const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
@@ -95,7 +95,7 @@ function buildMelderBestaetigung(storung) {
     <p style="font-size:13px;color:#666;margin-top:16px">
       ${benachrichtigt
         ? 'Sie erhalten automatisch eine E-Mail, sobald sich der Status Ihrer Meldung ändert.'
-        : 'Sie erhalten keine weiteren automatischen Benachrichtigungen.<br>Bei Rückfragen verwenden Sie bitte Ihre Ticket-Nummer.'}
+        : 'Sie erhalten keine weiteren automatischen Benachrichtigungen zu Statusänderungen.<br>Bei Rückfragen verwenden Sie bitte Ihre Ticket-Nummer.'}
     </p>
   </div>
   <div class="footer">Feuerwehr LZ Frechen – Störungsmelder</div>
@@ -110,7 +110,6 @@ function buildMelderStatusHtml(storung, note, changedBy) {
     : storung.status === 'bestaetigt' ? '#e67e22'
     : isZurueck ? '#c0392b'
     : '#2980b9';
-  // Bei Zurückweisung: Name des Admins anzeigen, der zurückgewiesen hat
   const zurueckHinweis = isZurueck
     ? `<p style="font-size:13px;color:#c0392b;margin-top:12px">✕ Ihr Ticket wurde zurückgewiesen. Bei Rückfragen wenden Sie sich bitte direkt an ${escHtml(changedBy || 'die Werkstatt')}.</p>`
     : '';
@@ -138,6 +137,7 @@ function buildMelderStatusHtml(storung, note, changedBy) {
 
 // ── Öffentliche Funktionen ───────────────────────────────────────────────────────────────────
 
+/** Admin-Benachrichtigung bei neuer Störung */
 async function sendStorungMail(storung) {
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (!recipients.length) { console.warn('[Mailer] Keine Empfänger (MAIL_RECIPIENTS)'); return; }
@@ -155,11 +155,14 @@ async function sendStorungMail(storung) {
   }
 }
 
-/** Bestätigungs-Mail an Melder – immer senden wenn E-Mail vorhanden */
+/**
+ * Bestätigungs-Mail an Melder bei Eingang – IMMER wenn Mail vorhanden.
+ * Unabhängig vom melderBenachrichtigung-Flag.
+ */
 async function sendMelderBestaetigung(storung) {
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) {
-    console.log('[Mailer] Keine Melder-Mail im Kontakt gefunden:', storung.melderKontakt);
+    console.log('[Mailer] Keine Melder-Mail, Bestätigung übersprungen:', storung.melderKontakt);
     return;
   }
   try {
@@ -175,8 +178,13 @@ async function sendMelderBestaetigung(storung) {
   }
 }
 
+/**
+ * Statusänderungs-Mail:
+ * - Zurückweisung: IMMER an Melder wenn Mail vorhanden
+ * - Alle anderen Status: nur bei Opt-in (melderBenachrichtigung = 1)
+ */
 async function sendStatusMail(storung, changedBy, note) {
-  // Admin-Info immer
+  // Admin immer benachrichtigen
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
     const status = STATUS_LABEL[storung.status] || storung.status;
@@ -192,23 +200,28 @@ async function sendStatusMail(storung, changedBy, note) {
       console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message);
     }
   }
-  // Melder nur wenn opt-in UND E-Mail vorhanden
-  if (Number(storung.melderBenachrichtigung) === 1) {
-    const melderMail = extractMelderMail(storung.melderKontakt);
-    if (melderMail) {
-      const status = STATUS_LABEL[storung.status] || storung.status;
-      try {
-        await getTransport().sendMail({
-          from: process.env.MAIL_FROM, to: melderMail,
-          subject: `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
-          html: buildMelderStatusHtml(storung, note, changedBy),
-          text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}${storung.status === 'zurueckgewiesen' ? '\nBei Rückfragen wenden Sie sich bitte direkt an ' + (changedBy || 'die Werkstatt') + '.' : ''}`,
-        });
-        console.log(`[Mailer] Status-Mail an Melder: ${melderMail}`);
-      } catch (err) {
-        console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message);
-      }
-    }
+
+  const melderMail = extractMelderMail(storung.melderKontakt);
+  if (!melderMail) return; // keine Mail-Adresse vorhanden – nichts zu tun
+
+  const isZurueck = storung.status === 'zurueckgewiesen';
+  // Zurückweisung: immer; alle anderen Status: nur bei Opt-in
+  const melderBekommt = isZurueck || Number(storung.melderBenachrichtigung) === 1;
+  if (!melderBekommt) return;
+
+  const status = STATUS_LABEL[storung.status] || storung.status;
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM, to: melderMail,
+      subject: isZurueck
+        ? `❌ Ihre Störungsmeldung wurde zurückgewiesen – Ticket ${storung.id}`
+        : `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
+      html: buildMelderStatusHtml(storung, note, changedBy),
+      text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}${isZurueck ? '\nBei Rückfragen wenden Sie sich bitte direkt an ' + (changedBy || 'die Werkstatt') + '.' : ''}`,
+    });
+    console.log(`[Mailer] Status-Mail an Melder gesendet (${isZurueck ? 'Zurückweisung – Pflicht' : 'Opt-in'}): ${melderMail}`);
+  } catch (err) {
+    console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message);
   }
 }
 

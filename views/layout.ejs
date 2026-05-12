@@ -24,8 +24,6 @@
       </a>
 
       <nav class="header-nav" aria-label="Hauptnavigation">
-
-        <!-- Suche-Button -->
         <% if (user) { %>
         <button class="btn btn-ghost btn-sm" id="searchBtn" aria-label="St&ouml;rung suchen" title="St&ouml;rung suchen">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -34,7 +32,6 @@
         </button>
         <% } %>
 
-        <!-- Theme Toggle -->
         <button class="theme-toggle" data-theme-toggle aria-label="Theme wechseln" title="Hell/Dunkel">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
@@ -44,10 +41,7 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!-- Nur Username, kein Badge, kein Avatar-Kreis -->
           <span class="user-label"><%= user.username %></span>
-
-          <!-- Logout -->
           <form action="/logout" method="POST" style="margin:0">
             <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden" aria-label="Abmelden">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -70,14 +64,31 @@
     <p>Feuerwehr LZ Frechen &middot; St&ouml;rungsmelder &middot; Intern</p>
   </footer>
 
-  <!-- Status-Änderungs-Modal -->
+  <!-- Globales Status-Modal (Dashboard-Cards + Detail-Seite) -->
   <div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
-    <div class="modal">
-      <h3 id="modalTitle">Status &auml;ndern</h3>
-      <p id="modalDesc">Bitte best&auml;tigen Sie die Status&auml;nderung.</p>
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label" for="statusNote">Notiz (optional)</label>
-        <input type="text" class="form-control" id="statusNote" placeholder="z.B. Werkstatt informiert..." maxlength="200">
+    <div class="modal" style="max-width:500px">
+      <h3 id="modalTitle" style="margin-bottom:var(--space-2)">Status &auml;ndern</h3>
+      <p id="modalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
+
+      <!-- Schweregrad: nur sichtbar wenn data-mit-schwere="1" am Button -->
+      <div id="schwereWrap" style="display:none;margin-bottom:var(--space-4)">
+        <label class="form-label" for="schwereSelect" style="display:flex;align-items:center;gap:var(--space-2)">
+          Schweregrad
+          <span style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:400">(Admin kann korrigieren)</span>
+        </label>
+        <select class="form-control" id="schwereSelect">
+          <option value="klein">&#128994; Klein</option>
+          <option value="normal">&#128993; Normal</option>
+          <option value="schwer">&#128992; Schwer</option>
+          <option value="totalausfall">&#128308; Totalausfall</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="statusNote">Notiz <span style="color:var(--color-text-faint)">(optional)</span></label>
+        <textarea class="form-control" id="statusNote" rows="3"
+          placeholder="z. B. Fahrzeug kommt diese Woche in die Werkstatt."
+          maxlength="500" style="resize:vertical"></textarea>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="modalCancel">Abbrechen</button>
@@ -158,8 +169,7 @@
     close.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
-    const SCHWERE_ICON  = { niedrig:'\uD83D\uDFE2', mittel:'\uD83D\uDFE1', hoch:'\uD83D\uDFE0', kritisch:'\uD83D\uDD34',
-                            klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
+    const SCHWERE_ICON  = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
     const STATUS_LABEL  = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt' };
     const STATUS_COLOR  = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)' };
     submit.addEventListener('click', async () => {

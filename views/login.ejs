@@ -19,7 +19,7 @@
     <div class="login-tabs" role="tablist">
       <button type="button" class="login-tab <%= tab !== 'admin' ? 'active' : '' %>" role="tab"
               aria-selected="<%= tab !== 'admin' %>" data-tab="crew" id="tab-crew" aria-controls="panel-crew">
-        🚒 Mannschaft
+        🚒 Melder
       </button>
       <button type="button" class="login-tab <%= tab === 'admin' ? 'active' : '' %>" role="tab"
               aria-selected="<%= tab === 'admin' %>" data-tab="admin" id="tab-admin" aria-controls="panel-admin">
@@ -27,7 +27,7 @@
       </button>
     </div>
 
-    <!-- Panel: Mannschaft -->
+    <!-- Panel: Melder -->
     <div class="login-panel <%= tab !== 'admin' ? '' : 'hidden' %>" id="panel-crew" role="tabpanel" aria-labelledby="tab-crew">
       <form action="/login" method="POST" autocomplete="on" novalidate>
         <input type="hidden" name="type" value="crew">

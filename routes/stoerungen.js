@@ -8,7 +8,7 @@ const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer ────────────────────────────────────────────────────────────────────────
+// ── Multer ────────────────────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
@@ -30,7 +30,7 @@ function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ────────────────────────────────────────────────────────────────────────────────
+// ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
     const [gesendet, bestaetigt, erledigt, zurueckgewiesen] = await Promise.all([
@@ -52,7 +52,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────
+// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -62,10 +62,8 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
 
-    // Benachrichtigung: nur aktiv wenn explizit '1'
     const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
 
-    // Kontakt aus Handy + Mail zusammensetzen
     const kontaktTeile = [];
     if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
     if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
@@ -103,7 +101,7 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   }
 });
 
-// ── Störung-Detail ──────────────────────────────────────────────────────────────────────────────────
+// ── Störung-Detail ────────────────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
@@ -115,7 +113,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ────────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ─────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz } = req.body;
@@ -137,7 +135,7 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────
+// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -153,7 +151,7 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API ──────────────────────────────────────────────────────────────────────────────────────
+// ── Such-API ────────────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status } = req.query;
@@ -162,19 +160,28 @@ router.get('/api/suche', requireLogin, async (req, res) => {
       ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
     const rows = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statusList);
-    res.json(rows);
+    // S6-FIX: Nur benötigte Felder zurückgeben – keine Kontaktdaten
+    res.json(rows.map(r => ({
+      id:                r.id,
+      fahrzeug:          r.fahrzeug,
+      fehlerBeschreibung: r.fehlerBeschreibung,
+      schwere:           r.schwere,
+      status:            r.status,
+      createdAt:         r.createdAt,
+    })));
   } catch (err) {
     console.error('[API Suche]', err);
     res.status(500).json({ error: 'Fehler.' });
   }
 });
 
-// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;
     if (!q || q.length < 3) return res.json([]);
     const rows = await db.searchSimilarFehler(q, fahrzeug || null, includeErledigt === '1');
+    // S6-FIX: Nur id, fehlerBeschreibung und status – keine Melder-Kontaktdaten
     res.json(rows.map(r => ({ id: r.id, fehler: r.fehlerBeschreibung, status: r.status })));
   } catch (err) {
     console.error('[API Similar]', err);

@@ -16,7 +16,6 @@ function getAdmins() {
     admins.push({ username: name.trim(), passHash: hash, role: 'admin' });
     i++;
   }
-  // Rückwärtskompatibilität: alter USER_ADMIN_NAME
   const legacyName = process.env.USER_ADMIN_NAME;
   const legacyHash = process.env.USER_ADMIN_PASS_HASH;
   if (legacyName && legacyHash && !admins.find(a => a.username.toLowerCase() === legacyName.toLowerCase())) {
@@ -25,7 +24,6 @@ function getAdmins() {
   return admins;
 }
 
-/** Login für Admins: Name + Passwort */
 async function verifyAdmin(username, password) {
   const admins = getAdmins();
   const admin  = admins.find(a => a.username.toLowerCase() === username.toLowerCase());
@@ -35,7 +33,6 @@ async function verifyAdmin(username, password) {
   return { username: admin.username, role: 'admin' };
 }
 
-/** Login für Mannschaft: nur Passwort */
 async function verifyCrewPassword(password) {
   const hash = process.env.CREW_PASS_HASH;
   if (!hash) return null;
@@ -46,7 +43,11 @@ async function verifyCrewPassword(password) {
 
 function requireLogin(req, res, next) {
   if (!req.session.user) {
-    req.session.returnTo = req.originalUrl;
+    // S3: returnTo nur setzen wenn sichere URL
+    const url = req.originalUrl;
+    if (url && url.startsWith('/') && !url.startsWith('//')) {
+      req.session.returnTo = url;
+    }
     return res.redirect('/login');
   }
   next();
@@ -55,7 +56,10 @@ function requireLogin(req, res, next) {
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.session.user) {
-      req.session.returnTo = req.originalUrl;
+      const url = req.originalUrl;
+      if (url && url.startsWith('/') && !url.startsWith('//')) {
+        req.session.returnTo = url;
+      }
       return res.redirect('/login');
     }
     if (!roles.includes(req.session.user.role)) {

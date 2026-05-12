@@ -23,17 +23,6 @@
 })();
 
 // ─── Globales Status-Modal ──────────────────────────────────────────────────
-// Wird von Dashboard-Cards UND der Detail-Seite genutzt.
-// Jeder Button braucht die Klasse .status-change-btn und:
-//   data-id            = Störungs-ID
-//   data-target        = Ziel-Status
-//   data-schwere       = aktueller Schweregrad
-//   data-mit-schwere   = "1"  → Schwere-Dropdown anzeigen
-//   data-with-reminder = "1"  → Erinnerungs-Checkbox anzeigen
-//   data-title         = Modal-Überschrift (optional)
-//   data-desc          = Modal-Beschreibung (optional)
-//   data-label         = Text des Bestätigungs-Buttons (optional)
-//   data-color         = CSS-Farbe des Bestätigungs-Buttons (optional)
 (function () {
   const modal          = document.getElementById('statusModal');
   const modalTitle     = document.getElementById('modalTitle');
@@ -57,16 +46,23 @@
   let pendingAction = null;
   let aktSchwereRef = 'normal';
 
-  // Morgen 08:00 als Default für Reminder
+  // Morgen 08:00 im Format "YYYY-MM-DDTHH:MM" (lokale Zeit)
   function defaultReminderTime() {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    d.setHours(8, 0, 0, 0);
     const pad = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T08:00`;
   }
 
-  // Checkbox toggle → Felder ein-/ausblenden
+  // String-Vergleich in lokaler Zeit – vermeidet Timezone-Probleme mit new Date()
+  function isFuture(datetimeLocalValue) {
+    if (!datetimeLocalValue) return false;
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const nowStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    return datetimeLocalValue > nowStr;
+  }
+
   if (reminderEnabled) {
     reminderEnabled.addEventListener('change', () => {
       reminderFields.style.display = reminderEnabled.checked ? '' : 'none';
@@ -77,35 +73,35 @@
   }
 
   function openModal(btn) {
-    const target      = btn.dataset.target;
-    const mitSchwere  = btn.dataset.mitSchwere === '1';
-    const withReminder= btn.dataset.withReminder === '1';
-    aktSchwereRef     = btn.dataset.schwere || 'normal';
-    const label       = btn.dataset.label || STATUS_LABELS[target] || target;
-    const color       = btn.dataset.color || '';
+    const target       = btn.dataset.target;
+    const mitSchwere   = btn.dataset.mitSchwere === '1';
+    const withReminder = btn.dataset.withReminder === '1';
+    aktSchwereRef      = btn.dataset.schwere || 'normal';
+    const label        = btn.dataset.label || STATUS_LABELS[target] || target;
+    const color        = btn.dataset.color || '';
 
     pendingAction = { id: btn.dataset.id, target };
 
-    modalTitle.textContent   = btn.dataset.title || `${label} best\u00e4tigen`;
-    modalDesc.textContent    = btn.dataset.desc  || `St\u00f6rung wird auf \u201e${STATUS_LABELS[target] || target}\u201c gesetzt.`;
-    modalConfirm.textContent = label;
+    modalTitle.textContent     = btn.dataset.title || `${label} best\u00e4tigen`;
+    modalDesc.textContent      = btn.dataset.desc  || `St\u00f6rung wird auf \u201e${STATUS_LABELS[target] || target}\u201c gesetzt.`;
+    modalConfirm.textContent   = label;
     modalConfirm.style.cssText = color ? `background:${color};color:#fff;border:none` : '';
+    modalConfirm.disabled      = false;
 
-    schwereWrap.style.display  = mitSchwere   ? '' : 'none';
+    schwereWrap.style.display  = mitSchwere ? '' : 'none';
     if (mitSchwere) schwereSelect.value = aktSchwereRef;
 
-    // Reminder-Block
-    reminderWrap.style.display   = withReminder ? '' : 'none';
-    reminderEnabled.checked      = false;
-    reminderFields.style.display = 'none';
-    reminderAtInput.value        = '';
+    reminderWrap.style.display        = withReminder ? '' : 'none';
+    reminderEnabled.checked           = false;
+    reminderFields.style.display      = 'none';
+    reminderAtInput.value             = '';
+    reminderAtInput.style.borderColor = '';
 
     statusNote.value = '';
     modal.hidden = false;
     setTimeout(() => (mitSchwere ? schwereSelect : statusNote).focus(), 50);
   }
 
-  // Event-Delegation – funktioniert für Dashboard-Cards + Detail-Seite
   document.addEventListener('click', e => {
     const btn = e.target.closest('.status-change-btn');
     if (btn) openModal(btn);
@@ -120,17 +116,14 @@
   modalConfirm.addEventListener('click', async () => {
     if (!pendingAction) return;
 
-    // Reminder-Validierung
+    // Reminder-Validierung: nur wenn Checkbox aktiv
     const wantsReminder = reminderEnabled.checked;
-    if (wantsReminder) {
-      const at = reminderAtInput.value;
-      if (!at || new Date(at) <= new Date()) {
-        reminderAtInput.style.borderColor = 'var(--color-error)';
-        reminderAtInput.focus();
-        return;
-      }
-      reminderAtInput.style.borderColor = '';
+    if (wantsReminder && !isFuture(reminderAtInput.value)) {
+      reminderAtInput.style.borderColor = 'var(--color-error)';
+      reminderAtInput.focus();
+      return;
     }
+    if (wantsReminder) reminderAtInput.style.borderColor = '';
 
     const notiz      = statusNote.value.trim() || null;
     const mitSchwere = schwereWrap.style.display !== 'none';
@@ -150,24 +143,29 @@
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!data.ok) { alert('Fehler: ' + (data.error || 'Unbekannt')); return; }
+      if (!data.ok) {
+        alert('Fehler: ' + (data.error || 'Unbekannt'));
+        modalConfirm.disabled    = false;
+        modalConfirm.textContent = 'Best\u00e4tigen';
+        return;
+      }
 
-      // 2. Ggf. Reminder setzen (feuert an den eingeloggten Admin → Server ermittelt Mail)
+      // 2. Reminder setzen – geht an eingeloggten Admin (Server löst Username → Mail auf)
       if (wantsReminder) {
         await fetch(`/stoerung/${pendingAction.id}/reminder`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reminderAt: reminderAtInput.value, reminderTo: '' }),
-        }).catch(err => console.warn('[Reminder] Konnte nicht gesetzt werden:', err));
+        }).catch(err => console.warn('[Reminder] Setzen fehlgeschlagen:', err));
       }
 
-      window.location.reload();
-    } catch { alert('Netzwerkfehler. Bitte Seite neu laden.'); }
-    finally {
-      modalConfirm.disabled    = false;
-      modalConfirm.textContent = 'Best\u00e4tigen';
       modal.hidden  = true;
       pendingAction = null;
+      window.location.reload();
+    } catch {
+      alert('Netzwerkfehler. Bitte Seite neu laden.');
+      modalConfirm.disabled    = false;
+      modalConfirm.textContent = 'Best\u00e4tigen';
     }
   });
 })();

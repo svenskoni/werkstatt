@@ -71,6 +71,16 @@ async function run(sql, args = []) { return db.execute({ sql, args }); }
 async function all(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows; }
 async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
+// libsql gibt INTEGER-Spalten manchmal als BigInt zurück.
+// Diese Funktion normalisiert ein Zeilen-Objekt so dass alle Felder
+// sicher mit === verglichen werden können.
+function normalizeRow(row) {
+  if (!row) return row;
+  const out = Object.assign({}, row);
+  out.melderBenachrichtigung = Number(out.melderBenachrichtigung ?? 0);
+  return out;
+}
+
 async function generateTicketId(fahrzeug, isoDate) {
   const d      = new Date(isoDate);
   const year   = d.getUTCFullYear();
@@ -108,17 +118,19 @@ async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibu
 async function getStorungById(id) {
   const s = await get(`SELECT * FROM stoerungen WHERE id = ?`, [id]);
   if (!s) return null;
-  s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [id]);
-  s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [id]);
-  return s;
+  const row = normalizeRow(s);
+  row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [id]);
+  row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [id]);
+  return row;
 }
 
 async function getAllStorungen() {
   const rows = await all(`SELECT * FROM stoerungen ORDER BY COALESCE(updatedAt, createdAt) DESC`);
   return Promise.all(rows.map(async s => {
-    s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
-    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
-    return s;
+    const row = normalizeRow(s);
+    row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
+    row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
+    return row;
   }));
 }
 
@@ -128,9 +140,10 @@ async function getByStatus(status) {
     [status]
   );
   return Promise.all(rows.map(async s => {
-    s.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
-    s.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
-    return s;
+    const row = normalizeRow(s);
+    row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
+    row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
+    return row;
   }));
 }
 

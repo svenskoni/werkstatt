@@ -53,10 +53,7 @@ const STATUS_LABEL = {
       <div class="attachment-grid">
         <% storung.attachments.forEach(function(a) { %>
           <% if (a.mimetype && a.mimetype.startsWith('image/')) { %>
-            <%
-              /* U5-FIX: originalname und filename kommen aus DB – EJS <%= %> escaped automatisch */
-              /* Kein <%- %> verwenden – das wäre unescaped/XSS-gefährdet */
-            %>
+            <%# U5-FIX: originalname und filename kommen aus DB – EJS <%= %> escaped automatisch %>
             <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer">
               <img
                 src="/uploads/<%= encodeURIComponent(a.filename) %>"
@@ -66,7 +63,7 @@ const STATUS_LABEL = {
                 style="object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-border);max-height:150px;display:block">
             </a>
           <% } else if (a.mimetype && a.mimetype.startsWith('video/')) { %>
-            <%/* U6-FIX: Video als <video>-Tag mit preload=none – kein auto-buffering */%>
+            <%# U6-FIX: Video als <video>-Tag mit preload=none – kein auto-buffering %>
             <div style="border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-border)">
               <video
                 src="/uploads/<%= encodeURIComponent(a.filename) %>"

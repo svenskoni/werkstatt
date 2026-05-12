@@ -103,13 +103,17 @@ function buildMelderBestaetigung(storung) {
 }
 
 /** Statusänderungs-Mail an Melder */
-function buildMelderStatusHtml(storung, note) {
+function buildMelderStatusHtml(storung, note, changedBy) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   const isZurueck = storung.status === 'zurueckgewiesen';
   const statusColor = storung.status === 'erledigt' ? '#27ae60'
     : storung.status === 'bestaetigt' ? '#e67e22'
     : isZurueck ? '#c0392b'
     : '#2980b9';
+  // Bei Zurückweisung: Name des Admins anzeigen, der zurückgewiesen hat
+  const zurueckHinweis = isZurueck
+    ? `<p style="font-size:13px;color:#c0392b;margin-top:12px">✕ Ihr Ticket wurde zurückgewiesen. Bei Rückfragen wenden Sie sich bitte direkt an ${escHtml(changedBy || 'die Werkstatt')}.</p>`
+    : '';
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
   .status-badge{display:inline-block;padding:6px 16px;border-radius:20px;font-weight:bold;font-size:16px;color:#fff;background:${statusColor}}
   </style></head><body><div class="wrap">
@@ -126,7 +130,7 @@ function buildMelderStatusHtml(storung, note) {
     </table>
     ${note ? `<div class="desc" style="margin-top:12px"><strong>Hinweis:</strong> ${escHtml(note)}</div>` : ''}
     ${storung.status === 'erledigt' ? '<p style="font-size:13px;color:#27ae60;margin-top:12px">✅ Ihre Meldung wurde abgeschlossen. Vielen Dank!</p>' : ''}
-    ${isZurueck ? '<p style="font-size:13px;color:#c0392b;margin-top:12px">✕ Ihr Ticket wurde zurückgewiesen. Bei Fragen wenden Sie sich bitte direkt an die Werkstatt.</p>' : ''}
+    ${zurueckHinweis}
   </div>
   <div class="footer">Feuerwehr LZ Frechen – Störungsmelder</div>
 </div></body></html>`;
@@ -197,8 +201,8 @@ async function sendStatusMail(storung, changedBy, note) {
         await getTransport().sendMail({
           from: process.env.MAIL_FROM, to: melderMail,
           subject: `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
-          html: buildMelderStatusHtml(storung, note),
-          text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}`,
+          html: buildMelderStatusHtml(storung, note, changedBy),
+          text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}${storung.status === 'zurueckgewiesen' ? '\nBei Rückfragen wenden Sie sich bitte direkt an ' + (changedBy || 'die Werkstatt') + '.' : ''}`,
         });
         console.log(`[Mailer] Status-Mail an Melder: ${melderMail}`);
       } catch (err) {

@@ -11,14 +11,12 @@ const STATUS_LABEL = {
 };
 const hasReminder  = !!storung.reminderAt;
 const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'}) : null;
-// Für datetime-local Input brauchen wir "YYYY-MM-DDTHH:MM"
 function toLocalInput(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   const pad = n => String(n).padStart(2,'0');
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
 %>
 <div class="form-container">
   <div class="form-header">
@@ -55,7 +53,6 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
         <tr><th>&#9201; Erinnerung</th><td>
           <span id="reminderDisplay" style="font-size:var(--text-sm);color:var(--color-warning)">
             <strong><%= reminderDate %></strong>
-            <% if (storung.reminderTo) { %> &rarr; <%= storung.reminderTo %><% } %>
           </span>
           <% if (user && user.role === 'admin') { %>
             <button class="btn btn-xs btn-ghost" id="clearReminderBtn"
@@ -204,7 +201,7 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">&#9888;&#65039; Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Diese Aktion ist <strong>nicht rükgängig</strong>. Bitte gib eine Begründung an.
+      Diese Aktion ist <strong>nicht rückgängig</strong>. Bitte gib eine Begründung an.
     </p>
     <div class="form-group">
       <label class="form-label required" for="deleteGrund">Begründung</label>
@@ -220,45 +217,18 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
   </div>
 </div>
 
-<!-- Erinnerungs-Modal -->
+<!-- Erinnerungs-Modal (nur für eingeloggten Admin – keine Auswahl anderer Admins) -->
 <div class="modal-backdrop" id="reminderModal" hidden role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle" tabindex="-1">
-  <div class="modal" style="max-width:460px">
+  <div class="modal" style="max-width:420px">
     <h3 id="reminderModalTitle" style="margin-bottom:var(--space-2)">&#9201; Erinnerung setzen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
       Du erhältst eine E-Mail-Erinnerung zum gewählten Zeitpunkt mit dem aktuellen Ticket-Status.
     </p>
-
     <div class="form-group">
       <label class="form-label" for="reminderAtInput">Datum &amp; Uhrzeit</label>
       <input type="datetime-local" class="form-control" id="reminderAtInput" style="max-width:260px">
     </div>
-
-    <% const adminNames = Object.keys(adminMails); %>
-    <% if (adminNames.length > 1) { %>
-    <div class="form-group" style="margin-top:var(--space-3)">
-      <label class="form-label" for="reminderToSelect">Senden an</label>
-      <select class="form-control" id="reminderToSelect" style="max-width:260px">
-        <% adminNames.forEach(function(name) { %>
-          <option value="<%= name %>" <%= name === user.username ? 'selected' : '' %>>
-            <%= name %> &lt;<%= adminMails[name] %>&gt;
-          </option>
-        <% }); %>
-      </select>
-    </div>
-    <% } else if (adminNames.length === 1) { %>
-      <p style="font-size:var(--text-xs);color:var(--color-text-muted)">
-        Wird gesendet an: <strong><%= adminNames[0] %> &lt;<%= adminMails[adminNames[0]] %>&gt;</strong>
-      </p>
-      <input type="hidden" id="reminderToSelect" value="<%= adminNames[0] %>">
-    <% } else { %>
-      <p style="font-size:var(--text-xs);color:var(--color-warning)">
-        &#9888; Kein <code>ADMIN_MAILS</code> in der .env hinterlegt – Erinnerung wird an alle Admins gesendet.
-      </p>
-      <input type="hidden" id="reminderToSelect" value="">
-    <% } %>
-
     <div id="reminderFeedback" style="font-size:var(--text-xs);color:var(--color-error);margin-top:var(--space-2);min-height:1.2em"></div>
-
     <div class="modal-actions" style="margin-top:var(--space-4)">
       <button class="btn btn-ghost" id="reminderCancelBtn">Abbrechen</button>
       <button class="btn btn-sm" id="reminderSaveBtn"
@@ -318,20 +288,17 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
   }
 
   // ── Erinnerung setzen ───────────────────────────────────────────────
-  const setReminderBtn   = document.getElementById('setReminderBtn');
-  const reminderModal    = document.getElementById('reminderModal');
+  const setReminderBtn    = document.getElementById('setReminderBtn');
+  const reminderModal     = document.getElementById('reminderModal');
   const reminderCancelBtn = document.getElementById('reminderCancelBtn');
-  const reminderSaveBtn  = document.getElementById('reminderSaveBtn');
-  const reminderAtInput  = document.getElementById('reminderAtInput');
-  const reminderToSelect = document.getElementById('reminderToSelect');
-  const reminderFeedback = document.getElementById('reminderFeedback');
+  const reminderSaveBtn   = document.getElementById('reminderSaveBtn');
+  const reminderAtInput   = document.getElementById('reminderAtInput');
+  const reminderFeedback  = document.getElementById('reminderFeedback');
 
-  // Morgen 08:00 als Default
   function defaultReminderTime() {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    d.setHours(8, 0, 0, 0);
-    const pad = n => String(n).padStart(2,'0');
+    const pad = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T08:00`;
   }
 
@@ -339,6 +306,7 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
     setReminderBtn.addEventListener('click', () => {
       reminderAtInput.value = defaultReminderTime();
       reminderFeedback.textContent = '';
+      reminderAtInput.style.borderColor = '';
       reminderModal.hidden = false;
       setTimeout(() => reminderAtInput.focus(), 50);
     });
@@ -348,22 +316,22 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
   }
   if (reminderModal) {
     reminderModal.addEventListener('click', e => { if (e.target === reminderModal) reminderModal.hidden = true; });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !reminderModal.hidden) reminderModal.hidden = true; });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !reminderModal.hidden) reminderModal.hidden = true;
+    });
   }
   if (reminderSaveBtn) {
     reminderSaveBtn.addEventListener('click', async () => {
       const at = reminderAtInput.value;
-      if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; return; }
-      if (new Date(at) <= new Date()) { reminderFeedback.textContent = 'Das Datum muss in der Zukunft liegen.'; return; }
+      if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
       reminderFeedback.textContent = '';
+      reminderAtInput.style.borderColor = '';
       reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere…';
       try {
         const r = await fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            reminderAt: at,
-            reminderTo: reminderToSelect ? reminderToSelect.value : '',
-          }),
+          // reminderTo leer lassen – Server nimmt eingeloggten Admin
+          body: JSON.stringify({ reminderAt: at, reminderTo: '' }),
         });
         const data = await r.json();
         if (data.ok) {
@@ -371,11 +339,14 @@ const adminMails = typeof adminMailMap !== 'undefined' ? adminMailMap : {};
           window.location.reload();
         } else {
           reminderFeedback.textContent = data.error || 'Fehler beim Speichern.';
-          reminderSaveBtn.disabled = false; reminderSaveBtn.textContent = '\u23F0 Erinnerung speichern';
+          reminderAtInput.style.borderColor = 'var(--color-error)';
+          reminderSaveBtn.disabled = false;
+          reminderSaveBtn.textContent = '\u23F0 Erinnerung speichern';
         }
       } catch(e) {
         reminderFeedback.textContent = 'Netzwerkfehler.';
-        reminderSaveBtn.disabled = false; reminderSaveBtn.textContent = '\u23F0 Erinnerung speichern';
+        reminderSaveBtn.disabled = false;
+        reminderSaveBtn.textContent = '\u23F0 Erinnerung speichern';
       }
     });
   }

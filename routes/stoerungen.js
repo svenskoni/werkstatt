@@ -99,9 +99,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).render('error', { title: '404', message: 'St\u00f6rung nicht gefunden.' });
-    // Admin-Mail-Map f\u00fcr Reminder-Dropdown mitgeben
-    const adminMailMap = req.session.user && req.session.user.role === 'admin' ? mailer.getAdminMailMap() : {};
-    res.render('stoerung-detail', { storung, user: req.session.user, adminMailMap });
+    res.render('stoerung-detail', { storung, user: req.session.user });
   } catch (err) {
     console.error('[Detail]', err);
     res.status(500).render('error', { title: 'Fehler', message: 'St\u00f6rung konnte nicht geladen werden.' });
@@ -136,22 +134,31 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
     if (!reminderAt) {
-      // Erinnerung l\u00f6schen
       await db.clearReminder(storung.id);
       return res.json({ ok: true, cleared: true });
     }
 
-    // reminderAt ist lokale Datumszeit des Admins (datetime-local = "2026-05-15T14:30")
-    // Wir speichern als ISO-String (UTC).
-    const dt = new Date(reminderAt);
+    // datetime-local liefert "YYYY-MM-DDTHH:MM" OHNE Zeitzonenangabe.
+    // new Date() würde das als UTC interpretieren → falsche Zeit.
+    // Korrektur: "+02:00" (CEST) anhängen damit JS lokal rechnet.
+    // Robustere Lösung: String direkt als Europa/Berlin parsen.
+    let dt;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(reminderAt)) {
+      // Kein Timezone-Suffix → als lokale Berliner Zeit behandeln
+      // Offset von Europe/Berlin ermitteln (berücksichtigt Sommer-/Winterzeit)
+      const localDate = new Date(reminderAt + ':00');  // Sekunden ergänzen
+      const berlin = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
+      const diff = localDate - berlin;  // Differenz zwischen lokaler JS-Zeit und Berlin-Zeit
+      dt = new Date(localDate.getTime() - diff);       // in UTC umrechnen
+    } else {
+      dt = new Date(reminderAt);
+    }
+
     if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ung\u00fcltiges Datum.' });
     if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
 
-    // reminderTo: entweder direkt eine Mail-Adresse oder ein Username aus ADMIN_MAILS
-    const to = reminderTo && reminderTo.includes('@')
-      ? reminderTo.trim()
-      : (mailer.resolveAdminMail(reminderTo) || mailer.resolveAdminMail(req.session.user.username));
-
+    // reminderTo: immer eingeloggter Admin (Auswahl anderer Admins wurde entfernt)
+    const to = mailer.resolveAdminMail(req.session.user.username);
     if (!to) return res.status(400).json({ error: 'Keine g\u00fcltige Admin-E-Mail gefunden. Bitte ADMIN_MAILS in der .env konfigurieren.' });
 
     await db.setReminder(storung.id, dt.toISOString(), to);

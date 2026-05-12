@@ -116,14 +116,20 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
 // ── Status ändern (nur Admin) ─────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
-    const { status, notiz } = req.body;
+    const { status, notiz, neuSchwere } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
 
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
 
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null);
+    // neuSchwere validieren – nur für bestaetigt sinnvoll, aber generell erlaubt
+    const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
+    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+
+    const updated = await db.updateStatus(
+      storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere
+    );
 
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
@@ -160,7 +166,6 @@ router.get('/api/suche', requireLogin, async (req, res) => {
       ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
     const rows = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statusList);
-    // S6-FIX: Nur benötigte Felder zurückgeben – keine Kontaktdaten
     res.json(rows.map(r => ({
       id:                r.id,
       fahrzeug:          r.fahrzeug,
@@ -181,7 +186,6 @@ router.get('/api/similar', requireLogin, async (req, res) => {
     const { q, fahrzeug, includeErledigt } = req.query;
     if (!q || q.length < 3) return res.json([]);
     const rows = await db.searchSimilarFehler(q, fahrzeug || null, includeErledigt === '1');
-    // S6-FIX: Nur id, fehlerBeschreibung und status – keine Melder-Kontaktdaten
     res.json(rows.map(r => ({ id: r.id, fehler: r.fehlerBeschreibung, status: r.status })));
   } catch (err) {
     console.error('[API Similar]', err);

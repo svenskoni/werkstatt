@@ -141,6 +141,21 @@ const STATUS_LABEL = {
   <div class="modal" style="max-width:500px">
     <h3 id="statusModalTitle" style="margin-bottom:var(--space-2)"></h3>
     <p id="statusModalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
+
+    <%# Schweregrad-Änderung – nur beim Bestätigen (gesendet → bestaetigt) anzeigen %>
+    <div id="schwereAendernWrap" style="display:none;margin-bottom:var(--space-4)">
+      <label class="form-label" for="neuSchwereSelect" style="display:flex;align-items:center;gap:var(--space-2)">
+        Schweregrad
+        <span style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:400">(Admin kann korrigieren)</span>
+      </label>
+      <select class="form-control" id="neuSchwereSelect">
+        <option value="klein">🟢 Klein</option>
+        <option value="normal">🟡 Normal</option>
+        <option value="schwer">🟠 Schwer</option>
+        <option value="totalausfall">🔴 Totalausfall</option>
+      </select>
+    </div>
+
     <div class="form-group">
       <label class="form-label" for="statusNotiz">Notiz <span style="color:var(--color-text-faint)">(optional)</span></label>
       <textarea class="form-control" id="statusNotiz" rows="3"
@@ -176,25 +191,33 @@ const STATUS_LABEL = {
 
 <script>
 (function() {
-  const STOERUNG_ID = '<%= storung.id %>';
+  const STOERUNG_ID      = '<%= storung.id %>';
+  const AKTUELL_SCHWERE  = '<%= storung.schwere %>';
 
-  const statusModal   = document.getElementById('statusModal');
-  const statusTitle   = document.getElementById('statusModalTitle');
-  const statusDesc    = document.getElementById('statusModalDesc');
-  const statusNotiz   = document.getElementById('statusNotiz');
-  const statusCancel  = document.getElementById('statusCancelBtn');
-  const statusConfirm = document.getElementById('statusConfirmBtn');
-  let pendingTarget   = null;
+  const statusModal      = document.getElementById('statusModal');
+  const statusTitle      = document.getElementById('statusModalTitle');
+  const statusDesc       = document.getElementById('statusModalDesc');
+  const statusNotiz      = document.getElementById('statusNotiz');
+  const statusCancel     = document.getElementById('statusCancelBtn');
+  const statusConfirm    = document.getElementById('statusConfirmBtn');
+  const schwereWrap      = document.getElementById('schwereAendernWrap');
+  const schwereSelect    = document.getElementById('neuSchwereSelect');
+  let pendingTarget      = null;
+  let showSchwere        = false;
 
-  function openStatusModal(target, title, desc, confirmLabel, confirmStyle) {
+  function openStatusModal(target, title, desc, confirmLabel, confirmStyle, mitSchwere) {
     pendingTarget = target;
+    showSchwere   = !!mitSchwere;
     statusTitle.textContent   = title;
     statusDesc.textContent    = desc;
     statusConfirm.textContent = confirmLabel;
     statusConfirm.style.cssText = confirmStyle || '';
     statusNotiz.value = '';
+    // Schweregrad-Dropdown: anzeigen/verbergen und auf aktuellen Wert setzen
+    schwereWrap.style.display = showSchwere ? '' : 'none';
+    if (showSchwere) schwereSelect.value = AKTUELL_SCHWERE;
     statusModal.hidden = false;
-    setTimeout(() => statusNotiz.focus(), 50);
+    setTimeout(() => (showSchwere ? schwereSelect : statusNotiz).focus(), 50);
   }
 
   statusCancel.addEventListener('click', () => { statusModal.hidden = true; });
@@ -204,15 +227,23 @@ const STATUS_LABEL = {
     if (!pendingTarget) return;
     statusConfirm.disabled = true;
     statusConfirm.textContent = 'Wird gespeichert\u2026';
+    const payload = {
+      status: pendingTarget,
+      notiz:  statusNotiz.value.trim() || null,
+    };
+    // Schwere nur mitsenden wenn Dropdown sichtbar und Wert geändert
+    if (showSchwere && schwereSelect.value !== AKTUELL_SCHWERE) {
+      payload.neuSchwere = schwereSelect.value;
+    }
     try {
       const r = await fetch('/stoerung/' + STOERUNG_ID + '/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: pendingTarget, notiz: statusNotiz.value.trim() || null }),
+        body: JSON.stringify(payload),
       });
       const data = await r.json();
       if (data.ok) { window.location.reload(); }
-      else { alert('Fehler: ' + (data.error || 'Unbekannt')); statusConfirm.disabled = false; }
+      else { alert('Fehler: ' + (data.error || 'Unbekannt')); statusConfirm.disabled = false; statusConfirm.textContent = confirmLabel; }
     } catch(e) {
       alert('Netzwerkfehler.');
       statusConfirm.disabled = false;
@@ -231,25 +262,29 @@ const STATUS_LABEL = {
   const erledigtBtn      = document.getElementById('erledigtBtn');
   const zurueckBtn       = document.getElementById('zurueckBtn');
 
+  // Bestätigen: MIT Schweregrad-Dropdown
   if (bestaetigenBtn) bestaetigenBtn.addEventListener('click', () =>
     openStatusModal('bestaetigt', '\u2713 St\u00f6rung best\u00e4tigen',
-      'Die St\u00f6rung wird als \u201eIn Bearbeitung\u201c markiert.',
-      'Best\u00e4tigen', 'background:var(--color-active);color:#fff;border:none'));
+      'Die St\u00f6rung wird als \u201eIn Bearbeitung\u201c markiert. Optional den Schweregrad korrigieren.',
+      'Best\u00e4tigen', 'background:var(--color-active);color:#fff;border:none', true));
 
+  // Zurückweisen: OHNE Schweregrad
   if (zurueckweisenBtn) zurueckweisenBtn.addEventListener('click', () =>
     openStatusModal('zurueckgewiesen', '\u2715 Ticket zur\u00fcckweisen',
       'Das Ticket wird als \u201eZur\u00fcckgewiesen\u201c geschlossen. Optional eine Begr\u00fcndung angeben.',
-      'Zur\u00fcckweisen', 'background:var(--color-primary);color:#fff;border:none'));
+      'Zur\u00fcckweisen', 'background:var(--color-primary);color:#fff;border:none', false));
 
+  // Erledigt: OHNE Schweregrad
   if (erledigtBtn) erledigtBtn.addEventListener('click', () =>
     openStatusModal('erledigt', '\u2713 St\u00f6rung erledigen',
       'Die St\u00f6rung wird als \u201eErledigt\u201c markiert.',
-      'Erledigt setzen', 'background:var(--color-done);color:#fff;border:none'));
+      'Erledigt setzen', 'background:var(--color-done);color:#fff;border:none', false));
 
+  // Zurück zu Eingegangen: OHNE Schweregrad
   if (zurueckBtn) zurueckBtn.addEventListener('click', () =>
     openStatusModal('gesendet', '\u21a9 Zur\u00fcck zu Eingegangen',
       'Der Status wird auf \u201eEingegangen\u201c zur\u00fcckgesetzt.',
-      'Zur\u00fccksetzen', ''));
+      'Zur\u00fccksetzen', '', false));
 
   const deleteBtn        = document.getElementById('deleteBtn');
   const deleteModal      = document.getElementById('deleteModal');

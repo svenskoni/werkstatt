@@ -124,14 +124,47 @@ async function getByStatus(status) {
   }));
 }
 
-async function updateStatus(id, newStatus, changedBy, note) {
+/**
+ * updateStatus – aktualisiert Status und optional den Schweregrad.
+ * Wenn neuSchwere gesetzt und verschieden vom alten Wert, wird schwere in
+ * stoerungen aktualisiert und die History-Notiz mit der Änderung ergänzt.
+ */
+async function updateStatus(id, newStatus, changedBy, note, neuSchwere) {
   const now = new Date().toISOString();
-  await run(`UPDATE stoerungen SET status = ? WHERE id = ?`, [newStatus, id]);
+
+  // Alten Schweregrad holen um Änderung zu erkennen
+  const current = await get(`SELECT schwere FROM stoerungen WHERE id = ?`, [id]);
+  const alterSchwere = current ? current.schwere : null;
+
+  const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
+  const schwereGeaendert = neuSchwere && validSchwere.includes(neuSchwere) && neuSchwere !== alterSchwere;
+
+  if (schwereGeaendert) {
+    await run(`UPDATE stoerungen SET status = ?, schwere = ? WHERE id = ?`, [newStatus, neuSchwere, id]);
+  } else {
+    await run(`UPDATE stoerungen SET status = ? WHERE id = ?`, [newStatus, id]);
+  }
+
+  // History-Notiz aufbauen: eigene Notiz + ggf. Schwereänderungs-Vermerk
+  const SCHWERE_LABEL = {
+    klein: '🟢 Klein', normal: '🟡 Normal', schwer: '🟠 Schwer', totalausfall: '🔴 Totalausfall',
+  };
+  let historyNote = note || null;
+  if (schwereGeaendert) {
+    const aenderung = `[Schweregrad geändert: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} → ${SCHWERE_LABEL[neuSchwere] || neuSchwere}]`;
+    historyNote = historyNote ? `${historyNote} ${aenderung}` : aenderung;
+  }
+
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
-    [id, newStatus, changedBy, now, note || null]
+    [id, newStatus, changedBy, now, historyNote]
   );
-  return getStorungById(id);
+
+  const updated = await getStorungById(id);
+  // Metadaten für Mailer mitgeben damit dieser die Schwereänderung kennt
+  updated._alterSchwere    = schwereGeaendert ? alterSchwere : null;
+  updated._schwereGeaendert = schwereGeaendert;
+  return updated;
 }
 
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
@@ -187,10 +220,6 @@ async function getAttachmentsForCompression(cutoffIso) {
 
 async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]); }
 
-/**
- * U4-FIX: Anhänge für Purge – erledigte/zurückgewiesene Tickets zuerst,
- * dann nach Erstellungsdatum sortiert. Aktive Tickets werden so zuletzt berührt.
- */
 async function getOldestAttachmentsForPurge() {
   return all(`
     SELECT a.*, s.status AS storungStatus
@@ -206,15 +235,10 @@ async function getOldestAttachmentsForPurge() {
   `);
 }
 
-/** Legacy-Alias – wird intern durch getOldestAttachmentsForPurge ersetzt */
 async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
 
 async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
 
-/**
- * deleteStorung – löscht zuerst Disk-Dateien, dann DB-Eintrag.
- * CASCADE löscht stoerung_history + stoerung_attachments automatisch.
- */
 async function deleteStorung(id) {
   const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
   const attachments = await all(`SELECT filename FROM stoerung_attachments WHERE stoerungId = ?`, [id]);

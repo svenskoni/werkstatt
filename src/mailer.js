@@ -41,28 +41,30 @@ th{background:#f7f7f7;width:38%}
 .btn{display:inline-block;margin-top:16px;padding:11px 22px;background:#c0392b;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;font-weight:bold}
 .desc{background:#f9f9f9;border-left:3px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:13px;white-space:pre-wrap}
 .ticket{font-size:28px;font-weight:bold;letter-spacing:1px;color:#c0392b;text-align:center;padding:16px;background:#fff5f5;border-radius:6px;margin:16px 0}
-.footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}`;
+.footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}
+.schwere-change{background:#fff8e1;border-left:3px solid #e67e22;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}`;
 
-/**
- * Extrahiert die erste gültige E-Mail-Adresse aus melderKontakt.
- */
 function extractMelderMail(kontakt) {
   const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].trim() : null;
 }
 
-function buildAdminHtml(storung) {
+function buildAdminHtml(storung, alterSchwere) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
   const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
+  const schwereChangeHtml = alterSchwere
+    ? `<tr><th>Schweregrad geändert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} → ${schwere}</strong> <span style="color:#e67e22">(vom Admin angepasst)</span></td></tr>`
+    : '';
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>🚨 Störungsmeldung – ${escHtml(storung.fahrzeug)}</h1><p>Eingegangen: ${datum}</p></div>
   <div class="body">
     <table>
       <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
       <tr><th>Schweregrad</th><td>${schwere}</td></tr>
+      ${schwereChangeHtml}
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
       <tr><th>Status</th><td>${status}</td></tr>
       <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} – ${escHtml(storung.melderKontakt)}</td></tr>
@@ -78,7 +80,6 @@ function buildAdminHtml(storung) {
 </div></body></html>`;
 }
 
-/** Bestätigungsmail an Melder nach Eingang – IMMER wenn Mail vorhanden */
 function buildMelderBestaetigung(storung) {
   const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
@@ -102,8 +103,7 @@ function buildMelderBestaetigung(storung) {
 </div></body></html>`;
 }
 
-/** Statusänderungs-Mail an Melder */
-function buildMelderStatusHtml(storung, note, changedBy) {
+function buildMelderStatusHtml(storung, note, changedBy, alterSchwere) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   const isZurueck = storung.status === 'zurueckgewiesen';
   const statusColor = storung.status === 'erledigt' ? '#27ae60'
@@ -112,6 +112,9 @@ function buildMelderStatusHtml(storung, note, changedBy) {
     : '#2980b9';
   const zurueckHinweis = isZurueck
     ? `<p style="font-size:13px;color:#c0392b;margin-top:12px">✕ Ihr Ticket wurde zurückgewiesen. Bei Rückfragen wenden Sie sich bitte direkt an ${escHtml(changedBy || 'die Werkstatt')}.</p>`
+    : '';
+  const schwereChangeHtml = alterSchwere
+    ? `<div class="schwere-change" style="margin-top:12px">ℹ️ <strong>Schweregrad wurde angepasst:</strong> ${escHtml(SCHWERE_LABEL[alterSchwere] || alterSchwere)} → <strong>${escHtml(SCHWERE_LABEL[storung.schwere] || storung.schwere)}</strong></div>`
     : '';
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
   .status-badge{display:inline-block;padding:6px 16px;border-radius:20px;font-weight:bold;font-size:16px;color:#fff;background:${statusColor}}
@@ -124,9 +127,11 @@ function buildMelderStatusHtml(storung, note, changedBy) {
     <table>
       <tr><th>Fahrzeug</th><td>${escHtml(storung.fahrzeug)}</td></tr>
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
+      <tr><th>Schweregrad</th><td>${escHtml(SCHWERE_LABEL[storung.schwere] || storung.schwere)}</td></tr>
       <tr><th>Neuer Status</th><td><strong>${status}</strong></td></tr>
       <tr><th>Ticket-Nr.</th><td><code>${storung.id}</code></td></tr>
     </table>
+    ${schwereChangeHtml}
     ${note ? `<div class="desc" style="margin-top:12px"><strong>Hinweis:</strong> ${escHtml(note)}</div>` : ''}
     ${storung.status === 'erledigt' ? '<p style="font-size:13px;color:#27ae60;margin-top:12px">✅ Ihre Meldung wurde abgeschlossen. Vielen Dank!</p>' : ''}
     ${zurueckHinweis}
@@ -137,7 +142,6 @@ function buildMelderStatusHtml(storung, note, changedBy) {
 
 // ── Öffentliche Funktionen ───────────────────────────────────────────────────────────────────
 
-/** Admin-Benachrichtigung bei neuer Störung */
 async function sendStorungMail(storung) {
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (!recipients.length) { console.warn('[Mailer] Keine Empfänger (MAIL_RECIPIENTS)'); return; }
@@ -146,7 +150,7 @@ async function sendStorungMail(storung) {
     await getTransport().sendMail({
       from: process.env.MAIL_FROM, to: recipients.join(', '),
       subject: `[Störung] ${storung.fahrzeug} – ${schwere} – ${storung.fehlerBeschreibung.slice(0,50)}`,
-      html: buildAdminHtml(storung),
+      html: buildAdminHtml(storung, null),
       text: `Störung: ${storung.fahrzeug}\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
     });
     console.log(`[Mailer] Admin-Mail gesendet an: ${recipients.join(', ')}`);
@@ -155,10 +159,6 @@ async function sendStorungMail(storung) {
   }
 }
 
-/**
- * Bestätigungs-Mail an Melder bei Eingang – IMMER wenn Mail vorhanden.
- * Unabhängig vom melderBenachrichtigung-Flag.
- */
 async function sendMelderBestaetigung(storung) {
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) {
@@ -179,21 +179,23 @@ async function sendMelderBestaetigung(storung) {
 }
 
 /**
- * Statusänderungs-Mail:
- * - Zurückweisung: IMMER an Melder wenn Mail vorhanden
- * - Alle anderen Status: nur bei Opt-in (melderBenachrichtigung = 1)
+ * sendStatusMail – liest _alterSchwere und _schwereGeaendert vom storung-Objekt
+ * (werden von db.updateStatus() gesetzt).
  */
 async function sendStatusMail(storung, changedBy, note) {
+  const alterSchwere = storung._schwereGeaendert ? storung._alterSchwere : null;
+
   // Admin immer benachrichtigen
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
     const status = STATUS_LABEL[storung.status] || storung.status;
+    const schwereHinweis = alterSchwere ? ` [Schwere: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} → ${SCHWERE_LABEL[storung.schwere] || storung.schwere}]` : '';
     try {
       await getTransport().sendMail({
         from: process.env.MAIL_FROM, to: recipients.join(', '),
-        subject: `[Status] ${storung.fahrzeug} → ${status} (Melder: ${storung.melderName})`,
-        html: buildAdminHtml(storung),
-        text: `Statuswechsel: ${storung.fahrzeug} → ${status}\nMelder: ${storung.melderName}\nGeändert von: ${changedBy}`,
+        subject: `[Status] ${storung.fahrzeug} → ${status}${schwereHinweis} (Melder: ${storung.melderName})`,
+        html: buildAdminHtml(storung, alterSchwere),
+        text: `Statuswechsel: ${storung.fahrzeug} → ${status}${schwereHinweis}\nMelder: ${storung.melderName}\nGeändert von: ${changedBy}`,
       });
       console.log(`[Mailer] Status-Mail Admin gesendet`);
     } catch (err) {
@@ -202,10 +204,9 @@ async function sendStatusMail(storung, changedBy, note) {
   }
 
   const melderMail = extractMelderMail(storung.melderKontakt);
-  if (!melderMail) return; // keine Mail-Adresse vorhanden – nichts zu tun
+  if (!melderMail) return;
 
   const isZurueck = storung.status === 'zurueckgewiesen';
-  // Zurückweisung: immer; alle anderen Status: nur bei Opt-in
   const melderBekommt = isZurueck || Number(storung.melderBenachrichtigung) === 1;
   if (!melderBekommt) return;
 
@@ -216,7 +217,7 @@ async function sendStatusMail(storung, changedBy, note) {
       subject: isZurueck
         ? `❌ Ihre Störungsmeldung wurde zurückgewiesen – Ticket ${storung.id}`
         : `🔔 Statusänderung Ihrer Störungsmeldung – ${status}`,
-      html: buildMelderStatusHtml(storung, note, changedBy),
+      html: buildMelderStatusHtml(storung, note, changedBy, alterSchwere),
       text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}${note ? '\nHinweis: ' + note : ''}${isZurueck ? '\nBei Rückfragen wenden Sie sich bitte direkt an ' + (changedBy || 'die Werkstatt') + '.' : ''}`,
     });
     console.log(`[Mailer] Status-Mail an Melder gesendet (${isZurueck ? 'Zurückweisung – Pflicht' : 'Opt-in'}): ${melderMail}`);

@@ -53,7 +53,6 @@ const STATUS_LABEL = {
       <div class="attachment-grid">
         <% storung.attachments.forEach(function(a) { %>
           <% if (a.mimetype && a.mimetype.startsWith('image/')) { %>
-            <%# U5-FIX: originalname und filename kommen aus DB – EJS <%= %> escaped automatisch %>
             <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer">
               <img
                 src="/uploads/<%= encodeURIComponent(a.filename) %>"
@@ -63,7 +62,6 @@ const STATUS_LABEL = {
                 style="object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-border);max-height:150px;display:block">
             </a>
           <% } else if (a.mimetype && a.mimetype.startsWith('video/')) { %>
-            <%# U6-FIX: Video als <video>-Tag mit preload=none – kein auto-buffering %>
             <div style="border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-border)">
               <video
                 src="/uploads/<%= encodeURIComponent(a.filename) %>"
@@ -139,7 +137,6 @@ const STATUS_LABEL = {
 </div>
 
 <% if (user && user.role === 'admin') { %>
-<!-- Status-Modal -->
 <div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
     <h3 id="statusModalTitle" style="margin-bottom:var(--space-2)"></h3>
@@ -157,7 +154,6 @@ const STATUS_LABEL = {
   </div>
 </div>
 
-<!-- Löschen-Modal -->
 <div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">&#9888;&#65039; Störung löschen</h3>

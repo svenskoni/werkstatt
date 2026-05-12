@@ -41,29 +41,55 @@ const SCHWERE = {
       <% if (s.status === 'gesendet') { %>
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-active);color:#fff;border:none"
-          data-id="<%= s.id %>" data-target="bestaetigt">
+          data-id="<%= s.id %>"
+          data-target="bestaetigt"
+          data-schwere="<%= s.schwere %>"
+          data-mit-schwere="1"
+          data-title="✓ Störung bestätigen"
+          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad optional korrigieren."
+          data-label="Bestätigen">
           ✓ Bestätigen
         </button>
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-primary);color:#fff;border:none"
-          data-id="<%= s.id %>" data-target="zurueckgewiesen">
+          data-id="<%= s.id %>"
+          data-target="zurueckgewiesen"
+          data-schwere="<%= s.schwere %>"
+          data-title="✕ Ticket zurückweisen"
+          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
+          data-label="Zurückweisen">
           ✕ Zurückweisen
         </button>
       <% } %>
       <% if (s.status === 'bestaetigt') { %>
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-done);color:#fff;border:none"
-          data-id="<%= s.id %>" data-target="erledigt">
+          data-id="<%= s.id %>"
+          data-target="erledigt"
+          data-schwere="<%= s.schwere %>"
+          data-title="✓ Störung erledigen"
+          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
+          data-label="Erledigt setzen">
           ✓ Erledigt
         </button>
         <button class="btn btn-xs btn-ghost status-change-btn"
-          data-id="<%= s.id %>" data-target="gesendet">
+          data-id="<%= s.id %>"
+          data-target="gesendet"
+          data-schwere="<%= s.schwere %>"
+          data-title="↩ Zurück zu Eingegangen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-label="Zurücksetzen">
           ↩ Zurück
         </button>
       <% } %>
       <% if (s.status === 'erledigt' || s.status === 'zurueckgewiesen') { %>
         <button class="btn btn-xs btn-ghost status-change-btn"
-          data-id="<%= s.id %>" data-target="gesendet">
+          data-id="<%= s.id %>"
+          data-target="gesendet"
+          data-schwere="<%= s.schwere %>"
+          data-title="↩ Wiedereröffnen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-label="Wiedereröffnen">
           ↩ Wiederöffnen
         </button>
       <% } %>

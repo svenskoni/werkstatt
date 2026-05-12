@@ -43,30 +43,48 @@ th{background:#f7f7f7;width:38%}
 .ticket{font-size:28px;font-weight:bold;letter-spacing:1px;color:#c0392b;text-align:center;padding:16px;background:#fff5f5;border-radius:6px;margin:16px 0}
 .footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}
 .schwere-change{background:#fff8e1;border-left:3px solid #e67e22;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
-.changed-by{background:#eaf4fb;border-left:3px solid #2980b9;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}`;
+.changed-by{background:#eaf4fb;border-left:3px solid #2980b9;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
+.reminder-banner{background:#fff3cd;border-left:4px solid #e6a817;padding:10px 14px;border-radius:4px;font-size:14px;margin-bottom:12px;font-weight:bold}`;
 
 function extractMelderMail(kontakt) {
   const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].trim() : null;
 }
 
-// ── Admin-Mail ─────────────────────────────────────────────────────────────
+// Liest Admin-Mail-Adressen aus der ENV.
+// ADMIN_MAILS = kommagetrennte Liste: "max@fw.de,lisa@fw.de"
+// Rückgabe: { username → email } oder leeres Objekt wenn nicht gesetzt.
+function getAdminMailMap() {
+  const raw = process.env.ADMIN_MAILS || '';
+  const map = {};
+  raw.split(',').forEach(entry => {
+    const [username, email] = entry.trim().split(':').map(s => s.trim());
+    if (username && email && email.includes('@')) map[username] = email;
+  });
+  return map;
+}
+
+// Gibt die Mail-Adresse eines Admins zurück (aus ADMIN_MAILS).
+// Fallback: MAIL_RECIPIENTS (alle Admins)
+function resolveAdminMail(username) {
+  if (!username) return null;
+  const map = getAdminMailMap();
+  return map[username] || null;
+}
+
+// ── Admin-Mail ──────────────────────────────────────────────────
 function buildAdminHtml(storung, alterSchwere, changedBy) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
   const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
-
   const schwereChangeHtml = alterSchwere
-    ? `<tr><th>Schweregrad geändert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${schwere}</strong> <span style="color:#e67e22">(vom Admin angepasst)</span></td></tr>`
+    ? `<tr><th>Schweregrad ge\u00e4ndert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${schwere}</strong> <span style="color:#e67e22">(vom Admin angepasst)</span></td></tr>`
     : '';
-
-  // Wer hat den Status geändert? Nur anzeigen wenn explizit übergeben und verschieden von createdBy
   const changedByHtml = changedBy
-    ? `<tr><th>Status geändert von</th><td><strong>${escHtml(changedBy)}</strong></td></tr>`
+    ? `<tr><th>Status ge\u00e4ndert von</th><td><strong>${escHtml(changedBy)}</strong></td></tr>`
     : '';
-
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>\uD83D\uDEA8 St\u00f6rungsmeldung \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Eingegangen: ${datum}</p></div>
   <div class="body">
@@ -90,7 +108,6 @@ function buildAdminHtml(storung, alterSchwere, changedBy) {
 </div></body></html>`;
 }
 
-// ── Melder-Bestätigung (Eingang) ────────────────────────────────────────────
 function buildMelderBestaetigung(storung) {
   const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
@@ -114,7 +131,6 @@ function buildMelderBestaetigung(storung) {
 </div></body></html>`;
 }
 
-// ── Melder-Status-Mail ──────────────────────────────────────────────────
 function buildMelderStatusHtml(storung, note, changedBy, alterSchwere) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   const isZurueck = storung.status === 'zurueckgewiesen';
@@ -122,20 +138,15 @@ function buildMelderStatusHtml(storung, note, changedBy, alterSchwere) {
     : storung.status === 'bestaetigt' ? '#e67e22'
     : isZurueck ? '#c0392b'
     : '#2980b9';
-
   const zurueckHinweis = isZurueck
     ? `<p style="font-size:13px;color:#c0392b;margin-top:12px">\u2715 Ihr Ticket wurde zur\u00fcckgewiesen. Bei R\u00fcckfragen wenden Sie sich bitte direkt an ${escHtml(changedBy || 'die Werkstatt')}.</p>`
     : '';
-
   const schwereChangeHtml = alterSchwere
     ? `<div class="schwere-change" style="margin-top:12px">\u2139\uFE0F <strong>Schweregrad wurde angepasst:</strong> ${escHtml(SCHWERE_LABEL[alterSchwere] || alterSchwere)} \u2192 <strong>${escHtml(SCHWERE_LABEL[storung.schwere] || storung.schwere)}</strong></div>`
     : '';
-
-  // Wer hat geändert – immer sichtbar für den Melder
   const changedByHtml = changedBy
-    ? `<div class="changed-by" style="margin-top:12px">\uD83D\uDC64 <strong>Status geändert von:</strong> ${escHtml(changedBy)}</div>`
+    ? `<div class="changed-by" style="margin-top:12px">\uD83D\uDC64 <strong>Status ge\u00e4ndert von:</strong> ${escHtml(changedBy)}</div>`
     : '';
-
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
   .status-badge{display:inline-block;padding:6px 16px;border-radius:20px;font-weight:bold;font-size:16px;color:#fff;background:${statusColor}}
   </style></head><body><div class="wrap">
@@ -162,7 +173,34 @@ function buildMelderStatusHtml(storung, note, changedBy, alterSchwere) {
 </div></body></html>`;
 }
 
-// ── Öffentliche Funktionen ──────────────────────────────────────────────────────
+/** Erinnerungs-Mail an einen einzelnen Admin */
+function buildReminderHtml(storung) {
+  const baseUrl   = process.env.APP_BASE_URL;
+  const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
+  const status    = STATUS_LABEL[storung.status]    || storung.status;
+  const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+  const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
+  <div class="header"><h1>\u23F0 Erinnerung: offenes Ticket \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Ticket: ${escHtml(storung.id)}</p></div>
+  <div class="body">
+    <div class="reminder-banner">\u23F0 Du hast dir eine Erinnerung f\u00fcr dieses Ticket gesetzt.</div>
+    <table>
+      <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
+      <tr><th>Schweregrad</th><td>${schwere}</td></tr>
+      <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
+      <tr><th>Aktueller Status</th><td><strong>${status}</strong></td></tr>
+      <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} \u2013 ${escHtml(storung.melderKontakt)}</td></tr>
+      <tr><th>Erfasst am</th><td>${datum}</td></tr>
+      <tr><th>Ticket-Nr.</th><td><code>${storung.id}</code></td></tr>
+    </table>
+    ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
+    <a href="${detailUrl}" class="btn">Ticket \u00f6ffnen \u2192</a>
+  </div>
+  <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
+</div></body></html>`;
+}
+
+// ── Öffentliche Funktionen ─────────────────────────────────────────────
 async function sendStorungMail(storung) {
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (!recipients.length) { console.warn('[Mailer] Keine Empf\u00e4nger (MAIL_RECIPIENTS)'); return; }
@@ -182,16 +220,13 @@ async function sendStorungMail(storung) {
 
 async function sendMelderBestaetigung(storung) {
   const melderMail = extractMelderMail(storung.melderKontakt);
-  if (!melderMail) {
-    console.log('[Mailer] Keine Melder-Mail, Best\u00e4tigung \u00fcbersprungen:', storung.melderKontakt);
-    return;
-  }
+  if (!melderMail) { console.log('[Mailer] Keine Melder-Mail, Best\u00e4tigung \u00fcbersprungen'); return; }
   try {
     await getTransport().sendMail({
       from: process.env.MAIL_FROM, to: melderMail,
       subject: `\u2705 St\u00f6rungsmeldung eingegangen \u2013 Ticket ${storung.id}`,
       html: buildMelderBestaetigung(storung),
-      text: `Hallo ${storung.melderName},\nIhre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}`,
+      text: `Hallo ${storung.melderName},\nIhre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}`,
     });
     console.log(`[Mailer] Best\u00e4tigung an Melder: ${melderMail}`);
   } catch (err) {
@@ -202,7 +237,7 @@ async function sendMelderBestaetigung(storung) {
 async function sendStatusMail(storung, changedBy, note) {
   const alterSchwere = storung._schwereGeaendert ? storung._alterSchwere : null;
 
-  // Admin immer benachrichtigen
+  // Admin-Gruppe immer benachrichtigen
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
     const status = STATUS_LABEL[storung.status] || storung.status;
@@ -212,21 +247,31 @@ async function sendStatusMail(storung, changedBy, note) {
         from: process.env.MAIL_FROM, to: recipients.join(', '),
         subject: `[Status] ${storung.fahrzeug} \u2192 ${status}${schwereHinweis} | von: ${changedBy} | Melder: ${storung.melderName}`,
         html: buildAdminHtml(storung, alterSchwere, changedBy),
-        text: `Statuswechsel: ${storung.fahrzeug} \u2192 ${status}${schwereHinweis}\nGe\u00e4ndert von: ${changedBy}\nMelder: ${storung.melderName}`,
+        text: `Statuswechsel: ${storung.fahrzeug} \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}\nMelder: ${storung.melderName}`,
       });
-      console.log(`[Mailer] Status-Mail Admin gesendet`);
-    } catch (err) {
-      console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message);
-    }
+    } catch (err) { console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message); }
   }
 
+  // Zusätzlich: individuelle Admin-Mail wenn in ADMIN_MAILS hinterlegt
+  const changedByMail = resolveAdminMail(changedBy);
+  if (changedByMail && !recipients.includes(changedByMail)) {
+    try {
+      const status = STATUS_LABEL[storung.status] || storung.status;
+      await getTransport().sendMail({
+        from: process.env.MAIL_FROM, to: changedByMail,
+        subject: `[Dein Status-Update] ${storung.fahrzeug} \u2192 ${status} | ${storung.id}`,
+        html: buildAdminHtml(storung, alterSchwere, changedBy),
+        text: `Du hast den Status von ${storung.id} auf "${status}" gesetzt.`,
+      });
+      console.log(`[Mailer] Pers\u00f6nliche Status-Mail an ${changedBy}: ${changedByMail}`);
+    } catch (err) { console.error('[Mailer] sendStatusMail pers\u00f6nlich FEHLER:', err.message); }
+  }
+
+  // Melder benachrichtigen (Opt-in oder Zurückweisung)
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) return;
-
   const isZurueck = storung.status === 'zurueckgewiesen';
-  const melderBekommt = isZurueck || Number(storung.melderBenachrichtigung) === 1;
-  if (!melderBekommt) return;
-
+  if (!isZurueck && Number(storung.melderBenachrichtigung) !== 1) return;
   const status = STATUS_LABEL[storung.status] || storung.status;
   try {
     await getTransport().sendMail({
@@ -235,11 +280,24 @@ async function sendStatusMail(storung, changedBy, note) {
         ? `\u274C Ihre St\u00f6rungsmeldung wurde zur\u00fcckgewiesen \u2013 Ticket ${storung.id}`
         : `\uD83D\uDD14 Status\u00e4nderung Ihrer St\u00f6rungsmeldung \u2013 ${status}`,
       html: buildMelderStatusHtml(storung, note, changedBy, alterSchwere),
-      text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}\nGe\u00e4ndert von: ${changedBy}${note ? '\nHinweis: ' + note : ''}${isZurueck ? '\nBei R\u00fcckfragen wenden Sie sich bitte direkt an ' + (changedBy || 'die Werkstatt') + '.' : ''}`,
+      text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}\nGe\u00e4ndert von: ${changedBy}`,
     });
-    console.log(`[Mailer] Status-Mail an Melder gesendet (${isZurueck ? 'Zur\u00fcckweisung \u2013 Pflicht' : 'Opt-in'}): ${melderMail}`);
+  } catch (err) { console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message); }
+}
+
+/** Erinnerungs-Mail an spezifischen Admin */
+async function sendReminderMail(storung, toEmail) {
+  const status = STATUS_LABEL[storung.status] || storung.status;
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM, to: toEmail,
+      subject: `\u23F0 Erinnerung: Ticket ${storung.id} \u2013 ${storung.fahrzeug} (${status})`,
+      html: buildReminderHtml(storung),
+      text: `Erinnerung f\u00fcr Ticket ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nStatus: ${status}\nFehler: ${storung.fehlerBeschreibung}`,
+    });
+    console.log(`[Mailer] Erinnerungs-Mail gesendet an: ${toEmail}`);
   } catch (err) {
-    console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message);
+    console.error('[Mailer] sendReminderMail FEHLER:', err.message);
   }
 }
 
@@ -266,28 +324,16 @@ async function sendDeleteMail(storung, deletedBy, grund) {
 </div></body></html>`;
   const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
-    try {
-      await getTransport().sendMail({ from: process.env.MAIL_FROM, to: recipients.join(', '), subject, html, text: `Gel\u00f6scht: ${storung.id} \u2013 ${grund}` });
-      console.log(`[Mailer] L\u00f6sch-Mail Admin gesendet`);
-    } catch (err) {
-      console.error('[Mailer] sendDeleteMail Admin FEHLER:', err.message);
-    }
+    try { await getTransport().sendMail({ from: process.env.MAIL_FROM, to: recipients.join(', '), subject, html, text: `Gel\u00f6scht: ${storung.id} \u2013 ${grund}` }); }
+    catch (err) { console.error('[Mailer] sendDeleteMail Admin FEHLER:', err.message); }
   }
   if (Number(storung.melderBenachrichtigung) === 1 && storung.status !== 'erledigt') {
     const melderMail = extractMelderMail(storung.melderKontakt);
     if (melderMail) {
-      try {
-        await getTransport().sendMail({
-          from: process.env.MAIL_FROM, to: melderMail,
-          subject: `Ihre St\u00f6rungsmeldung wurde entfernt \u2013 ${storung.fahrzeug}`,
-          html, text: `Ihre Meldung ${storung.id} wurde gel\u00f6scht.\nGel\u00f6scht von: ${deletedBy}\nBegr\u00fcndung: ${grund}`,
-        });
-        console.log(`[Mailer] L\u00f6sch-Mail Melder gesendet: ${melderMail}`);
-      } catch (err) {
-        console.error('[Mailer] sendDeleteMail Melder FEHLER:', err.message);
-      }
+      try { await getTransport().sendMail({ from: process.env.MAIL_FROM, to: melderMail, subject: `Ihre St\u00f6rungsmeldung wurde entfernt \u2013 ${storung.fahrzeug}`, html, text: `Ihre Meldung ${storung.id} wurde gel\u00f6scht.\nGel\u00f6scht von: ${deletedBy}\nBegr\u00fcndung: ${grund}` }); }
+      catch (err) { console.error('[Mailer] sendDeleteMail Melder FEHLER:', err.message); }
     }
   }
 }
 
-module.exports = { sendStorungMail, sendMelderBestaetigung, sendStatusMail, sendDeleteMail };
+module.exports = { sendStorungMail, sendMelderBestaetigung, sendStatusMail, sendReminderMail, sendDeleteMail, resolveAdminMail, getAdminMailMap };

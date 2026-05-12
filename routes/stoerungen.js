@@ -8,7 +8,7 @@ const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer ────────────────────────────────────────────────────────────────────────────────
+// ── Multer ──────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
@@ -30,7 +30,7 @@ function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
+// ── Dashboard ──────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
     const [gesendet, bestaetigt, erledigt, zurueckgewiesen] = await Promise.all([
@@ -52,7 +52,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Neue Störung ──────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -61,26 +61,21 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   const old = req.body || {};
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
-
     const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
-
     const kontaktTeile = [];
     if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
     if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
     const melderKontakt = kontaktTeile.join(' / ');
-
     const errors = [];
     if (!melderName)         errors.push('Name des Melders ist erforderlich.');
-    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
-    if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
+    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug ausw\u00e4hlen.');
+    if (!schwere)            errors.push('Bitte einen Schweregrad ausw\u00e4hlen.');
     if (!fehlerBeschreibung) errors.push('Fehlerbeschreibung ist erforderlich.');
     if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
     if (errors.length) return renderNeu(res, errors, old, req.session.user);
-
     const attachments = (req.files || []).map(f => ({
       filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
     }));
-
     const storung = await db.createStorung({
       fahrzeug, schwere, fehlerBeschreibung,
       beschreibung: beschreibung || '',
@@ -90,10 +85,8 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
       melderBenachrichtigung,
       attachments,
     });
-
     mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
     mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
-
     res.redirect('/');
   } catch (err) {
     console.error('[Neu]', err);
@@ -101,39 +94,33 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
   }
 });
 
-// ── Störung-Detail ────────────────────────────────────────────────────────────────────────────────────────────
+// ── Störung-Detail ────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).render('error', { title: '404', message: 'Störung nicht gefunden.' });
-    res.render('stoerung-detail', { storung, user: req.session.user });
+    if (!storung) return res.status(404).render('error', { title: '404', message: 'St\u00f6rung nicht gefunden.' });
+    // Admin-Mail-Map f\u00fcr Reminder-Dropdown mitgeben
+    const adminMailMap = req.session.user && req.session.user.role === 'admin' ? mailer.getAdminMailMap() : {};
+    res.render('stoerung-detail', { storung, user: req.session.user, adminMailMap });
   } catch (err) {
     console.error('[Detail]', err);
-    res.status(500).render('error', { title: 'Fehler', message: 'Störung konnte nicht geladen werden.' });
+    res.status(500).render('error', { title: 'Fehler', message: 'St\u00f6rung konnte nicht geladen werden.' });
   }
 });
 
-// ── Status ändern (nur Admin) ─────────────────────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ──────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
-    if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
-
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Ung\u00fcltiger Status.' });
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-
-    // neuSchwere validieren – nur für bestaetigt sinnvoll, aber generell erlaubt
     const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
-    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
-
-    const updated = await db.updateStatus(
-      storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere
-    );
-
+    const gepr\u00fcfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, gepr\u00fcfteSchwere);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
-
     res.json({ ok: true, newStatus: status });
   } catch (err) {
     console.error('[Status]', err);
@@ -141,7 +128,46 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────────────────
+// ── Erinnerung setzen (nur Admin) ───────────────────────────────────────────────────────────────
+router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
+  try {
+    const { reminderAt, reminderTo } = req.body;
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+
+    if (!reminderAt) {
+      // Erinnerung l\u00f6schen
+      await db.clearReminder(storung.id);
+      return res.json({ ok: true, cleared: true });
+    }
+
+    // reminderAt ist lokale Datumszeit des Admins (datetime-local = "2026-05-15T14:30")
+    // Wir speichern als ISO-String (UTC).
+    const dt = new Date(reminderAt);
+    if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ung\u00fcltiges Datum.' });
+    if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
+
+    // reminderTo: entweder direkt eine Mail-Adresse oder ein Username aus ADMIN_MAILS
+    const to = reminderTo && reminderTo.includes('@')
+      ? reminderTo.trim()
+      : (mailer.resolveAdminMail(reminderTo) || mailer.resolveAdminMail(req.session.user.username));
+
+    if (!to) return res.status(400).json({ error: 'Keine g\u00fcltige Admin-E-Mail gefunden. Bitte ADMIN_MAILS in der .env konfigurieren.' });
+
+    await db.setReminder(storung.id, dt.toISOString(), to);
+    res.json({
+      ok: true,
+      reminderAt: dt.toISOString(),
+      reminderTo: to,
+      localTime: dt.toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }),
+    });
+  } catch (err) {
+    console.error('[Reminder]', err);
+    res.status(500).json({ error: 'Interner Fehler.' });
+  }
+});
+
+// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -152,12 +178,12 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
     await db.deleteStorung(storung.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[Löschen]', err);
-    res.status(500).json({ error: 'Löschen fehlgeschlagen.' });
+    console.error('[L\u00f6schen]', err);
+    res.status(500).json({ error: 'L\u00f6schen fehlgeschlagen.' });
   }
 });
 
-// ── Such-API ────────────────────────────────────────────────────────────────────────────────────────────
+// ── Such-API ─────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status } = req.query;
@@ -167,12 +193,8 @@ router.get('/api/suche', requireLogin, async (req, res) => {
       : ['gesendet','bestaetigt','erledigt'];
     const rows = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statusList);
     res.json(rows.map(r => ({
-      id:                r.id,
-      fahrzeug:          r.fahrzeug,
-      fehlerBeschreibung: r.fehlerBeschreibung,
-      schwere:           r.schwere,
-      status:            r.status,
-      createdAt:         r.createdAt,
+      id: r.id, fahrzeug: r.fahrzeug, fehlerBeschreibung: r.fehlerBeschreibung,
+      schwere: r.schwere, status: r.status, createdAt: r.createdAt,
     })));
   } catch (err) {
     console.error('[API Suche]', err);
@@ -180,7 +202,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

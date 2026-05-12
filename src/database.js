@@ -23,7 +23,9 @@ async function initDb() {
       updatedAt              TEXT,
       melderName             TEXT NOT NULL,
       melderKontakt          TEXT NOT NULL,
-      melderBenachrichtigung INTEGER NOT NULL DEFAULT 0
+      melderBenachrichtigung INTEGER NOT NULL DEFAULT 0,
+      reminderAt             TEXT,
+      reminderTo             TEXT
     );
     CREATE TABLE IF NOT EXISTS stoerung_history (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,19 +49,17 @@ async function initDb() {
     );
   `);
 
-  // Migration: Spalten nachträglich hinzufügen falls noch nicht vorhanden
+  // Migrations
   for (const migration of [
     `ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE stoerungen ADD COLUMN updatedAt TEXT`,
+    `ALTER TABLE stoerungen ADD COLUMN reminderAt TEXT`,
+    `ALTER TABLE stoerungen ADD COLUMN reminderTo TEXT`,
   ]) {
     try { await db.execute(migration); } catch { /* already exists */ }
   }
 
-  // updatedAt befüllen für bestehende Einträge (einmalig)
-  await db.execute(`
-    UPDATE stoerungen SET updatedAt = createdAt WHERE updatedAt IS NULL
-  `);
-
+  await db.execute(`UPDATE stoerungen SET updatedAt = createdAt WHERE updatedAt IS NULL`);
   await db.execute(
     `UPDATE stoerungen SET melderBenachrichtigung = 0
      WHERE melderBenachrichtigung = 1
@@ -136,10 +136,8 @@ async function getByStatus(status) {
 
 async function updateStatus(id, newStatus, changedBy, note, neuSchwere) {
   const now = new Date().toISOString();
-
   const current = await get(`SELECT schwere FROM stoerungen WHERE id = ?`, [id]);
   const alterSchwere = current ? current.schwere : null;
-
   const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
   const schwereGeaendert = neuSchwere && validSchwere.includes(neuSchwere) && neuSchwere !== alterSchwere;
 
@@ -157,16 +155,40 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere) {
     const aenderung = `[Schweregrad ge\u00e4ndert: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${SCHWERE_LABEL[neuSchwere] || neuSchwere}]`;
     historyNote = historyNote ? `${historyNote} ${aenderung}` : aenderung;
   }
-
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
     [id, newStatus, changedBy, now, historyNote]
   );
-
   const updated = await getStorungById(id);
   updated._alterSchwere     = schwereGeaendert ? alterSchwere : null;
   updated._schwereGeaendert = schwereGeaendert;
   return updated;
+}
+
+/** Erinnerung setzen oder löschen (reminderAt=ISO-String, reminderTo=E-Mail des Admins) */
+async function setReminder(id, reminderAt, reminderTo) {
+  await run(
+    `UPDATE stoerungen SET reminderAt = ?, reminderTo = ? WHERE id = ?`,
+    [reminderAt || null, reminderTo || null, id]
+  );
+  return getStorungById(id);
+}
+
+/** Alle Tickets die einen fälligen Reminder haben (reminderAt <= jetzt, nicht erledigt/zurückgewiesen) */
+async function getDueReminders() {
+  const now = new Date().toISOString();
+  return all(
+    `SELECT * FROM stoerungen
+     WHERE reminderAt IS NOT NULL
+       AND reminderAt <= ?
+       AND status NOT IN ('erledigt','zurueckgewiesen')`,
+    [now]
+  );
+}
+
+/** Reminder zurücksetzen nachdem er verschickt wurde */
+async function clearReminder(id) {
+  await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
@@ -189,58 +211,22 @@ async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
   const orderBy = `ORDER BY CASE status WHEN 'erledigt' THEN 1 ELSE 0 END ASC, COALESCE(updatedAt, createdAt) DESC`;
   const excludeStatuses = `status NOT IN ('erledigt', 'zurueckgewiesen')`;
   if (fahrzeug) {
-    if (includeErledigt) {
-      return all(
-        `SELECT * FROM stoerungen WHERE fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
-        [fahrzeug, like]
-      );
-    }
-    return all(
-      `SELECT * FROM stoerungen WHERE ${excludeStatuses} AND fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
-      [fahrzeug, like]
-    );
+    if (includeErledigt) return all(`SELECT * FROM stoerungen WHERE fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`, [fahrzeug, like]);
+    return all(`SELECT * FROM stoerungen WHERE ${excludeStatuses} AND fahrzeug = ? AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`, [fahrzeug, like]);
   }
-  if (includeErledigt) {
-    return all(
-      `SELECT * FROM stoerungen WHERE lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
-      [like]
-    );
-  }
-  return all(
-    `SELECT * FROM stoerungen WHERE ${excludeStatuses} AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`,
-    [like]
-  );
+  if (includeErledigt) return all(`SELECT * FROM stoerungen WHERE lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`, [like]);
+  return all(`SELECT * FROM stoerungen WHERE ${excludeStatuses} AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`, [like]);
 }
 
 async function getAttachmentsForCompression(cutoffIso) {
-  return all(`
-    SELECT a.* FROM stoerung_attachments a
-    JOIN stoerungen s ON s.id = a.stoerungId
-    WHERE s.status = 'erledigt' AND s.createdAt < ? AND a.compressed = 0
-  `, [cutoffIso]);
+  return all(`SELECT a.* FROM stoerung_attachments a JOIN stoerungen s ON s.id = a.stoerungId WHERE s.status = 'erledigt' AND s.createdAt < ? AND a.compressed = 0`, [cutoffIso]);
 }
-
 async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attachments SET compressed = 1 WHERE id = ?`, [id]); }
-
 async function getOldestAttachmentsForPurge() {
-  return all(`
-    SELECT a.*, s.status AS storungStatus
-    FROM stoerung_attachments a
-    JOIN stoerungen s ON s.id = a.stoerungId
-    ORDER BY
-      CASE s.status
-        WHEN 'erledigt'        THEN 0
-        WHEN 'zurueckgewiesen' THEN 0
-        ELSE                        1
-      END ASC,
-      a.createdAt ASC
-  `);
+  return all(`SELECT a.*, s.status AS storungStatus FROM stoerung_attachments a JOIN stoerungen s ON s.id = a.stoerungId ORDER BY CASE s.status WHEN 'erledigt' THEN 0 WHEN 'zurueckgewiesen' THEN 0 ELSE 1 END ASC, a.createdAt ASC`);
 }
-
 async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
-
 async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
-
 async function deleteStorung(id) {
   const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
   const attachments = await all(`SELECT filename FROM stoerung_attachments WHERE stoerungId = ?`, [id]);
@@ -254,6 +240,7 @@ async function deleteStorung(id) {
 module.exports = {
   initDb,
   createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
+  setReminder, getDueReminders, clearReminder,
   searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
   getOldestAttachments, getOldestAttachmentsForPurge, deleteAttachment,

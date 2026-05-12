@@ -1,7 +1,7 @@
 {
   "name": "feuerwehr-stoerungsmelder",
-  "version": "1.4.3",
-  "description": "Feuerwehr St\u00f6rungs- und Reparaturmeldungssystem \u2013 LZ Frechen (Plesk only)",
+  "version": "1.5.0",
+  "description": "Feuerwehr Störungs- und Reparaturmeldungssystem – LZ Frechen (Plesk only)",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
@@ -12,19 +12,19 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.22.2",
     "express-session": "^1.17.3",
     "express-ejs-layouts": "^2.5.1",
-    "bcryptjs": "^2.4.3",
-    "dotenv": "^16.3.1",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.0.0",
     "multer": "^2.0.0",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^8.0.7",
     "uuid": "^11.0.0",
-    "helmet": "^7.1.0",
-    "express-rate-limit": "^7.1.5",
-    "ejs": "^3.1.9",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^8.0.0",
+    "ejs": "^3.1.10",
     "sanitize-html": "^2.11.0",
-    "jimp": "^0.22.12",
-    "@libsql/client": "^0.14.0"
+    "jimp": "^1.6.1",
+    "@libsql/client": "^0.17.3"
   }
 }

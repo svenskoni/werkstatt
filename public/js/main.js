@@ -25,49 +25,80 @@
 // ─── Globales Status-Modal ──────────────────────────────────────────────────
 // Wird von Dashboard-Cards UND der Detail-Seite genutzt.
 // Jeder Button braucht die Klasse .status-change-btn und:
-//   data-id           = Störungs-ID
-//   data-target       = Ziel-Status
-//   data-schwere      = aktueller Schweregrad
-//   data-mit-schwere  = "1"  → Schwere-Dropdown anzeigen (nur Bestätigen)
-//   data-title        = Modal-Überschrift (optional)
-//   data-desc         = Modal-Beschreibung (optional)
-//   data-label        = Text des Bestätigungs-Buttons (optional)
-//   data-color        = CSS-Farbe des Bestätigungs-Buttons (optional)
+//   data-id            = Störungs-ID
+//   data-target        = Ziel-Status
+//   data-schwere       = aktueller Schweregrad
+//   data-mit-schwere   = "1"  → Schwere-Dropdown anzeigen
+//   data-with-reminder = "1"  → Erinnerungs-Checkbox anzeigen
+//   data-title         = Modal-Überschrift (optional)
+//   data-desc          = Modal-Beschreibung (optional)
+//   data-label         = Text des Bestätigungs-Buttons (optional)
+//   data-color         = CSS-Farbe des Bestätigungs-Buttons (optional)
 (function () {
-  const modal        = document.getElementById('statusModal');
-  const modalTitle   = document.getElementById('modalTitle');
-  const modalDesc    = document.getElementById('modalDesc');
-  const modalConfirm = document.getElementById('modalConfirm');
-  const modalCancel  = document.getElementById('modalCancel');
-  const statusNote   = document.getElementById('statusNote');
-  const schwereWrap  = document.getElementById('schwereWrap');
-  const schwereSelect= document.getElementById('schwereSelect');
+  const modal          = document.getElementById('statusModal');
+  const modalTitle     = document.getElementById('modalTitle');
+  const modalDesc      = document.getElementById('modalDesc');
+  const modalConfirm   = document.getElementById('modalConfirm');
+  const modalCancel    = document.getElementById('modalCancel');
+  const statusNote     = document.getElementById('statusNote');
+  const schwereWrap    = document.getElementById('schwereWrap');
+  const schwereSelect  = document.getElementById('schwereSelect');
+  const reminderWrap   = document.getElementById('reminderWrap');
+  const reminderEnabled= document.getElementById('reminderEnabled');
+  const reminderFields = document.getElementById('reminderFields');
+  const reminderAtInput= document.getElementById('modalReminderAt');
   if (!modal) return;
 
   const STATUS_LABELS = {
     gesendet: 'Eingegangen', bestaetigt: 'In Bearbeitung',
-    erledigt: 'Erledigt',   zurueckgewiesen: 'Zurückgewiesen',
+    erledigt: 'Erledigt',   zurueckgewiesen: 'Zur\u00fcckgewiesen',
   };
 
-  let pendingAction  = null;
-  let aktSchwereRef  = 'normal'; // merkt sich den Ausgangswert für Vergleich
+  let pendingAction = null;
+  let aktSchwereRef = 'normal';
+
+  // Morgen 08:00 als Default für Reminder
+  function defaultReminderTime() {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(8, 0, 0, 0);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T08:00`;
+  }
+
+  // Checkbox toggle → Felder ein-/ausblenden
+  if (reminderEnabled) {
+    reminderEnabled.addEventListener('change', () => {
+      reminderFields.style.display = reminderEnabled.checked ? '' : 'none';
+      if (reminderEnabled.checked && !reminderAtInput.value) {
+        reminderAtInput.value = defaultReminderTime();
+      }
+    });
+  }
 
   function openModal(btn) {
-    const target     = btn.dataset.target;
-    const mitSchwere = btn.dataset.mitSchwere === '1';
-    aktSchwereRef    = btn.dataset.schwere || 'normal';
-    const label      = btn.dataset.label || STATUS_LABELS[target] || target;
-    const color      = btn.dataset.color || '';
+    const target      = btn.dataset.target;
+    const mitSchwere  = btn.dataset.mitSchwere === '1';
+    const withReminder= btn.dataset.withReminder === '1';
+    aktSchwereRef     = btn.dataset.schwere || 'normal';
+    const label       = btn.dataset.label || STATUS_LABELS[target] || target;
+    const color       = btn.dataset.color || '';
 
     pendingAction = { id: btn.dataset.id, target };
 
-    modalTitle.textContent   = btn.dataset.title || `${label} bestätigen`;
-    modalDesc.textContent    = btn.dataset.desc  || `Störung wird auf „${STATUS_LABELS[target] || target}" gesetzt.`;
+    modalTitle.textContent   = btn.dataset.title || `${label} best\u00e4tigen`;
+    modalDesc.textContent    = btn.dataset.desc  || `St\u00f6rung wird auf \u201e${STATUS_LABELS[target] || target}\u201c gesetzt.`;
     modalConfirm.textContent = label;
     modalConfirm.style.cssText = color ? `background:${color};color:#fff;border:none` : '';
 
-    schwereWrap.style.display = mitSchwere ? '' : 'none';
+    schwereWrap.style.display  = mitSchwere   ? '' : 'none';
     if (mitSchwere) schwereSelect.value = aktSchwereRef;
+
+    // Reminder-Block
+    reminderWrap.style.display   = withReminder ? '' : 'none';
+    reminderEnabled.checked      = false;
+    reminderFields.style.display = 'none';
+    reminderAtInput.value        = '';
 
     statusNote.value = '';
     modal.hidden = false;
@@ -88,30 +119,53 @@
 
   modalConfirm.addEventListener('click', async () => {
     if (!pendingAction) return;
+
+    // Reminder-Validierung
+    const wantsReminder = reminderEnabled.checked;
+    if (wantsReminder) {
+      const at = reminderAtInput.value;
+      if (!at || new Date(at) <= new Date()) {
+        reminderAtInput.style.borderColor = 'var(--color-error)';
+        reminderAtInput.focus();
+        return;
+      }
+      reminderAtInput.style.borderColor = '';
+    }
+
     const notiz      = statusNote.value.trim() || null;
     const mitSchwere = schwereWrap.style.display !== 'none';
     const payload    = { status: pendingAction.target, notiz };
-
-    // neuSchwere nur senden wenn Dropdown sichtbar UND Wert geändert
     if (mitSchwere && schwereSelect.value !== aktSchwereRef) {
       payload.neuSchwere = schwereSelect.value;
     }
 
     modalConfirm.disabled    = true;
-    modalConfirm.textContent = 'Wird gespeichert…';
+    modalConfirm.textContent = 'Wird gespeichert\u2026';
+
     try {
-      const res = await fetch(`/stoerung/${pendingAction.id}/status`, {
+      // 1. Status setzen
+      const res  = await fetch(`/stoerung/${pendingAction.id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (data.ok) { window.location.reload(); }
-      else { alert('Fehler: ' + (data.error || 'Unbekannt')); }
+      if (!data.ok) { alert('Fehler: ' + (data.error || 'Unbekannt')); return; }
+
+      // 2. Ggf. Reminder setzen (feuert an den eingeloggten Admin → Server ermittelt Mail)
+      if (wantsReminder) {
+        await fetch(`/stoerung/${pendingAction.id}/reminder`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reminderAt: reminderAtInput.value, reminderTo: '' }),
+        }).catch(err => console.warn('[Reminder] Konnte nicht gesetzt werden:', err));
+      }
+
+      window.location.reload();
     } catch { alert('Netzwerkfehler. Bitte Seite neu laden.'); }
     finally {
       modalConfirm.disabled    = false;
-      modalConfirm.textContent = 'Bestätigen';
+      modalConfirm.textContent = 'Best\u00e4tigen';
       modal.hidden  = true;
       pendingAction = null;
     }
@@ -126,11 +180,11 @@
   flash.className = 'flash flash-success';
   flash.setAttribute('role', 'alert');
   const msgs = {
-    created: '✓ Störung erfolgreich gemeldet und E-Mail gesendet.',
-    updated: '✓ Status wurde aktualisiert.',
-    deleted: '✓ Störung wurde gelöscht.',
+    created: '\u2713 St\u00f6rung erfolgreich gemeldet und E-Mail gesendet.',
+    updated: '\u2713 Status wurde aktualisiert.',
+    deleted: '\u2713 St\u00f6rung wurde gel\u00f6scht.',
   };
-  flash.innerHTML = `${msgs[params.get('success')] || '✓ Gespeichert.'} <button class="flash-close" onclick="this.parentElement.remove()">&#x2715;</button>`;
+  flash.innerHTML = `${msgs[params.get('success')] || '\u2713 Gespeichert.'} <button class="flash-close" onclick="this.parentElement.remove()">&#x2715;</button>`;
   document.getElementById('main-content')?.prepend(flash);
   history.replaceState(null, '', location.pathname);
 })();

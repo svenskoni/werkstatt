@@ -107,17 +107,50 @@ const STATUS_LABEL = {
 
       <% if (storung.status === 'gesendet') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
-        <button class="btn btn-sm" id="bestaetigenBtn"
-          style="background:var(--color-active);color:#fff;border:none">&#10003; Bestätigen</button>
-        <button class="btn btn-sm" id="zurueckweisenBtn"
-          style="background:var(--color-primary);color:#fff;border:none">&#10007; Zurückweisen</button>
+        <button class="btn btn-sm status-change-btn"
+          style="background:var(--color-active);color:#fff;border:none"
+          data-id="<%= storung.id %>"
+          data-target="bestaetigt"
+          data-schwere="<%= storung.schwere %>"
+          data-mit-schwere="1"
+          data-title="✓ Störung bestätigen"
+          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad optional korrigieren."
+          data-label="Bestätigen">
+          &#10003; Bestätigen
+        </button>
+        <button class="btn btn-sm status-change-btn"
+          style="background:var(--color-primary);color:#fff;border:none"
+          data-id="<%= storung.id %>"
+          data-target="zurueckgewiesen"
+          data-schwere="<%= storung.schwere %>"
+          data-title="✕ Ticket zurückweisen"
+          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
+          data-label="Zurückweisen">
+          &#10007; Zurückweisen
+        </button>
       </div>
       <% } %>
       <% if (storung.status === 'bestaetigt') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
-        <button class="btn btn-sm" id="erledigtBtn"
-          style="background:var(--color-done);color:#fff;border:none">&#10003; Erledigt</button>
-        <button class="btn btn-xs btn-ghost" id="zurueckBtn">&larrhk; Zurück zu Eingegangen</button>
+        <button class="btn btn-sm status-change-btn"
+          style="background:var(--color-done);color:#fff;border:none"
+          data-id="<%= storung.id %>"
+          data-target="erledigt"
+          data-schwere="<%= storung.schwere %>"
+          data-title="✓ Störung erledigen"
+          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
+          data-label="Erledigt setzen">
+          &#10003; Erledigt
+        </button>
+        <button class="btn btn-xs btn-ghost status-change-btn"
+          data-id="<%= storung.id %>"
+          data-target="gesendet"
+          data-schwere="<%= storung.schwere %>"
+          data-title="↩ Zurück zu Eingegangen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-label="Zurücksetzen">
+          &larrhk; Zurück zu Eingegangen
+        </button>
       </div>
       <% } %>
 
@@ -137,43 +170,11 @@ const STATUS_LABEL = {
 </div>
 
 <% if (user && user.role === 'admin') { %>
-<div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" tabindex="-1">
-  <div class="modal" style="max-width:500px">
-    <h3 id="statusModalTitle" style="margin-bottom:var(--space-2)"></h3>
-    <p id="statusModalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
-
-    <%# Schweregrad-Änderung – nur beim Bestätigen (gesendet → bestaetigt) anzeigen %>
-    <div id="schwereAendernWrap" style="display:none;margin-bottom:var(--space-4)">
-      <label class="form-label" for="neuSchwereSelect" style="display:flex;align-items:center;gap:var(--space-2)">
-        Schweregrad
-        <span style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:400">(Admin kann korrigieren)</span>
-      </label>
-      <select class="form-control" id="neuSchwereSelect">
-        <option value="klein">🟢 Klein</option>
-        <option value="normal">🟡 Normal</option>
-        <option value="schwer">🟠 Schwer</option>
-        <option value="totalausfall">🔴 Totalausfall</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" for="statusNotiz">Notiz <span style="color:var(--color-text-faint)">(optional)</span></label>
-      <textarea class="form-control" id="statusNotiz" rows="3"
-        placeholder="z. B. Fahrzeug kommt diese Woche in die Werkstatt."
-        maxlength="500" style="resize:vertical"></textarea>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="statusCancelBtn">Abbrechen</button>
-      <button class="btn btn-primary" id="statusConfirmBtn">Bestätigen</button>
-    </div>
-  </div>
-</div>
-
 <div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">&#9888;&#65039; Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Diese Aktion ist <strong>nicht rückgängig</strong>. Bitte gib eine Begründung an.
+      Diese Aktion ist <strong>nicht rükgängig</strong>. Bitte gib eine Begründung an.
     </p>
     <div class="form-group">
       <label class="form-label required" for="deleteGrund">Begründung</label>
@@ -191,114 +192,20 @@ const STATUS_LABEL = {
 
 <script>
 (function() {
-  const STOERUNG_ID      = '<%= storung.id %>';
-  const AKTUELL_SCHWERE  = '<%= storung.schwere %>';
-
-  const statusModal      = document.getElementById('statusModal');
-  const statusTitle      = document.getElementById('statusModalTitle');
-  const statusDesc       = document.getElementById('statusModalDesc');
-  const statusNotiz      = document.getElementById('statusNotiz');
-  const statusCancel     = document.getElementById('statusCancelBtn');
-  const statusConfirm    = document.getElementById('statusConfirmBtn');
-  const schwereWrap      = document.getElementById('schwereAendernWrap');
-  const schwereSelect    = document.getElementById('neuSchwereSelect');
-  let pendingTarget      = null;
-  let showSchwere        = false;
-
-  function openStatusModal(target, title, desc, confirmLabel, confirmStyle, mitSchwere) {
-    pendingTarget = target;
-    showSchwere   = !!mitSchwere;
-    statusTitle.textContent   = title;
-    statusDesc.textContent    = desc;
-    statusConfirm.textContent = confirmLabel;
-    statusConfirm.style.cssText = confirmStyle || '';
-    statusNotiz.value = '';
-    // Schweregrad-Dropdown: anzeigen/verbergen und auf aktuellen Wert setzen
-    schwereWrap.style.display = showSchwere ? '' : 'none';
-    if (showSchwere) schwereSelect.value = AKTUELL_SCHWERE;
-    statusModal.hidden = false;
-    setTimeout(() => (showSchwere ? schwereSelect : statusNotiz).focus(), 50);
-  }
-
-  statusCancel.addEventListener('click', () => { statusModal.hidden = true; });
-  statusModal.addEventListener('click', e => { if (e.target === statusModal) statusModal.hidden = true; });
-
-  statusConfirm.addEventListener('click', async () => {
-    if (!pendingTarget) return;
-    statusConfirm.disabled = true;
-    statusConfirm.textContent = 'Wird gespeichert\u2026';
-    const payload = {
-      status: pendingTarget,
-      notiz:  statusNotiz.value.trim() || null,
-    };
-    // Schwere nur mitsenden wenn Dropdown sichtbar und Wert geändert
-    if (showSchwere && schwereSelect.value !== AKTUELL_SCHWERE) {
-      payload.neuSchwere = schwereSelect.value;
-    }
-    try {
-      const r = await fetch('/stoerung/' + STOERUNG_ID + '/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await r.json();
-      if (data.ok) { window.location.reload(); }
-      else { alert('Fehler: ' + (data.error || 'Unbekannt')); statusConfirm.disabled = false; statusConfirm.textContent = confirmLabel; }
-    } catch(e) {
-      alert('Netzwerkfehler.');
-      statusConfirm.disabled = false;
-    }
-  });
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      if (!statusModal.hidden) statusModal.hidden = true;
-      if (!deleteModal.hidden) deleteModal.hidden = true;
-    }
-  });
-
-  const bestaetigenBtn   = document.getElementById('bestaetigenBtn');
-  const zurueckweisenBtn = document.getElementById('zurueckweisenBtn');
-  const erledigtBtn      = document.getElementById('erledigtBtn');
-  const zurueckBtn       = document.getElementById('zurueckBtn');
-
-  // Bestätigen: MIT Schweregrad-Dropdown
-  if (bestaetigenBtn) bestaetigenBtn.addEventListener('click', () =>
-    openStatusModal('bestaetigt', '\u2713 St\u00f6rung best\u00e4tigen',
-      'Die St\u00f6rung wird als \u201eIn Bearbeitung\u201c markiert. Optional den Schweregrad korrigieren.',
-      'Best\u00e4tigen', 'background:var(--color-active);color:#fff;border:none', true));
-
-  // Zurückweisen: OHNE Schweregrad
-  if (zurueckweisenBtn) zurueckweisenBtn.addEventListener('click', () =>
-    openStatusModal('zurueckgewiesen', '\u2715 Ticket zur\u00fcckweisen',
-      'Das Ticket wird als \u201eZur\u00fcckgewiesen\u201c geschlossen. Optional eine Begr\u00fcndung angeben.',
-      'Zur\u00fcckweisen', 'background:var(--color-primary);color:#fff;border:none', false));
-
-  // Erledigt: OHNE Schweregrad
-  if (erledigtBtn) erledigtBtn.addEventListener('click', () =>
-    openStatusModal('erledigt', '\u2713 St\u00f6rung erledigen',
-      'Die St\u00f6rung wird als \u201eErledigt\u201c markiert.',
-      'Erledigt setzen', 'background:var(--color-done);color:#fff;border:none', false));
-
-  // Zurück zu Eingegangen: OHNE Schweregrad
-  if (zurueckBtn) zurueckBtn.addEventListener('click', () =>
-    openStatusModal('gesendet', '\u21a9 Zur\u00fcck zu Eingegangen',
-      'Der Status wird auf \u201eEingegangen\u201c zur\u00fcckgesetzt.',
-      'Zur\u00fccksetzen', '', false));
-
-  const deleteBtn        = document.getElementById('deleteBtn');
-  const deleteModal      = document.getElementById('deleteModal');
-  const deleteCancelBtn  = document.getElementById('deleteCancelBtn');
-  const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
-  const grundField       = document.getElementById('deleteGrund');
+  const STOERUNG_ID = '<%= storung.id %>';
+  const erledigt    = document.getElementById('deleteBtn')?.dataset.erledigt === '1';
+  const deleteBtn   = document.getElementById('deleteBtn');
+  const deleteModal = document.getElementById('deleteModal');
+  const cancelBtn   = document.getElementById('deleteCancelBtn');
+  const confirmBtn  = document.getElementById('deleteConfirmBtn');
+  const grundField  = document.getElementById('deleteGrund');
   if (!deleteBtn) return;
-  const erledigt = deleteBtn.dataset.erledigt === '1';
 
   deleteBtn.addEventListener('click', () => {
     if (erledigt) {
       deleteBtn.disabled = true;
-      deleteBtn.textContent = 'L\u00f6sche\u2026';
-      doDelete('Erledigt \u2013 automatisch bereinigt');
+      deleteBtn.textContent = 'Lösche…';
+      doDelete('Erledigt – automatisch bereinigt');
     } else {
       grundField.value = '';
       deleteModal.hidden = false;
@@ -306,15 +213,16 @@ const STATUS_LABEL = {
     }
   });
 
-  deleteCancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
+  cancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
   deleteModal.addEventListener('click', e => { if (e.target === deleteModal) deleteModal.hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
 
-  deleteConfirmBtn.addEventListener('click', () => {
+  confirmBtn.addEventListener('click', () => {
     const grund = grundField.value.trim();
     if (!grund) { grundField.style.borderColor = 'var(--color-primary)'; grundField.focus(); return; }
     grundField.style.borderColor = '';
-    deleteConfirmBtn.disabled = true;
-    deleteConfirmBtn.textContent = 'L\u00f6sche\u2026';
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Lösche…';
     doDelete(grund);
   });
 
@@ -330,9 +238,9 @@ const STATUS_LABEL = {
       else {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
         deleteBtn.disabled = false;
-        if (deleteConfirmBtn) { deleteConfirmBtn.disabled = false; deleteConfirmBtn.textContent = 'Endg\u00fcltig l\u00f6schen'; }
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Endgültig löschen'; }
       }
-    } catch (e) {
+    } catch(e) {
       alert('Netzwerkfehler.');
       deleteBtn.disabled = false;
     }

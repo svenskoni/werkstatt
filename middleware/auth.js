@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 /**
  * Admins: ADMIN_1_NAME / ADMIN_1_PASS_HASH
  *         ADMIN_2_NAME / ADMIN_2_PASS_HASH  … beliebig viele
- * Mannschaft: CREW_PASS_HASH  (kein Name nötig)
+ * Melder: CREW_PASS_HASH  (kein Name nötig)
  */
 function getAdmins() {
   const admins = [];
@@ -38,7 +38,7 @@ async function verifyCrewPassword(password) {
   if (!hash) return null;
   const ok = await bcrypt.compare(password, hash);
   if (!ok) return null;
-  return { username: 'Mannschaft', role: 'crew' };
+  return { username: 'Melder', role: 'crew' };
 }
 
 function requireLogin(req, res, next) {

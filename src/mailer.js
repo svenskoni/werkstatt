@@ -16,8 +16,9 @@ function getTransport() {
 }
 
 const SCHWERE_LABEL = {
-  klein: '\uD83D\uDFE2 Klein', normal: '\uD83D\uDFE1 Normal', schwer: '\uD83D\uDFE0 Schwer', totalausfall: '\uD83D\uDD34 Totalausfall',
+  klein: '\uD83D\uDFE2 Klein', normal: '\uD83D\uDFE1 Normal', totalausfall: '\uD83D\uDD34 Totalausfall',
 };
+const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
 const STATUS_LABEL = {
   gesendet:        'Eingegangen',
   bestaetigt:      'In Bearbeitung',
@@ -44,16 +45,14 @@ th{background:#f7f7f7;width:38%}
 .footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}
 .schwere-change{background:#fff8e1;border-left:3px solid #e67e22;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
 .changed-by{background:#eaf4fb;border-left:3px solid #2980b9;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
-.reminder-banner{background:#fff3cd;border-left:4px solid #e6a817;padding:10px 14px;border-radius:4px;font-size:14px;margin-bottom:12px;font-weight:bold}`;
+.reminder-banner{background:#fff3cd;border-left:4px solid #e6a817;padding:10px 14px;border-radius:4px;font-size:14px;margin-bottom:12px;font-weight:bold}
+.klasse-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;background:#e8f4f8;color:#1a6080}`;
 
 function extractMelderMail(kontakt) {
   const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].trim() : null;
 }
 
-// Liest Admin-Mail-Adressen aus der ENV.
-// ADMIN_MAILS = kommagetrennte Liste: "max@fw.de,lisa@fw.de"
-// Rückgabe: { username → email } oder leeres Objekt wenn nicht gesetzt.
 function getAdminMailMap() {
   const raw = process.env.ADMIN_MAILS || '';
   const map = {};
@@ -64,19 +63,30 @@ function getAdminMailMap() {
   return map;
 }
 
-// Gibt die Mail-Adresse eines Admins zurück (aus ADMIN_MAILS).
-// Fallback: MAIL_RECIPIENTS (alle Admins)
 function resolveAdminMail(username) {
   if (!username) return null;
   const map = getAdminMailMap();
   return map[username] || null;
 }
 
-// ── Admin-Mail ──────────────────────────────────────────────────
+/**
+ * Gibt die Werkstatt-Empfänger je nach Klasse zurück.
+ * MAIL_KFZ   → für Klasse 'kfz'
+ * MAIL_GERAET → für Klasse 'geraet'
+ * Mehrere Adressen kommagetrennt möglich.
+ */
+function getWerkstattRecipients(klasse) {
+  const envKey = klasse === 'geraet' ? 'MAIL_GERAET' : 'MAIL_KFZ';
+  const raw = process.env[envKey] || '';
+  return raw.split(',').map(e => e.trim()).filter(Boolean);
+}
+
+// ── HTML-Builder ───────────────────────────────────────────────────────────────
 function buildAdminHtml(storung, alterSchwere, changedBy) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
+  const klasse    = KLASSE_LABEL[storung.klasse]    || storung.klasse || 'KFZ';
   const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
   const schwereChangeHtml = alterSchwere
@@ -90,6 +100,7 @@ function buildAdminHtml(storung, alterSchwere, changedBy) {
   <div class="body">
     <table>
       <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
+      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
       <tr><th>Schweregrad</th><td>${schwere}</td></tr>
       ${schwereChangeHtml}
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
@@ -103,6 +114,33 @@ function buildAdminHtml(storung, alterSchwere, changedBy) {
     ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
     ${storung.attachments && storung.attachments.length > 0 ? `<p style="font-size:13px;color:#666">\uD83D\uDCCE ${storung.attachments.length} Anhang/Anh\u00e4nge</p>` : ''}
     <a href="${detailUrl}" class="btn">Detail ansehen \u2192</a>
+  </div>
+  <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
+</div></body></html>`;
+}
+
+function buildWerkstattHtml(storung, changedBy) {
+  const baseUrl   = process.env.APP_BASE_URL;
+  const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
+  const klasse    = KLASSE_LABEL[storung.klasse]    || storung.klasse || 'KFZ';
+  const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+  const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
+  <div class="header"><h1>\uD83D\uDD27 Auftrag f\u00fcr ${escHtml(klasse)}-Werkstatt: ${escHtml(storung.fahrzeug)}</h1><p>Ticket: ${storung.id}</p></div>
+  <div class="body">
+    <p style="font-size:15px">Eine St\u00f6rung wurde zur Bearbeitung freigegeben.</p>
+    <table>
+      <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
+      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
+      <tr><th>Schweregrad</th><td>${schwere}</td></tr>
+      <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
+      <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} \u2013 ${escHtml(storung.melderKontakt)}</td></tr>
+      <tr><th>Erfasst am</th><td>${datum}</td></tr>
+      <tr><th>Freigegeben von</th><td><strong>${escHtml(changedBy)}</strong></td></tr>
+      <tr><th>Ticket-Nr.</th><td><code>${storung.id}</code></td></tr>
+    </table>
+    ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
+    <a href="${detailUrl}" class="btn">Ticket ansehen \u2192</a>
   </div>
   <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
 </div></body></html>`;
@@ -173,11 +211,11 @@ function buildMelderStatusHtml(storung, note, changedBy, alterSchwere) {
 </div></body></html>`;
 }
 
-/** Erinnerungs-Mail an einen einzelnen Admin */
 function buildReminderHtml(storung) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
+  const klasse    = KLASSE_LABEL[storung.klasse]    || storung.klasse || 'KFZ';
   const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
@@ -186,6 +224,7 @@ function buildReminderHtml(storung) {
     <div class="reminder-banner">\u23F0 Du hast dir eine Erinnerung f\u00fcr dieses Ticket gesetzt.</div>
     <table>
       <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
+      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
       <tr><th>Schweregrad</th><td>${schwere}</td></tr>
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
       <tr><th>Aktueller Status</th><td><strong>${status}</strong></td></tr>
@@ -200,17 +239,20 @@ function buildReminderHtml(storung) {
 </div></body></html>`;
 }
 
-// ── Öffentliche Funktionen ─────────────────────────────────────────────
+// ── Öffentliche Funktionen ─────────────────────────────────────────────────────
+
+/** Neue Störung → geht an alle Admins (MAIL_RECIPIENTS) */
 async function sendStorungMail(storung) {
-  const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
+  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
   if (!recipients.length) { console.warn('[Mailer] Keine Empf\u00e4nger (MAIL_RECIPIENTS)'); return; }
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
+  const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
   try {
     await getTransport().sendMail({
       from: process.env.MAIL_FROM, to: recipients.join(', '),
-      subject: `[St\u00f6rung] ${storung.fahrzeug} \u2013 ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0,50)}`,
+      subject: `[St\u00f6rung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0,50)}`,
       html: buildAdminHtml(storung, null, null),
-      text: `St\u00f6rung: ${storung.fahrzeug}\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
+      text: `St\u00f6rung: ${storung.fahrzeug} (${klasse})\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
     });
     console.log(`[Mailer] Admin-Mail gesendet an: ${recipients.join(', ')}`);
   } catch (err) {
@@ -234,29 +276,35 @@ async function sendMelderBestaetigung(storung) {
   }
 }
 
+/**
+ * Statuswechsel-Mail:
+ * - immer an MAIL_RECIPIENTS (Admin-Gruppe)
+ * - bei 'bestaetigt': zusätzlich an Werkstatt (MAIL_KFZ oder MAIL_GERAET je nach Klasse)
+ * - bei Opt-in oder Zurückweisung: an Melder
+ */
 async function sendStatusMail(storung, changedBy, note) {
   const alterSchwere = storung._schwereGeaendert ? storung._alterSchwere : null;
+  const status = STATUS_LABEL[storung.status] || storung.status;
+  const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
 
-  // Admin-Gruppe immer benachrichtigen
-  const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
+  // 1. Admin-Gruppe
+  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
-    const status = STATUS_LABEL[storung.status] || storung.status;
     const schwereHinweis = alterSchwere ? ` [Schwere: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${SCHWERE_LABEL[storung.schwere] || storung.schwere}]` : '';
     try {
       await getTransport().sendMail({
         from: process.env.MAIL_FROM, to: recipients.join(', '),
-        subject: `[Status] ${storung.fahrzeug} \u2192 ${status}${schwereHinweis} | von: ${changedBy} | Melder: ${storung.melderName}`,
+        subject: `[Status] ${storung.fahrzeug} | ${klasse} \u2192 ${status}${schwereHinweis} | von: ${changedBy} | Melder: ${storung.melderName}`,
         html: buildAdminHtml(storung, alterSchwere, changedBy),
-        text: `Statuswechsel: ${storung.fahrzeug} \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}\nMelder: ${storung.melderName}`,
+        text: `Statuswechsel: ${storung.fahrzeug} (${klasse}) \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}\nMelder: ${storung.melderName}`,
       });
     } catch (err) { console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message); }
   }
 
-  // Zusätzlich: individuelle Admin-Mail wenn in ADMIN_MAILS hinterlegt
+  // 2. Individuelle Admin-Mail (ADMIN_MAILS)
   const changedByMail = resolveAdminMail(changedBy);
   if (changedByMail && !recipients.includes(changedByMail)) {
     try {
-      const status = STATUS_LABEL[storung.status] || storung.status;
       await getTransport().sendMail({
         from: process.env.MAIL_FROM, to: changedByMail,
         subject: `[Dein Status-Update] ${storung.fahrzeug} \u2192 ${status} | ${storung.id}`,
@@ -267,12 +315,29 @@ async function sendStatusMail(storung, changedBy, note) {
     } catch (err) { console.error('[Mailer] sendStatusMail pers\u00f6nlich FEHLER:', err.message); }
   }
 
-  // Melder benachrichtigen (Opt-in oder Zurückweisung)
+  // 3. Werkstatt-Mail bei 'bestaetigt' (MAIL_KFZ / MAIL_GERAET)
+  if (storung.status === 'bestaetigt') {
+    const werkstattRecipients = getWerkstattRecipients(storung.klasse);
+    if (werkstattRecipients.length) {
+      try {
+        await getTransport().sendMail({
+          from: process.env.MAIL_FROM, to: werkstattRecipients.join(', '),
+          subject: `[Auftrag ${klasse}] ${storung.fahrzeug} \u2013 ${storung.fehlerBeschreibung.slice(0,50)} | ${storung.id}`,
+          html: buildWerkstattHtml(storung, changedBy),
+          text: `Auftrag f\u00fcr ${klasse}-Werkstatt:\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}\nFreigegeben von: ${changedBy}`,
+        });
+        console.log(`[Mailer] Werkstatt-Mail (${klasse}) gesendet an: ${werkstattRecipients.join(', ')}`);
+      } catch (err) { console.error('[Mailer] sendStatusMail Werkstatt FEHLER:', err.message); }
+    } else {
+      console.warn(`[Mailer] Keine Werkstatt-Empf\u00e4nger f\u00fcr Klasse '${storung.klasse}' (${klasse === 'KFZ' ? 'MAIL_KFZ' : 'MAIL_GERAET'} nicht gesetzt).`);
+    }
+  }
+
+  // 4. Melder (Opt-in oder Zurückweisung)
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) return;
   const isZurueck = storung.status === 'zurueckgewiesen';
   if (!isZurueck && Number(storung.melderBenachrichtigung) !== 1) return;
-  const status = STATUS_LABEL[storung.status] || storung.status;
   try {
     await getTransport().sendMail({
       from: process.env.MAIL_FROM, to: melderMail,
@@ -285,7 +350,6 @@ async function sendStatusMail(storung, changedBy, note) {
   } catch (err) { console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message); }
 }
 
-/** Erinnerungs-Mail an spezifischen Admin */
 async function sendReminderMail(storung, toEmail) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   try {
@@ -303,8 +367,9 @@ async function sendReminderMail(storung, toEmail) {
 
 async function sendDeleteMail(storung, deletedBy, grund) {
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
+  const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
   const datum   = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-  const subject = `[Gel\u00f6scht] St\u00f6rung ${storung.id} \u2013 ${storung.fahrzeug} | Gel\u00f6scht von: ${deletedBy} | Melder: ${storung.melderName}`;
+  const subject = `[Gel\u00f6scht] St\u00f6rung ${storung.id} \u2013 ${storung.fahrzeug} | ${klasse} | Gel\u00f6scht von: ${deletedBy} | Melder: ${storung.melderName}`;
   const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
   .grund{background:#fff3f3;border-left:3px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:14px;white-space:pre-wrap;margin-top:12px}
   </style></head><body><div class="wrap">
@@ -312,6 +377,7 @@ async function sendDeleteMail(storung, deletedBy, grund) {
   <div class="body">
     <table>
       <tr><th>Fahrzeug</th><td>${escHtml(storung.fahrzeug)}</td></tr>
+      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
       <tr><th>Schweregrad</th><td>${schwere}</td></tr>
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
       <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)}</td></tr>
@@ -322,7 +388,7 @@ async function sendDeleteMail(storung, deletedBy, grund) {
   </div>
   <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
 </div></body></html>`;
-  const recipients = process.env.MAIL_RECIPIENTS.split(',').map(e => e.trim()).filter(Boolean);
+  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
   if (recipients.length) {
     try { await getTransport().sendMail({ from: process.env.MAIL_FROM, to: recipients.join(', '), subject, html, text: `Gel\u00f6scht: ${storung.id} \u2013 ${grund}` }); }
     catch (err) { console.error('[Mailer] sendDeleteMail Admin FEHLER:', err.message); }

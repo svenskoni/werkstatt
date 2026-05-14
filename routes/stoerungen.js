@@ -248,42 +248,27 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API (Fahrzeug-Filter) ──────────────────────────────────────────────────────────────────
+// ── Such-API (Fahrzeug-Pflicht + Monat/ID/Freitext optional) ──────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
-    const { fahrzeug, monat, status } = req.query;
+    const { fahrzeug, monat, status, ticketId, q } = req.query;
     if (!fahrzeug) return res.status(400).json({ error: 'Fahrzeug fehlt.' });
     const statusList = status
       ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
-    const rows = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statusList);
+    const rows = await db.searchByFahrzeugMonat(
+      fahrzeug,
+      monat || null,
+      statusList,
+      ticketId || null,
+      q || null
+    );
     res.json(rows.map(r => ({
       id: r.id, fahrzeug: r.fahrzeug, fehlerBeschreibung: r.fehlerBeschreibung,
       schwere: r.schwere, status: r.status, createdAt: r.createdAt,
     })));
   } catch (err) {
     console.error('[API Suche]', err);
-    res.status(500).json({ error: 'Fehler.' });
-  }
-});
-
-// ── Globale Ticket-Suche API (Issue #7) ────────────────────────────────────────────────────────
-router.get('/api/suche-global', requireLogin, async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q || q.trim().length < 2) return res.json([]);
-    const rows = await db.searchGlobal(q.trim(), 15);
-    res.json(rows.map(r => ({
-      id:                r.id,
-      fahrzeug:          r.fahrzeug,
-      fehlerBeschreibung: r.fehlerBeschreibung,
-      schwere:           r.schwere,
-      status:            r.status,
-      createdAt:         r.createdAt,
-      melderName:        r.melderName,
-    })));
-  } catch (err) {
-    console.error('[API Suche Global]', err);
     res.status(500).json({ error: 'Fehler.' });
   }
 });

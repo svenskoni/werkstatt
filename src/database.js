@@ -197,17 +197,34 @@ async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
-async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
+/**
+ * Suche nach Fahrzeug (Pflicht) + optional: Monat, Ticket-ID, Freitext in Fehlerbeschreibung, Status-Filter
+ */
+async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
     : validStatuses;
   const placeholders = filtered.map(() => '?').join(',');
   const args = [fahrzeug, ...filtered];
+
   let sql = `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
              FROM stoerungen
              WHERE fahrzeug = ? AND status IN (${placeholders})`;
-  if (monat) { sql += ` AND strftime('%Y-%m', createdAt) = ?`; args.push(monat); }
+
+  if (monat) {
+    sql += ` AND strftime('%Y-%m', createdAt) = ?`;
+    args.push(monat);
+  }
+  if (ticketId && ticketId.trim()) {
+    sql += ` AND lower(id) LIKE ?`;
+    args.push('%' + ticketId.trim().toLowerCase() + '%');
+  }
+  if (freitext && freitext.trim()) {
+    sql += ` AND lower(fehlerBeschreibung) LIKE ?`;
+    args.push('%' + freitext.trim().toLowerCase() + '%');
+  }
+
   sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
   return all(sql, args);
 }
@@ -222,51 +239,6 @@ async function searchSimilarFehler(query, fahrzeug, includeErledigt = false) {
   }
   if (includeErledigt) return all(`SELECT * FROM stoerungen WHERE lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`, [like]);
   return all(`SELECT * FROM stoerungen WHERE ${excludeStatuses} AND lower(fehlerBeschreibung) LIKE ? ${orderBy} LIMIT 8`, [like]);
-}
-
-/**
- * Globale Volltextsuche (Issue #7)
- * Durchsucht: Ticket-ID (exakt + LIKE), Fehlerbeschreibung, Fahrzeug, Melder-Name
- * Priorisierung: exakter ID-Treffer zuerst, dann aktive vor erledigten
- */
-async function searchGlobal(query, limit = 15) {
-  const q    = (query || '').trim();
-  if (!q || q.length < 2) return [];
-  const like = '%' + q.toLowerCase() + '%';
-
-  // Reihenfolge:
-  // 1. Exakter Ticket-ID-Match (id = q, case-insensitive)
-  // 2. Ticket-ID beginnt mit Query (id LIKE 'q%')
-  // 3. Alles andere (Fehler, Fahrzeug, Melder) nach Aktualität
-  const rows = await all(
-    `SELECT
-       id, fahrzeug, schwere, fehlerBeschreibung, status, createdAt, melderName,
-       CASE
-         WHEN lower(id) = lower(?)              THEN 0
-         WHEN lower(id) LIKE lower(?) || '%'    THEN 1
-         WHEN lower(id) LIKE '%' || lower(?) || '%' THEN 2
-         ELSE 3
-       END AS _prio
-     FROM stoerungen
-     WHERE
-       lower(id)                  LIKE ?
-       OR lower(fehlerBeschreibung) LIKE ?
-       OR lower(fahrzeug)           LIKE ?
-       OR lower(melderName)         LIKE ?
-     ORDER BY
-       _prio ASC,
-       CASE status
-         WHEN 'gesendet'       THEN 0
-         WHEN 'bestaetigt'     THEN 1
-         WHEN 'erledigt'       THEN 2
-         WHEN 'zurueckgewiesen' THEN 3
-         ELSE 4
-       END ASC,
-       COALESCE(updatedAt, createdAt) DESC
-     LIMIT ?`,
-    [q, q, q, like, like, like, like, limit]
-  );
-  return rows;
 }
 
 async function getAttachmentsForCompression(cutoffIso) {
@@ -292,7 +264,7 @@ module.exports = {
   initDb,
   createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
   setReminder, getDueReminders, clearReminder,
-  searchByFahrzeugMonat, searchSimilarFehler, searchGlobal,
+  searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
   getOldestAttachments, getOldestAttachmentsForPurge, deleteAttachment,
   deleteStorung,

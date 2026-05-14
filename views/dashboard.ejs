@@ -30,32 +30,6 @@
     <% } %>
   </div>
 
-  <!-- Globale Ticket-Suche (Issue #7) -->
-  <div class="global-search-bar" role="search" aria-label="Ticket-Suche">
-    <div class="global-search-wrap">
-      <svg class="global-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      <input
-        type="search"
-        id="globalSearchInput"
-        class="global-search-input"
-        placeholder="Ticket-ID, Fehler, Fahrzeug oder Melder suchen…"
-        autocomplete="off"
-        aria-label="Ticket-Suche"
-        aria-autocomplete="list"
-        aria-controls="globalSearchResults"
-        aria-expanded="false"
-        maxlength="100"
-      >
-      <span id="globalSearchSpinner" class="global-search-spinner" aria-hidden="true" hidden></span>
-      <button type="button" id="globalSearchClear" class="global-search-clear" aria-label="Suche löschen" hidden>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div id="globalSearchResults" class="global-search-results" role="listbox" aria-label="Suchergebnisse" hidden></div>
-  </div>
-
   <!-- Fahrzeug-Filter -->
   <div class="vehicle-filter" role="group" aria-label="Nach Fahrzeug filtern" style="
     display:flex;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-3) var(--space-4);
@@ -155,7 +129,6 @@
 </div>
 
 <style>
-/* ── Fahrzeug-Filter ── */
 .vf-btn {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
@@ -172,275 +145,10 @@
   background: var(--color-primary); border-color: var(--color-primary);
   color: #fff; font-weight: 600;
 }
-
-/* ── Globale Suche ── */
-.global-search-bar {
-  position: relative;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-divider);
-}
-.global-search-wrap {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
-  transition: border-color var(--transition-interactive), box-shadow var(--transition-interactive);
-}
-.global-search-wrap:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.12);
-}
-.global-search-icon { color: var(--color-text-faint); flex-shrink: 0; }
-.global-search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: var(--text-sm);
-  color: var(--color-text);
-  outline: none;
-  min-width: 0;
-}
-.global-search-input::placeholder { color: var(--color-text-faint); }
-.global-search-input::-webkit-search-cancel-button { display: none; }
-.global-search-spinner {
-  width: 14px; height: 14px; flex-shrink: 0;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: gspin .6s linear infinite;
-}
-@keyframes gspin { to { transform: rotate(360deg); } }
-.global-search-clear {
-  display: flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  transition: background var(--transition-interactive), color var(--transition-interactive);
-}
-.global-search-clear:hover { background: var(--color-surface-offset); color: var(--color-text); }
-
-/* Dropdown-Ergebnisse */
-.global-search-results {
-  position: absolute;
-  top: calc(100% - var(--space-1));
-  left: var(--space-4);
-  right: var(--space-4);
-  z-index: 200;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-  max-height: 420px;
-  overflow-y: auto;
-}
-.gs-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  text-decoration: none;
-  color: var(--color-text);
-  border-bottom: 1px solid var(--color-divider);
-  cursor: pointer;
-  transition: background var(--transition-interactive);
-}
-.gs-item:last-child { border-bottom: none; }
-.gs-item:hover, .gs-item[aria-selected="true"] { background: var(--color-surface-offset); }
-.gs-item:focus { outline: none; background: var(--color-surface-offset); }
-.gs-ticket {
-  font-family: monospace; font-size: 11px; font-weight: 600;
-  color: var(--color-text-muted);
-  background: var(--color-surface-offset);
-  border-radius: var(--radius-sm);
-  padding: 2px 6px; flex-shrink: 0; white-space: nowrap;
-}
-.gs-fehler {
-  flex: 1; font-size: var(--text-xs);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.gs-meta {
-  font-size: 10px; color: var(--color-text-muted);
-  flex-shrink: 0; text-align: right; line-height: 1.4;
-}
-.gs-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-}
-.gs-empty {
-  padding: var(--space-6) var(--space-4);
-  text-align: center; font-size: var(--text-xs); color: var(--color-text-muted);
-}
-.gs-highlight { background: oklch(from var(--color-gold) l c h / 0.25); border-radius: 2px; }
 </style>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-// GLOBALE TICKET-SUCHE (Issue #7)
-// ═══════════════════════════════════════════════════════════════
 (function () {
-  const STATUS_META = {
-    gesendet:       { dot: '#22c55e', label: 'Eingegangen' },
-    bestaetigt:     { dot: '#f59e0b', label: 'In Bearbeitung' },
-    erledigt:       { dot: '#9ca3af', label: 'Erledigt' },
-    zurueckgewiesen:{ dot: '#a12c7b', label: 'Zur\u00fcckgewiesen' },
-  };
-
-  const searchInput   = document.getElementById('globalSearchInput');
-  const resultsBox    = document.getElementById('globalSearchResults');
-  const spinner       = document.getElementById('globalSearchSpinner');
-  const clearBtn      = document.getElementById('globalSearchClear');
-
-  let debounce = null;
-  let lastQ    = '';
-  let activeIdx = -1;
-
-  // Suchbegriff in Text hervorheben
-  function highlight(text, q) {
-    if (!q) return escHtml(text);
-    const idx = text.toLowerCase().indexOf(q.toLowerCase());
-    if (idx === -1) return escHtml(text);
-    return escHtml(text.slice(0, idx))
-      + '<mark class="gs-highlight">' + escHtml(text.slice(idx, idx + q.length)) + '</mark>'
-      + escHtml(text.slice(idx + q.length));
-  }
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  function formatDate(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
-  }
-
-  function renderResults(data, q) {
-    if (!data.length) {
-      resultsBox.innerHTML = `<div class="gs-empty">Keine Ergebnisse für &bdquo;${escHtml(q)}&ldquo;</div>`;
-      return;
-    }
-    resultsBox.innerHTML = data.map((r, i) => {
-      const meta   = STATUS_META[r.status] || { dot: '#9ca3af', label: r.status };
-      const fehler = r.fehlerBeschreibung || '';
-      return `<a
-        href="/stoerung/${encodeURIComponent(r.id)}"
-        class="gs-item"
-        role="option"
-        aria-selected="false"
-        data-idx="${i}"
-      >
-        <span class="gs-dot" style="background:${meta.dot}" title="${escHtml(meta.label)}"></span>
-        <span class="gs-ticket">${highlight(r.id, q)}</span>
-        <span class="gs-fehler" title="${escHtml(fehler)}">${highlight(fehler, q)}</span>
-        <span class="gs-meta">${escHtml(r.fahrzeug)}<br>${formatDate(r.createdAt)}</span>
-      </a>`;
-    }).join('');
-    activeIdx = -1;
-  }
-
-  function open() {
-    resultsBox.hidden = false;
-    searchInput.setAttribute('aria-expanded', 'true');
-  }
-  function close() {
-    resultsBox.hidden = true;
-    searchInput.setAttribute('aria-expanded', 'false');
-    activeIdx = -1;
-  }
-
-  function updateActive(newIdx) {
-    const items = resultsBox.querySelectorAll('.gs-item');
-    items.forEach((el, i) => el.setAttribute('aria-selected', i === newIdx ? 'true' : 'false'));
-    activeIdx = newIdx;
-  }
-
-  async function doSearch(q) {
-    if (q.length < 2) { close(); return; }
-    spinner.hidden = false;
-    try {
-      const r    = await fetch('/api/suche-global?q=' + encodeURIComponent(q));
-      const data = await r.json();
-      renderResults(data, q);
-      open();
-    } catch { close(); }
-    finally { spinner.hidden = true; }
-  }
-
-  searchInput.addEventListener('input', () => {
-    const q = searchInput.value.trim();
-    clearBtn.hidden = !q;
-    clearFieldErrors && clearFieldErrors();
-    clearTimeout(debounce);
-    if (q === lastQ) return;
-    lastQ = q;
-    if (q.length < 2) { close(); return; }
-    debounce = setTimeout(() => doSearch(q), 280);
-  });
-
-  // Keyboard-Navigation im Dropdown
-  searchInput.addEventListener('keydown', e => {
-    const items = resultsBox.querySelectorAll('.gs-item');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      updateActive(Math.min(activeIdx + 1, items.length - 1));
-      if (items[activeIdx]) items[activeIdx].focus();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (activeIdx <= 0) { searchInput.focus(); updateActive(-1); return; }
-      updateActive(activeIdx - 1);
-      if (items[activeIdx]) items[activeIdx].focus();
-    } else if (e.key === 'Escape') {
-      close(); searchInput.blur();
-    } else if (e.key === 'Enter' && !resultsBox.hidden) {
-      // Wenn kein Item fokussiert aber genau 1 Ergebnis: direkt navigieren
-      if (activeIdx === -1 && items.length === 1) {
-        e.preventDefault();
-        items[0].click();
-      }
-    }
-  });
-
-  // Keyboard-Navigation innerhalb der Ergebnisse
-  resultsBox.addEventListener('keydown', e => {
-    const items = [...resultsBox.querySelectorAll('.gs-item')];
-    const cur   = items.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (cur < items.length - 1) { updateActive(cur + 1); items[cur + 1].focus(); }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (cur <= 0) { searchInput.focus(); updateActive(-1); }
-      else { updateActive(cur - 1); items[cur - 1].focus(); }
-    } else if (e.key === 'Escape') {
-      close(); searchInput.focus();
-    }
-  });
-
-  clearBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    lastQ = '';
-    clearBtn.hidden = true;
-    close();
-    searchInput.focus();
-  });
-
-  // Schließen wenn außerhalb geklickt
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.global-search-bar')) close();
-  });
-  document.addEventListener('focusin', e => {
-    if (!e.target.closest('.global-search-bar')) close();
-  });
-})();
-
-// ═══════════════════════════════════════════════════════════════
-// FAHRZEUG-FILTER
-// ═══════════════════════════════════════════════════════════════
-(function () {
-  const STORAGE_KEY = 'vf_active';
   const btns = document.querySelectorAll('.vf-btn');
   const cols  = [
     { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
@@ -467,7 +175,7 @@
       emptyEl.hidden = !(wraps.length > 0 && visible === 0);
     });
     countEl.textContent = fahrzeug
-      ? `${totalVisible} Einträge für »fahr«`.replace('fahr', fahrzeug)
+      ? `${totalVisible} Einträge für »${fahrzeug}«`
       : '';
   }
 
@@ -478,17 +186,15 @@
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
     applyFilter(fahrzeug);
-    try { sessionStorage.setItem(STORAGE_KEY, fahrzeug); } catch {}
+    try { sessionStorage.setItem('vf_active', fahrzeug); } catch {}
   }
 
   let saved = '';
-  try { saved = sessionStorage.getItem(STORAGE_KEY) || ''; } catch {}
+  try { saved = sessionStorage.getItem('vf_active') || ''; } catch {}
   const validValues = Array.from(btns).map(b => b.dataset.vf);
   if (!validValues.includes(saved)) saved = '';
   setActive(saved);
 
-  btns.forEach(btn => {
-    btn.addEventListener('click', () => setActive(btn.dataset.vf));
-  });
+  btns.forEach(btn => btn.addEventListener('click', () => setActive(btn.dataset.vf)));
 })();
 </script>

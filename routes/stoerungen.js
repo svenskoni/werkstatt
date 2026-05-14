@@ -149,7 +149,12 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
       melderBenachrichtigung: 0,
       attachments,
     });
+
+    // Admin-Benachrichtigung (immer)
     mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
+    // Eingangsbestätigung an Melder (nur wenn E-Mail vorhanden)
+    mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
+
     res.redirect('/');
   } catch (err) {
     console.error('[Neu]', err);
@@ -181,6 +186,14 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
     const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
     const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
     await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere);
+
+    // Zurückweisung: Melder immer benachrichtigen (unabhängig von Opt-in)
+    if (status === 'zurueckgewiesen') {
+      const aktualisiert = await db.getStorungById(storung.id);
+      mailer.sendStatusMail(aktualisiert, req.session.user.username, notiz || null)
+        .catch(err => console.error('[Route] sendStatusMail (Zurückweisung):', err.message));
+    }
+
     res.json({ ok: true, newStatus: status });
   } catch (err) {
     console.error('[Status]', err);

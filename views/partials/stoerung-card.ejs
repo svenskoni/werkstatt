@@ -5,11 +5,11 @@ function formatCardDate(iso) {
     + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
 }
 const SCHWERE = {
-  klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
-  normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
-  totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
+  klein:        { label: 'Klein',        icon: '🟢' },
+  normal:       { label: 'Normal',       icon: '🟡' },
+  totalausfall: { label: 'Totalausfall', icon: '🔴' },
 };
-const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
+const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Gerät' };
 %>
 <article class="stoerung-card card-<%= s.status %>" role="article">
   <div class="card-top">
@@ -25,7 +25,7 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
   <p class="card-fehler"><%= s.fehlerBeschreibung %></p>
 
   <% if (s.beschreibung) { %>
-    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '\u2026' : '' %></p>
+    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '&hellip;' : '' %></p>
   <% } %>
 
   <div class="card-bottom">
@@ -33,7 +33,7 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
     <span class="card-meta">&middot;</span>
     <span class="card-meta"><%= formatCardDate(s.createdAt) %></span>
     <% if (s.attachments.length > 0) { %>
-      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anh\u00E4nge">\uD83D\uDCCC <%= s.attachments.length %></span>
+      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anh&auml;nge">&#128204; <%= s.attachments.length %></span>
     <% } %>
   </div>
 
@@ -50,10 +50,10 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
           data-mit-schwere="1"
           data-mit-klasse="1"
           data-with-reminder="1"
-          data-title="\u2713 St\u00F6rung best\u00E4tigen"
-          data-desc="St\u00F6rung wird als &raquo;In Bearbeitung&laquo; markiert."
-          data-label="Best\u00E4tigen">
-          \u2713 Best\u00E4tigen
+          data-title="St&ouml;rung best&auml;tigen"
+          data-desc="St&ouml;rung wird als &raquo;In Bearbeitung&laquo; markiert."
+          data-label="Best&auml;tigen">
+          &#10003; Best&auml;tigen
         </button>
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-primary);color:#fff;border:none"
@@ -63,10 +63,10 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
           data-klasse="<%= s.klasse || 'kfz' %>"
           data-mit-schwere="1"
           data-mit-klasse="1"
-          data-title="\u2715 Ticket zur\u00FCckweisen"
-          data-desc="Das Ticket wird als &raquo;Zur\u00FCckgewiesen&laquo; geschlossen."
-          data-label="Zur\u00FCckweisen">
-          \u2715 Zur\u00FCckweisen
+          data-title="Ticket zur&uuml;ckweisen"
+          data-desc="Das Ticket wird als &raquo;Zur&uuml;ckgewiesen&laquo; geschlossen."
+          data-label="Zur&uuml;ckweisen">
+          &#10007; Zur&uuml;ckweisen
         </button>
       <% } %>
       <% if (s.status === 'bestaetigt') { %>
@@ -78,10 +78,10 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
           data-klasse="<%= s.klasse || 'kfz' %>"
           data-mit-schwere="1"
           data-mit-klasse="1"
-          data-title="\u2713 St\u00F6rung erledigen"
-          data-desc="St\u00F6rung wird als &raquo;Erledigt&laquo; markiert."
+          data-title="St&ouml;rung erledigen"
+          data-desc="St&ouml;rung wird als &raquo;Erledigt&laquo; markiert."
           data-label="Erledigt setzen">
-          \u2713 Erledigt
+          &#10003; Erledigt
         </button>
         <button class="btn btn-xs btn-ghost status-change-btn"
           data-id="<%= s.id %>"
@@ -90,10 +90,10 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
           data-klasse="<%= s.klasse || 'kfz' %>"
           data-mit-schwere="1"
           data-mit-klasse="1"
-          data-title="\u21A9 Zur\u00FCck zu Eingegangen"
-          data-desc="Status wird zur\u00FCckgesetzt."
-          data-label="Zur\u00FCcksetzen">
-          \u21A9 Zur\u00FCck
+          data-title="Zur&uuml;ck zu Eingegangen"
+          data-desc="Status wird zur&uuml;ckgesetzt."
+          data-label="Zur&uuml;cksetzen">
+          &larrhk; Zur&uuml;ck
         </button>
       <% } %>
       <% if (s.status === 'erledigt' || s.status === 'zurueckgewiesen') { %>
@@ -104,10 +104,10 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
           data-klasse="<%= s.klasse || 'kfz' %>"
           data-mit-schwere="1"
           data-mit-klasse="1"
-          data-title="\u21A9 Wieder\u00F6ffnen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zur\u00FCckgesetzt."
-          data-label="Wieder\u00F6ffnen">
-          \u21A9 Wieder\u00F6ffnen
+          data-title="Wieder&ouml;ffnen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zur&uuml;ckgesetzt."
+          data-label="Wieder&ouml;ffnen">
+          &larrhk; Wieder&ouml;ffnen
         </button>
       <% } %>
     <% } %>

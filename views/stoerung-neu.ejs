@@ -151,7 +151,13 @@
 <style>
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Klasse-Buttons (Issue #4) */
+/* ── Klasse-Buttons (Issue #4) – Kasten-Fix ────────────────────── */
+.klasse-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
 .klasse-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -178,11 +184,57 @@
 }
 .klasse-option.active {
   border-color: var(--color-primary);
-  background: var(--color-primary-highlight);
+  background: color-mix(in oklch, var(--color-primary) 8%, var(--color-surface));
   box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.15);
 }
 .klasse-icon { font-size: 1.75rem; line-height: 1; }
 .klasse-label { font-weight: 700; font-size: var(--text-base); }
+
+/* ── Schwere-Grid (Issue #13) – Ampel-Zentrierung ────────────── */
+.schwere-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+.schwere-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  justify-items: center;
+}
+@media(max-width:480px) {
+  .schwere-grid {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+}
+.schwere-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
+  border: 2px solid transparent;
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+}
+.schwere-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+.schwere-option:hover { border-color: var(--color-primary); }
+.schwere-option.checked,
+.schwere-option:has(input:checked) {
+  border-color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 8%, var(--color-surface));
+  box-shadow: var(--shadow-md);
+}
+.schwere-icon { font-size: 1.75rem; line-height: 1; }
+.schwere-label { font-size: var(--text-xs); font-weight: 600; }
 
 .similar-item {
   display: flex;
@@ -251,8 +303,6 @@
 
 <script>
 // ═══════════════════════════════════════════════════════════════
-// KONSTANTEN
-// ═══════════════════════════════════════════════════════════════
 const MAX_FILE_BYTES = <%= parseInt(process.env.MAX_UPLOAD_MB || '8') %> * 1024 * 1024;
 const MAX_FILES      = 6;
 const MAX_NAME_LEN   = 200;
@@ -263,9 +313,7 @@ const ALLOWED_MIMES = new Set([
 ]);
 const ALLOWED_EXTS = new Set(['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov']);
 
-// ═══════════════════════════════════════════════════════════════
-// KLASSE-AUSWAHL (Issue #4)
-// ═══════════════════════════════════════════════════════════════
+// ══ KLASSE-AUSWAHL (Issue #4) ═════════════════════════════════════
 const klasseInput   = document.getElementById('klasseInput');
 const klasseButtons = document.querySelectorAll('.klasse-option');
 klasseButtons.forEach(btn => {
@@ -276,9 +324,7 @@ klasseButtons.forEach(btn => {
   });
 });
 
-// ═══════════════════════════════════════════════════════════════
-// MAGIC-BYTES PRÜFUNG
-// ═══════════════════════════════════════════════════════════════
+// ══ MAGIC-BYTES PRÜFUNG ═════════════════════════════════════════════
 function checkMagicBytes(file) {
   return new Promise(resolve => {
     const reader = new FileReader();
@@ -305,9 +351,7 @@ function checkMagicBytes(file) {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════
-// DATEI-VALIDIERUNG
-// ═══════════════════════════════════════════════════════════════
+// ══ DATEI-VALIDIERUNG ═════════════════════════════════════════════
 async function validateFile(file) {
   const errors = [];
   const name   = file.name || '';
@@ -352,14 +396,10 @@ async function validateFiles(fileList) {
   return { valid: validFiles, errors: allErrors };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// GESPEICHERTE DATEIEN
-// ═══════════════════════════════════════════════════════════════
+// ══ GESPEICHERTE DATEIEN ══════════════════════════════════════════
 let storedFiles = new DataTransfer();
 
-// ═══════════════════════════════════════════════════════════════
-// UPLOAD UI
-// ═══════════════════════════════════════════════════════════════
+// ══ UPLOAD UI ════════════════════════════════════════════════════
 const area         = document.getElementById('uploadArea');
 const input        = document.getElementById('attachments');
 const preview      = document.getElementById('filePreview');
@@ -404,7 +444,7 @@ function showPreview(files) {
       img.className = 'file-thumb'; img.alt = f.name; img.width = 100; img.height = 75;
       img.src = URL.createObjectURL(f); item.appendChild(img);
     } else {
-      const icon = document.createElement('div'); icon.className = 'file-icon'; icon.textContent = '🎬'; item.appendChild(icon);
+      const icon = document.createElement('div'); icon.className = 'file-icon'; icon.textContent = '🎦'; item.appendChild(icon);
     }
     const name = document.createElement('span'); name.className = 'file-name'; name.textContent = f.name; item.appendChild(name);
     const size = document.createElement('span'); size.className = 'file-size';
@@ -428,9 +468,7 @@ function removeFile(idx) {
   showPreview(storedFiles.files);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SUBMIT-BUTTON LOADING STATE
-// ═══════════════════════════════════════════════════════════════
+// ══ SUBMIT-BUTTON LOADING STATE ═════════════════════════════════
 const submitBtn     = document.getElementById('submitBtn');
 const submitIdle    = document.getElementById('submitIdle');
 const submitLoading = document.getElementById('submitLoading');
@@ -448,9 +486,7 @@ function setSubmitLoading(active) {
 
 let loadingTimeout = null;
 
-// ═══════════════════════════════════════════════════════════════
-// FORMULAR-VALIDIERUNG
-// ═══════════════════════════════════════════════════════════════
+// ══ FORMULAR-VALIDIERUNG ═══════════════════════════════════════
 const form    = document.getElementById('stoerungForm');
 const errBox  = document.getElementById('clientErrors');
 const errList = document.getElementById('clientErrorList');
@@ -531,9 +567,7 @@ form.addEventListener('submit', async e => {
   form.submit();
 });
 
-// ═══════════════════════════════════════════════════════════════
-// SCHWEREGRAD
-// ═══════════════════════════════════════════════════════════════
+// ══ SCHWEREGRAD ═════════════════════════════════════════════════
 document.querySelectorAll('.schwere-option').forEach(opt => {
   opt.addEventListener('click', () => {
     document.querySelectorAll('.schwere-option').forEach(o => o.classList.remove('checked'));
@@ -541,9 +575,7 @@ document.querySelectorAll('.schwere-option').forEach(opt => {
   });
 });
 
-// ═══════════════════════════════════════════════════════════════
-// ÄHNLICHE FEHLER
-// ═══════════════════════════════════════════════════════════════
+// ══ ÄHNLICHE FEHLER ══════════════════════════════════════════════
 const fehlerInput    = document.getElementById('fehlerBeschreibung');
 const fahrzeugSelect = document.getElementById('fahrzeug');
 const similarBox     = document.getElementById('similarBox');

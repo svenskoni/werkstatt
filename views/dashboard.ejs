@@ -140,21 +140,15 @@
   cursor: pointer;
   transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
 }
-.vf-btn:hover {
-  background: var(--color-surface-offset);
-  color: var(--color-text);
-}
+.vf-btn:hover { background: var(--color-surface-offset); color: var(--color-text); }
 .vf-btn.vf-active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #fff;
-  font-weight: 600;
+  background: var(--color-primary); border-color: var(--color-primary);
+  color: #fff; font-weight: 600;
 }
 </style>
 
 <script>
 (function () {
-  const STORAGE_KEY = 'vf_active';
   const btns = document.querySelectorAll('.vf-btn');
   const cols  = [
     { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
@@ -181,7 +175,7 @@
       emptyEl.hidden = !(wraps.length > 0 && visible === 0);
     });
     countEl.textContent = fahrzeug
-      ? `${totalVisible} Einträge für »fahr«`.replace('fahr', fahrzeug)
+      ? `${totalVisible} Einträge für »${fahrzeug}«`
       : '';
   }
 
@@ -192,20 +186,15 @@
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
     applyFilter(fahrzeug);
-    // Filter in sessionStorage merken (kein localStorage wegen Sandbox)
-    try { sessionStorage.setItem(STORAGE_KEY, fahrzeug); } catch {}
+    try { sessionStorage.setItem('vf_active', fahrzeug); } catch {}
   }
 
-  // Beim Laden gespeicherten Filter wiederherstellen
   let saved = '';
-  try { saved = sessionStorage.getItem(STORAGE_KEY) || ''; } catch {}
-  // Prüfen ob der gespeicherte Wert noch ein gültiger Button ist
+  try { saved = sessionStorage.getItem('vf_active') || ''; } catch {}
   const validValues = Array.from(btns).map(b => b.dataset.vf);
   if (!validValues.includes(saved)) saved = '';
   setActive(saved);
 
-  btns.forEach(btn => {
-    btn.addEventListener('click', () => setActive(btn.dataset.vf));
-  });
+  btns.forEach(btn => btn.addEventListener('click', () => setActive(btn.dataset.vf)));
 })();
 </script>

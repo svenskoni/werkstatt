@@ -12,7 +12,12 @@
     </div>
   <% } %>
 
-  <form class="stoerung-form" action="/stoerung/neu" method="POST" enctype="multipart/form-data" novalidate>
+  <!-- Inline-Validierungsfehler (clientseitig) -->
+  <div id="clientErrors" class="alert alert-error" role="alert" style="display:none">
+    <ul id="clientErrorList" class="error-list"></ul>
+  </div>
+
+  <form class="stoerung-form" id="stoerungForm" action="/stoerung/neu" method="POST" enctype="multipart/form-data" novalidate>
 
     <!-- Melderdaten -->
     <div class="form-group">
@@ -87,7 +92,6 @@
         value="<%= old.fehlerBeschreibung || '' %>"
         required minlength="6" maxlength="200" autocomplete="off">
 
-      <!-- Such-Status & Ergebnis -->
       <div id="similarBox" style="display:none;margin-top:var(--space-2);border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-border);background:var(--color-surface)">
         <div id="similarLoading" style="display:none;padding:var(--space-3) var(--space-4);font-size:var(--text-xs);color:var(--color-text-muted);align-items:center;gap:var(--space-2)">
           <span style="display:inline-block;width:12px;height:12px;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;animation:spin .7s linear infinite"></span>
@@ -111,7 +115,7 @@
     <div class="form-group">
       <label class="form-label">Fotos / Videos (max. <%= process.env.MAX_UPLOAD_MB || 8 %> MB pro Datei)</label>
       <div class="upload-area" id="uploadArea">
-        <input type="file" id="attachments" name="attachments" multiple accept="image/*,video/*" class="upload-input">
+        <input type="file" id="attachments" name="attachments" multiple accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime" class="upload-input">
         <div class="upload-placeholder" id="uploadPlaceholder">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           <span>Klicken oder Dateien hierher ziehen</span>
@@ -120,13 +124,22 @@
         </div>
         <div class="file-preview" id="filePreview" hidden></div>
       </div>
+      <div id="uploadErrors" style="display:none;margin-top:var(--space-2);color:var(--color-error);font-size:var(--text-xs)"></div>
     </div>
 
     <div class="form-actions">
-      <a href="/" class="btn btn-ghost">Abbrechen</a>
-      <button type="submit" class="btn btn-primary btn-lg">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Störung melden
+      <a href="/" class="btn btn-ghost" id="cancelBtn">Abbrechen</a>
+      <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+        <!-- Normaler Zustand -->
+        <span id="submitIdle" style="display:flex;align-items:center;gap:var(--space-2)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Störung melden
+        </span>
+        <!-- Loading-Zustand -->
+        <span id="submitLoading" style="display:none;align-items:center;gap:var(--space-2)">
+          <span style="display:inline-block;width:15px;height:15px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0" aria-hidden="true"></span>
+          Wird gesendet…
+        </span>
       </button>
     </div>
   </form>
@@ -183,40 +196,161 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
+.field-error {
+  border-color: var(--color-error) !important;
+}
+.field-error-msg {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  margin-top: var(--space-1);
+  display: block;
+}
+
+/* Submit-Button im Lade-Zustand */
+#submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 </style>
 
 <script>
-// Schweregrad
-document.querySelectorAll('.schwere-option').forEach(opt => {
-  opt.addEventListener('click', () => {
-    document.querySelectorAll('.schwere-option').forEach(o => o.classList.remove('checked'));
-    opt.classList.add('checked');
-  });
-});
+// ═══════════════════════════════════════════════════════════════
+// KONSTANTEN
+// ═══════════════════════════════════════════════════════════════
+const MAX_FILE_BYTES = <%= parseInt(process.env.MAX_UPLOAD_MB || '8') %> * 1024 * 1024;
+const MAX_FILES      = 6;
+const MAX_NAME_LEN   = 200;
 
-// Upload
-const area = document.getElementById('uploadArea');
-const input = document.getElementById('attachments');
-const preview = document.getElementById('filePreview');
-const placeholder = document.getElementById('uploadPlaceholder');
+const ALLOWED_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'video/mp4', 'video/quicktime',
+]);
+const ALLOWED_EXTS = new Set(['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov']);
+
+// ═══════════════════════════════════════════════════════════════
+// MAGIC-BYTES PRÜFUNG
+// ═══════════════════════════════════════════════════════════════
+function checkMagicBytes(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const buf  = new Uint8Array(e.target.result);
+      const mime = file.type;
+      if (mime === 'image/jpeg')
+        return resolve(buf[0]===0xFF && buf[1]===0xD8 && buf[2]===0xFF);
+      if (mime === 'image/png')
+        return resolve(buf[0]===0x89 && buf[1]===0x50 && buf[2]===0x4E && buf[3]===0x47);
+      if (mime === 'image/gif')
+        return resolve(buf[0]===0x47 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x38);
+      if (mime === 'image/webp') {
+        const riff = buf[0]===0x52 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x46;
+        const webp = buf[8]===0x57 && buf[9]===0x45 && buf[10]===0x42 && buf[11]===0x50;
+        return resolve(riff && webp);
+      }
+      if (mime === 'video/mp4' || mime === 'video/quicktime')
+        return resolve(buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70);
+      resolve(false);
+    };
+    reader.onerror = () => resolve(false);
+    reader.readAsArrayBuffer(file.slice(0, 12));
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATEI-VALIDIERUNG
+// ═══════════════════════════════════════════════════════════════
+async function validateFile(file) {
+  const errors = [];
+  const name   = file.name || '';
+  const ext    = name.includes('.') ? ('.' + name.split('.').pop()).toLowerCase() : '';
+
+  if (name.length > MAX_NAME_LEN)
+    errors.push(`"${name.slice(0,40)}…": Dateiname zu lang (max. ${MAX_NAME_LEN} Zeichen).`);
+  if (/[\/\\<>:"\|\?\*\x00-\x1f]/.test(name))
+    errors.push(`"${name.slice(0,40)}": Dateiname enthält ungültige Zeichen.`);
+  if (!ALLOWED_MIMES.has(file.type)) {
+    errors.push(`"${name.slice(0,40)}": Dateityp "${file.type}" ist nicht erlaubt.`);
+    return errors;
+  }
+  if (!ALLOWED_EXTS.has(ext)) {
+    errors.push(`"${name.slice(0,40)}": Dateiendung "${ext}" ist nicht erlaubt.`);
+    return errors;
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    const mb  = (file.size / 1024 / 1024).toFixed(1);
+    const max = (MAX_FILE_BYTES / 1024 / 1024).toFixed(0);
+    errors.push(`"${name.slice(0,40)}": Datei ist ${mb} MB groß (max. ${max} MB).`);
+  }
+  if (errors.length === 0 && file.size > 0) {
+    const magicOk = await checkMagicBytes(file);
+    if (!magicOk)
+      errors.push(`"${name.slice(0,40)}": Dateiinhalt stimmt nicht mit dem Dateityp überein (mögliche Manipulation).`);
+  }
+  return errors;
+}
+
+async function validateFiles(fileList) {
+  const allErrors = [], validFiles = [];
+  for (const file of fileList) {
+    const errs = await validateFile(file);
+    if (errs.length === 0) validFiles.push(file);
+    else allErrors.push(...errs);
+  }
+  if (validFiles.length > MAX_FILES) {
+    allErrors.push(`Maximal ${MAX_FILES} Dateien erlaubt.`);
+    validFiles.splice(MAX_FILES);
+  }
+  return { valid: validFiles, errors: allErrors };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GESPEICHERTE DATEIEN
+// ═══════════════════════════════════════════════════════════════
+let storedFiles = new DataTransfer();
+
+// ═══════════════════════════════════════════════════════════════
+// UPLOAD UI
+// ═══════════════════════════════════════════════════════════════
+const area         = document.getElementById('uploadArea');
+const input        = document.getElementById('attachments');
+const preview      = document.getElementById('filePreview');
+const placeholder  = document.getElementById('uploadPlaceholder');
 const uploadButton = document.getElementById('uploadButton');
+const uploadErrors = document.getElementById('uploadErrors');
+
 if (uploadButton) uploadButton.addEventListener('click', e => { e.stopPropagation(); input.click(); });
+
 area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('drag-over'); });
 area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
-area.addEventListener('drop', e => {
-  e.preventDefault(); area.classList.remove('drag-over');
-  const dt = new DataTransfer();
-  [...e.dataTransfer.files].forEach(f => dt.items.add(f));
-  input.files = dt.files; showPreview(input.files);
+area.addEventListener('drop', async e => {
+  e.preventDefault();
+  area.classList.remove('drag-over');
+  await processNewFiles([...e.dataTransfer.files]);
 });
-input.addEventListener('change', () => showPreview(input.files));
+input.addEventListener('change', async () => { await processNewFiles([...input.files]); });
+
+async function processNewFiles(newFiles) {
+  const combined = [...storedFiles.files, ...newFiles];
+  const { valid, errors } = await validateFiles(combined);
+  storedFiles = new DataTransfer();
+  valid.forEach(f => storedFiles.items.add(f));
+  input.files = storedFiles.files;
+  if (errors.length) {
+    uploadErrors.innerHTML = errors.map(e => `⚠️ ${e}`).join('<br>');
+    uploadErrors.style.display = 'block';
+  } else {
+    uploadErrors.style.display = 'none';
+  }
+  showPreview(storedFiles.files);
+}
+
 function showPreview(files) {
   preview.innerHTML = '';
   if (!files.length) { preview.hidden = true; placeholder.hidden = false; return; }
   preview.hidden = false; placeholder.hidden = true;
-  [...files].forEach(f => {
+  [...files].forEach((f, idx) => {
     const item = document.createElement('div'); item.className = 'file-item';
-    const MAX = (parseInt('<%= process.env.MAX_UPLOAD_MB || 8 %>') * 1024 * 1024);
     if (f.type.startsWith('image/')) {
       const img = document.createElement('img');
       img.className = 'file-thumb'; img.alt = f.name; img.width = 100; img.height = 75;
@@ -226,13 +360,146 @@ function showPreview(files) {
     }
     const name = document.createElement('span'); name.className = 'file-name'; name.textContent = f.name; item.appendChild(name);
     const size = document.createElement('span'); size.className = 'file-size';
-    size.textContent = f.size > MAX ? '⚠️ zu groß' : (f.size/1024).toFixed(0)+' KB';
-    if (f.size > MAX) size.style.color = 'var(--color-primary)';
-    item.appendChild(size); preview.appendChild(item);
+    size.textContent = `${(f.size/1024).toFixed(0)} KB`; item.appendChild(size);
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.className = 'btn btn-sm btn-ghost';
+    rm.setAttribute('aria-label', `${f.name} entfernen`);
+    rm.textContent = '✕';
+    rm.style.cssText = 'padding:2px 6px;font-size:11px;margin-left:auto;flex-shrink:0';
+    rm.addEventListener('click', () => removeFile(idx));
+    item.appendChild(rm);
+    preview.appendChild(item);
   });
 }
 
-// --- Ähnliche Fehler ---
+function removeFile(idx) {
+  const next = new DataTransfer();
+  [...storedFiles.files].forEach((f, i) => { if (i !== idx) next.items.add(f); });
+  storedFiles = next;
+  input.files = storedFiles.files;
+  showPreview(storedFiles.files);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SUBMIT-BUTTON LOADING STATE (Issue #6)
+// ═══════════════════════════════════════════════════════════════
+const submitBtn     = document.getElementById('submitBtn');
+const submitIdle    = document.getElementById('submitIdle');
+const submitLoading = document.getElementById('submitLoading');
+const cancelBtn     = document.getElementById('cancelBtn');
+
+function setSubmitLoading(active) {
+  submitBtn.disabled = active;
+  submitIdle.style.display    = active ? 'none'  : 'flex';
+  submitLoading.style.display = active ? 'flex'  : 'none';
+  // Abbrechen-Link im Lade-Zustand auch deaktivieren (verhindert Doppelklick-Chaos)
+  if (cancelBtn) {
+    cancelBtn.style.pointerEvents = active ? 'none' : '';
+    cancelBtn.style.opacity       = active ? '0.4' : '';
+  }
+}
+
+// Sicherheitsnetz: falls Server-Redirect ausbleibt (z.B. langsame Verbindung
+// → Seite lädt sehr lange), Button nach 60 s wieder freischalten
+let loadingTimeout = null;
+
+// ═══════════════════════════════════════════════════════════════
+// FORMULAR-VALIDIERUNG
+// ═══════════════════════════════════════════════════════════════
+const form    = document.getElementById('stoerungForm');
+const errBox  = document.getElementById('clientErrors');
+const errList = document.getElementById('clientErrorList');
+
+function showFieldError(inputEl, msg) {
+  inputEl.classList.add('field-error');
+  let span = inputEl.parentElement.querySelector('.field-error-msg');
+  if (!span) { span = document.createElement('span'); span.className = 'field-error-msg'; inputEl.after(span); }
+  span.textContent = msg;
+}
+function clearFieldErrors() {
+  document.querySelectorAll('.field-error').forEach(el => el.classList.remove('field-error'));
+  document.querySelectorAll('.field-error-msg').forEach(el => el.remove());
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  clearFieldErrors();
+  errBox.style.display = 'none';
+  errList.innerHTML = '';
+
+  const errors = [];
+
+  const nameVal = document.getElementById('melderName').value.trim();
+  if (!nameVal || nameVal.length < 3) {
+    errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
+    showFieldError(document.getElementById('melderName'), 'Bitte Namen eingeben (mind. 3 Zeichen).');
+  }
+
+  const handyVal = document.getElementById('melderHandy').value.trim();
+  const mailVal  = document.getElementById('melderMail').value.trim();
+  if (!handyVal && !mailVal) {
+    errors.push('Bitte Handy oder E‑Mail angeben.');
+    showFieldError(document.getElementById('melderHandy'), 'Handy oder E‑Mail erforderlich.');
+  }
+  if (mailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailVal)) {
+    errors.push('E‑Mail-Adresse ist ungültig.');
+    showFieldError(document.getElementById('melderMail'), 'Ungültige E‑Mail-Adresse.');
+  }
+
+  const fahrzeugVal = document.getElementById('fahrzeug').value;
+  if (!fahrzeugVal) {
+    errors.push('Bitte ein Fahrzeug auswählen.');
+    showFieldError(document.getElementById('fahrzeug'), 'Fahrzeug auswählen.');
+  }
+
+  const schwereVal = document.querySelector('input[name="schwere"]:checked');
+  if (!schwereVal) {
+    errors.push('Bitte einen Schweregrad auswählen.');
+    const fieldset = document.querySelector('.schwere-fieldset');
+    if (fieldset) {
+      let span = fieldset.querySelector('.field-error-msg');
+      if (!span) { span = document.createElement('span'); span.className = 'field-error-msg'; fieldset.appendChild(span); }
+      span.textContent = 'Schweregrad auswählen.';
+    }
+  }
+
+  const fehlerVal = document.getElementById('fehlerBeschreibung').value.trim();
+  if (!fehlerVal || fehlerVal.length < 6) {
+    errors.push('Fehlerbeschreibung ist erforderlich (mind. 6 Zeichen).');
+    showFieldError(document.getElementById('fehlerBeschreibung'), 'Bitte Fehlerbeschreibung eingeben (mind. 6 Zeichen).');
+  }
+
+  if (storedFiles.files.length > 0) {
+    const { errors: fileErrs } = await validateFiles([...storedFiles.files]);
+    fileErrs.forEach(fe => errors.push(fe));
+  }
+
+  if (errors.length) {
+    errList.innerHTML = errors.map(e => `<li>${e}</li>`).join('');
+    errBox.style.display = 'block';
+    errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  // ── Alles OK: Loading-State aktivieren, dann absenden ──
+  setSubmitLoading(true);
+  loadingTimeout = setTimeout(() => setSubmitLoading(false), 60_000);
+  form.submit();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// SCHWEREGRAD
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll('.schwere-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.schwere-option').forEach(o => o.classList.remove('checked'));
+    opt.classList.add('checked');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// ÄHNLICHE FEHLER
+// ═══════════════════════════════════════════════════════════════
 const fehlerInput    = document.getElementById('fehlerBeschreibung');
 const fahrzeugSelect = document.getElementById('fahrzeug');
 const similarBox     = document.getElementById('similarBox');
@@ -250,7 +517,6 @@ function checkSimilar() {
   clearTimeout(debounceTimer);
   const q = fehlerInput.value.trim();
   if (q.length < 6) { similarBox.style.display = 'none'; return; }
-  // Ladeanimation sofort zeigen
   similarBox.style.display = 'block';
   similarLoading.style.display = 'flex';
   similarList.innerHTML = '';
@@ -263,10 +529,8 @@ function checkSimilar() {
       const data = await r.json();
       similarLoading.style.display = 'none';
       if (!data.length) { similarBox.style.display = 'none'; return; }
-
       const aktiv    = data.filter(d => d.status !== 'erledigt');
       const erledigt = data.filter(d => d.status === 'erledigt');
-
       let html = '';
       if (aktiv.length) {
         html += `<div class="similar-section-label">⚠️ Aktive Störungen (${aktiv.length})</div>`;
@@ -295,7 +559,9 @@ function renderItem(d) {
 fehlerInput.addEventListener('input', checkSimilar);
 fahrzeugSelect.addEventListener('change', checkSimilar);
 
-// Benachrichtigungs-Toggle
+// ═══════════════════════════════════════════════════════════════
+// BENACHRICHTIGUNGS-TOGGLE
+// ═══════════════════════════════════════════════════════════════
 const mailInput  = document.getElementById('melderMail');
 const benGrp     = document.getElementById('benachrichtigungGroup');
 const benToggle  = document.getElementById('benachrichtigungToggle');

@@ -64,13 +64,12 @@
     <p>Feuerwehr LZ Frechen &middot; St&ouml;rungsmelder &middot; Intern</p>
   </footer>
 
-  <!-- Globales Status-Modal (Dashboard-Cards + Detail-Seite) -->
+  <!-- Globales Status-Modal -->
   <div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
     <div class="modal" style="max-width:500px">
       <h3 id="modalTitle" style="margin-bottom:var(--space-2)">Status &auml;ndern</h3>
       <p id="modalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
 
-      <!-- Schweregrad: nur sichtbar wenn data-mit-schwere="1" am Button -->
       <div id="schwereWrap" style="display:none;margin-bottom:var(--space-4)">
         <label class="form-label" for="schwereSelect" style="display:flex;align-items:center;gap:var(--space-2)">
           Schweregrad
@@ -91,7 +90,6 @@
           maxlength="500" style="resize:vertical"></textarea>
       </div>
 
-      <!-- Erinnerung: nur sichtbar wenn data-with-reminder="1" am Button -->
       <div id="reminderWrap" style="display:none;margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--color-divider)">
         <label style="display:flex;align-items:center;gap:var(--space-2);cursor:pointer;font-size:var(--text-sm);font-weight:500;margin-bottom:var(--space-3)">
           <input type="checkbox" id="reminderEnabled" style="width:16px;height:16px;cursor:pointer">
@@ -116,13 +114,31 @@
   <!-- Such-Modal -->
   <% if (user) { %>
   <div class="modal-backdrop" id="searchModal" hidden role="dialog" aria-modal="true" aria-labelledby="searchModalTitle" tabindex="-1">
-    <div class="modal">
+    <div class="modal" style="max-width:520px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
         <h3 id="searchModalTitle" style="margin:0">St&ouml;rung suchen</h3>
         <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
       </div>
+
+      <!-- 1. Ticket-ID -->
       <div class="form-group">
-        <label class="form-label" for="searchFahrzeug">Fahrzeug</label>
+        <label class="form-label" for="searchTicketId">
+          Ticket-ID
+          <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional &ndash; Teilsuche m&ouml;glich)</span>
+        </label>
+        <input type="text" class="form-control" id="searchTicketId"
+          placeholder="z.&thinsp;B.&nbsp;LKW1-2026-05 oder LKW1-2026-05-003"
+          maxlength="60" autocomplete="off" spellcheck="false">
+        <p id="searchTicketIdHint" style="font-size:var(--text-xs);color:var(--color-primary);margin-top:var(--space-1);display:none">
+          &#10003; Fahrzeug automatisch erkannt
+        </p>
+      </div>
+
+      <!-- 2. Fahrzeug (Pflicht) -->
+      <div class="form-group">
+        <label class="form-label" for="searchFahrzeug">
+          Fahrzeug <span style="color:var(--color-error);font-size:var(--text-xs)">Pflicht</span>
+        </label>
         <select class="form-control" id="searchFahrzeug">
           <option value="">-- Fahrzeug w&auml;hlen --</option>
           <% VEHICLES.forEach(v => { %>
@@ -130,30 +146,54 @@
           <% }); %>
         </select>
       </div>
+
+      <!-- 3. Freisuche -->
       <div class="form-group">
-        <label class="form-label" for="searchMonat">Monat <span style="font-weight:400;color:var(--color-text-muted)">(optional)</span></label>
+        <label class="form-label" for="searchFreitext">
+          Fehlerbeschreibung enth&auml;lt
+          <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="searchFreitext"
+          placeholder="z.&thinsp;B.&nbsp;Bremse, Motor&hellip;"
+          maxlength="120" autocomplete="off">
+      </div>
+
+      <!-- 4. Monat -->
+      <div class="form-group">
+        <label class="form-label" for="searchMonat">
+          Monat
+          <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional)</span>
+        </label>
         <input type="month" class="form-control" id="searchMonat">
       </div>
+
+      <!-- 5. Status – alle vier inkl. Zurückgewiesen -->
       <div class="form-group" style="margin-bottom:var(--space-5)">
         <span class="form-label" style="display:block;margin-bottom:var(--space-2)">Status</span>
         <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="statusGesendet" value="gesendet" checked>
+            <input type="checkbox" class="search-status-cb" value="gesendet" checked>
             <span style="width:10px;height:10px;border-radius:50%;background:var(--color-new);display:inline-block"></span>
             Eingegangen
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="statusBestaetigt" value="bestaetigt" checked>
+            <input type="checkbox" class="search-status-cb" value="bestaetigt" checked>
             <span style="width:10px;height:10px;border-radius:50%;background:var(--color-active);display:inline-block"></span>
             In Bearbeitung
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="statusErledigt" value="erledigt" checked>
+            <input type="checkbox" class="search-status-cb" value="erledigt" checked>
             <span style="width:10px;height:10px;border-radius:50%;background:var(--color-done);display:inline-block"></span>
             Erledigt
           </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
+            <input type="checkbox" class="search-status-cb" value="zurueckgewiesen" checked>
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--color-primary);display:inline-block"></span>
+            Zur&uuml;ckgewiesen
+          </label>
         </div>
       </div>
+
       <button class="btn btn-primary" id="searchSubmit" style="width:100%">Suchen</button>
       <div id="searchResults" style="margin-top:var(--space-4)" aria-live="polite"></div>
     </div>
@@ -174,57 +214,111 @@
   })();
   <% if (user) { %>
   (function () {
-    const btn     = document.getElementById('searchBtn');
-    const modal   = document.getElementById('searchModal');
-    const close   = document.getElementById('searchModalClose');
-    const submit  = document.getElementById('searchSubmit');
-    const results = document.getElementById('searchResults');
-    function openModal()  { modal.hidden = false; modal.focus(); }
-    function closeModal() { modal.hidden = true;  results.innerHTML = ''; }
+    const btn        = document.getElementById('searchBtn');
+    const modal      = document.getElementById('searchModal');
+    const closeBtn   = document.getElementById('searchModalClose');
+    const submit     = document.getElementById('searchSubmit');
+    const results    = document.getElementById('searchResults');
+    const ticketEl   = document.getElementById('searchTicketId');
+    const fahrzeugEl = document.getElementById('searchFahrzeug');
+    const ticketHint = document.getElementById('searchTicketIdHint');
+
+    const VEHICLES = Array.from(fahrzeugEl.options)
+      .map(o => o.value).filter(v => v !== '');
+
+    function openModal()  { modal.hidden = false; ticketEl.focus(); }
+    function closeModal() { modal.hidden = true; results.innerHTML = ''; }
+
     btn.addEventListener('click', openModal);
-    close.addEventListener('click', closeModal);
+    closeBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
-    const SCHWERE_ICON  = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
-    const STATUS_LABEL  = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt' };
-    const STATUS_COLOR  = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)' };
+
+    ticketEl.addEventListener('input', () => {
+      const val = ticketEl.value.trim();
+      ticketHint.style.display = 'none';
+      fahrzeugEl.style.borderColor = '';
+      if (!val) return;
+      const matched = VEHICLES
+        .filter(v => val.toLowerCase().startsWith(v.toLowerCase()))
+        .sort((a, b) => b.length - a.length)[0];
+      if (matched) {
+        fahrzeugEl.value = matched;
+        ticketHint.style.display = 'block';
+      }
+    });
+
+    const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
+    const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt', zurueckgewiesen:'Zur\u00FCckgewiesen' };
+    const STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)', zurueckgewiesen:'var(--color-primary)' };
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     submit.addEventListener('click', async () => {
-      const fahrzeug = document.getElementById('searchFahrzeug').value.trim();
+      const fahrzeug = fahrzeugEl.value.trim();
+      const ticketId = ticketEl.value.trim();
+      const freitext = document.getElementById('searchFreitext').value.trim();
       const monat    = document.getElementById('searchMonat').value.trim();
-      const checkedStatuses = ['statusGesendet','statusBestaetigt','statusErledigt']
-        .filter(id => document.getElementById(id).checked)
-        .map(id => document.getElementById(id).value);
-      if (!fahrzeug) { results.innerHTML = '<p style="color:var(--color-error)">Bitte ein Fahrzeug w&auml;hlen.</p>'; return; }
-      if (checkedStatuses.length === 0) { results.innerHTML = '<p style="color:var(--color-error)">Bitte mindestens einen Status ausw&auml;hlen.</p>'; return; }
-      submit.disabled = true; submit.textContent = 'Suche...';
+
+      // Alle Status-Checkboxen über gemeinsame Klasse einlesen
+      const checkedStatuses = Array.from(document.querySelectorAll('.search-status-cb:checked'))
+        .map(cb => cb.value);
+
+      fahrzeugEl.style.borderColor = '';
+      if (!fahrzeug) {
+        fahrzeugEl.style.borderColor = 'var(--color-error)';
+        results.innerHTML = '<p style="color:var(--color-error);font-size:var(--text-sm)">Bitte ein Fahrzeug wählen.</p>';
+        fahrzeugEl.focus();
+        return;
+      }
+      if (checkedStatuses.length === 0) {
+        results.innerHTML = '<p style="color:var(--color-error);font-size:var(--text-sm)">Bitte mindestens einen Status auswählen.</p>';
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = 'Suche\u2026';
       results.innerHTML = '';
+
       try {
-        const params = new URLSearchParams({ fahrzeug });
-        if (monat) params.set('monat', monat);
-        params.set('status', checkedStatuses.join(','));
+        const params = new URLSearchParams({ fahrzeug, status: checkedStatuses.join(',') });
+        if (monat)    params.set('monat',    monat);
+        if (ticketId) params.set('ticketId', ticketId);
+        if (freitext) params.set('q',        freitext);
+
         const res  = await fetch('/api/suche?' + params);
         const data = await res.json();
+
         if (!Array.isArray(data) || data.length === 0) {
-          results.innerHTML = '<p style="color:var(--color-text-muted);text-align:center;padding:var(--space-4) 0">F&uuml;r diesen Zeitraum keine Meldung.</p>';
+          results.innerHTML = '<p style="color:var(--color-text-muted);text-align:center;padding:var(--space-4) 0">Keine Meldungen für diese Kombination gefunden.</p>';
         } else {
+          const header = `<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-2)">${data.length} Ergebnis${data.length !== 1 ? 'se' : ''}</p>`;
           const rows = data.map(s => {
             const icon   = SCHWERE_ICON[s.schwere] || '';
             const status = STATUS_LABEL[s.status]  || s.status;
             const color  = STATUS_COLOR[s.status]  || 'var(--color-text-muted)';
             const datum  = new Date(s.createdAt).toLocaleDateString('de-DE');
             return `<a href="/stoerung/${encodeURIComponent(s.id)}" class="search-result-item">
-              <span class="search-result-id">${s.id}</span>
-              <span class="search-result-fehler">${s.fehlerBeschreibung}</span>
+              <span class="search-result-id">${escHtml(s.id)}</span>
+              <span class="search-result-fehler">${escHtml(s.fehlerBeschreibung)}</span>
               <span class="search-result-meta">${icon}&nbsp;${datum}&nbsp;&middot;&nbsp;<span style="color:${color};font-weight:600">${status}</span></span>
             </a>`;
           });
-          results.innerHTML = '<div class="search-result-list">' + rows.join('') + '</div>';
+          results.innerHTML = header + '<div class="search-result-list">' + rows.join('') + '</div>';
         }
       } catch(e) {
         results.innerHTML = '<p style="color:var(--color-error)">Fehler bei der Suche.</p>';
       } finally {
-        submit.disabled = false; submit.textContent = 'Suchen';
+        submit.disabled = false;
+        submit.textContent = 'Suchen';
       }
+    });
+
+    ['searchTicketId','searchFahrzeug','searchFreitext','searchMonat'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
     });
   })();
   <% } %>

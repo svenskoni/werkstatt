@@ -49,7 +49,6 @@ async function initDb() {
     );
   `);
 
-  // Migrations
   for (const migration of [
     `ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE stoerungen ADD COLUMN updatedAt TEXT`,
@@ -71,9 +70,6 @@ async function run(sql, args = []) { return db.execute({ sql, args }); }
 async function all(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows; }
 async function get(sql, args = []) { const r = await db.execute({ sql, args }); return r.rows[0] || null; }
 
-// libsql gibt INTEGER-Spalten manchmal als BigInt zurück.
-// Diese Funktion normalisiert ein Zeilen-Objekt so dass alle Felder
-// sicher mit === verglichen werden können.
 function normalizeRow(row) {
   if (!row) return row;
   const out = Object.assign({}, row);
@@ -178,7 +174,6 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere) {
   return updated;
 }
 
-/** Erinnerung setzen oder löschen (reminderAt=ISO-String, reminderTo=E-Mail des Admins) */
 async function setReminder(id, reminderAt, reminderTo) {
   await run(
     `UPDATE stoerungen SET reminderAt = ?, reminderTo = ? WHERE id = ?`,
@@ -187,7 +182,6 @@ async function setReminder(id, reminderAt, reminderTo) {
   return getStorungById(id);
 }
 
-/** Alle Tickets die einen fälligen Reminder haben (reminderAt <= jetzt, nicht erledigt/zurückgewiesen) */
 async function getDueReminders() {
   const now = new Date().toISOString();
   return all(
@@ -199,22 +193,38 @@ async function getDueReminders() {
   );
 }
 
-/** Reminder zurücksetzen nachdem er verschickt wurde */
 async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
-async function searchByFahrzeugMonat(fahrzeug, monat, statuses) {
+/**
+ * Suche nach Fahrzeug (Pflicht) + optional: Monat, Ticket-ID, Freitext in Fehlerbeschreibung, Status-Filter
+ */
+async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
     : validStatuses;
   const placeholders = filtered.map(() => '?').join(',');
   const args = [fahrzeug, ...filtered];
+
   let sql = `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
              FROM stoerungen
              WHERE fahrzeug = ? AND status IN (${placeholders})`;
-  if (monat) { sql += ` AND strftime('%Y-%m', createdAt) = ?`; args.push(monat); }
+
+  if (monat) {
+    sql += ` AND strftime('%Y-%m', createdAt) = ?`;
+    args.push(monat);
+  }
+  if (ticketId && ticketId.trim()) {
+    sql += ` AND lower(id) LIKE ?`;
+    args.push('%' + ticketId.trim().toLowerCase() + '%');
+  }
+  if (freitext && freitext.trim()) {
+    sql += ` AND lower(fehlerBeschreibung) LIKE ?`;
+    args.push('%' + freitext.trim().toLowerCase() + '%');
+  }
+
   sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
   return all(sql, args);
 }

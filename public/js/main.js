@@ -82,12 +82,15 @@
 
   if (reminderEnabled) {
     reminderEnabled.addEventListener('change', () => {
-      reminderFields.style.display = reminderEnabled.checked ? '' : 'none';
+      reminderFields.style.display = reminderEnabled.checked ? 'block' : 'none';
       if (reminderEnabled.checked && !reminderAtInput.value) {
         reminderAtInput.value = defaultReminderTime();
       }
     });
   }
+
+  function show(el) { el.style.display = 'block'; }
+  function hide(el) { el.style.display = 'none';  }
 
   function openModal(btn) {
     const target       = btn.dataset.target;
@@ -108,19 +111,19 @@
     modalConfirm.style.cssText = color ? `background:${color};color:#fff;border:none` : '';
     modalConfirm.disabled      = false;
 
-    // Klasse
-    klasseWrap.style.display = mitKlasse ? '' : 'none';
-    if (mitKlasse) setKlasseActive(selectedKlasse);
+    // Klasse — explizit block/none statt leer/'none'
+    if (mitKlasse) { show(klasseWrap); setKlasseActive(selectedKlasse); }
+    else           { hide(klasseWrap); }
 
     // Schweregrad
-    schwereWrap.style.display = mitSchwere ? '' : 'none';
-    if (mitSchwere) schwereSelect.value = aktSchwereRef;
+    if (mitSchwere) { show(schwereWrap); schwereSelect.value = aktSchwereRef; }
+    else            { hide(schwereWrap); }
 
     // Erinnerung
-    reminderWrap.style.display        = withReminder ? '' : 'none';
-    reminderEnabled.checked           = false;
-    reminderFields.style.display      = 'none';
-    reminderAtInput.value             = '';
+    if (withReminder) { show(reminderWrap); } else { hide(reminderWrap); }
+    reminderEnabled.checked      = false;
+    reminderFields.style.display = 'none';
+    reminderAtInput.value        = '';
     reminderAtInput.style.borderColor = '';
 
     statusNote.value = '';
@@ -151,8 +154,8 @@
     if (wantsReminder) reminderAtInput.style.borderColor = '';
 
     const notiz      = statusNote.value.trim() || null;
-    const mitSchwere = schwereWrap.style.display !== 'none';
-    const mitKlasse  = klasseWrap.style.display  !== 'none';
+    const mitSchwere = schwereWrap.style.display === 'block';
+    const mitKlasse  = klasseWrap.style.display  === 'block';
     const payload    = { status: pendingAction.target, notiz };
 
     if (mitSchwere && schwereSelect.value !== aktSchwereRef) {

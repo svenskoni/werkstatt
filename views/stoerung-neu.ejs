@@ -87,6 +87,12 @@
           <% }); %>
         </div>
       </fieldset>
+
+      <!-- Issue #13: Totalausfall-Hinweis mit WAL-Rufnummer -->
+      <div id="totalausfallHinweis" class="totalausfall-hinweis" style="display:<%= old.schwere === 'totalausfall' ? 'flex' : 'none' %>" role="alert">
+        <span class="totalausfall-hinweis-icon">⚠️</span>
+        <span>Bei Totalausfall zwingend Meldung an WAL unter <a href="tel:+492234956545" class="totalausfall-tel">02234-56545</a> machen!</span>
+      </div>
     </div>
 
     <!-- Fehlerbeschreibung -->
@@ -236,6 +242,37 @@
 .schwere-icon { font-size: 1.75rem; line-height: 1; }
 .schwere-label { font-size: var(--text-xs); font-weight: 600; }
 
+/* ── Totalausfall-Hinweis (Issue #13) ───────────────────────── */
+.totalausfall-hinweis {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in oklch, var(--color-error) 10%, var(--color-surface));
+  border: 1.5px solid color-mix(in oklch, var(--color-error) 40%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.totalausfall-hinweis-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.totalausfall-tel {
+  color: var(--color-error);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.totalausfall-tel:hover {
+  color: var(--color-error-hover);
+}
+
 .similar-item {
   display: flex;
   align-items: center;
@@ -324,6 +361,15 @@ klasseButtons.forEach(btn => {
   });
 });
 
+// ══ TOTALAUSFALL-HINWEIS (Issue #13) ══════════════════════════════
+const totalausfallHinweis = document.getElementById('totalausfallHinweis');
+document.querySelectorAll('.schwere-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    const val = opt.querySelector('input[type="radio"]').value;
+    totalausfallHinweis.style.display = val === 'totalausfall' ? 'flex' : 'none';
+  });
+});
+
 // ══ MAGIC-BYTES PRÜFUNG ═════════════════════════════════════════════
 function checkMagicBytes(file) {
   return new Promise(resolve => {
@@ -359,7 +405,7 @@ async function validateFile(file) {
 
   if (name.length > MAX_NAME_LEN)
     errors.push(`"${name.slice(0,40)}…": Dateiname zu lang (max. ${MAX_NAME_LEN} Zeichen).`);
-  if (/[\/\\<>:"|\?\*\x00-\x1f]/.test(name))
+  if (/[\/\\<>:"|?\*\x00-\x1f]/.test(name))
     errors.push(`"${name.slice(0,40)}": Dateiname enthält ungültige Zeichen.`);
   if (!ALLOWED_MIMES.has(file.type)) {
     errors.push(`"${name.slice(0,40)}": Dateityp "${file.type}" ist nicht erlaubt.`);

@@ -163,7 +163,11 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
       melderBenachrichtigung,
       attachments,
     });
-    mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
+
+    // Abwesende Admins beim Versand berücksichtigen
+    const abwesende = await db.getAbwesendeAdmins();
+    const abwesendeUsernames = abwesende.map(a => a.username);
+    mailer.sendStorungMail(storung, abwesendeUsernames).catch(err => console.error('[Route] sendStorungMail:', err.message));
     mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
     res.redirect('/');
   } catch (err) {
@@ -207,7 +211,7 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Info-Notiz hinzufügen (nur Admin, Issue #21) ────────────────────────────────────────────
+// ── Info-Notiz hinzufügen (nur Admin) ────────────────────────────────────────────────────
 router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   try {
     const { notiz } = req.body;
@@ -245,7 +249,7 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
     if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ungültiges Datum.' });
     if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
     const to = mailer.resolveAdminMail(req.session.user.username);
-    if (!to) return res.status(400).json({ error: 'Keine gültige Admin-E-Mail gefunden. Bitte ADMIN_MAILS in der .env konfigurieren.' });
+    if (!to) return res.status(400).json({ error: 'Keine gültige Admin-E-Mail gefunden. Bitte ADMIN_ESCALATION in der .env prüfen.' });
     await db.setReminder(storung.id, dt.toISOString(), to);
     res.json({ ok: true, reminderAt: dt.toISOString(), reminderTo: to, localTime: dt.toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) });
   } catch (err) {
@@ -270,7 +274,7 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API (Issue #19: klasse-Filter) ──────────────────────────────────────────────────────────
+// ── Such-API ──────────────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status, ticketId, q, klasse } = req.query;

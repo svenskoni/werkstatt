@@ -13,6 +13,7 @@ const uploadsRoute   = require('../routes/uploads');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
 const reminder       = require('./reminder');
+const { requireLogin, requireRole } = require('../middleware/auth');
 
 // Pflicht-Variablen prüfen
 const REQUIRED_ENV = [
@@ -20,7 +21,8 @@ const REQUIRED_ENV = [
   'VEHICLES',
   'MAX_UPLOAD_MB', 'MAX_UPLOAD_DIR_MB', 'COMPRESS_AFTER_DAYS',
   'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURE',
-  'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM', 'MAIL_RECIPIENTS',
+  'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM',
+  'ADMIN_ESCALATION',
 ];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length > 0) {
@@ -91,6 +93,46 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Urlaub / Abwesenheit API ──────────────────────────────────────────────────
+
+/** GET /api/urlaub/status – eigenen Abwesenheitsstatus abfragen */
+app.get('/api/urlaub/status', requireLogin, async (req, res) => {
+  try {
+    const eintrag = await db.getAdminUrlaub(req.session.user.username);
+    if (eintrag) {
+      res.json({ abwesend: true, abwesend_bis: eintrag.abwesend_bis });
+    } else {
+      res.json({ abwesend: false });
+    }
+  } catch (err) {
+    console.error('[Urlaub] status FEHLER:', err.message);
+    res.status(500).json({ error: 'Interner Fehler.' });
+  }
+});
+
+/** POST /api/urlaub/setzen – Abwesenheit setzen oder aufheben */
+app.post('/api/urlaub/setzen', requireLogin, async (req, res) => {
+  try {
+    const { abwesend_bis } = req.body;
+    if (abwesend_bis) {
+      const dt = new Date(abwesend_bis);
+      if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ungültiges Datum.' });
+      if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
+      await db.setAdminUrlaub(req.session.user.username, dt.toISOString());
+      console.log(`[Urlaub] ${req.session.user.username} abwesend bis ${dt.toISOString()}`);
+      res.json({ ok: true, abwesend_bis: dt.toISOString() });
+    } else {
+      await db.setAdminUrlaub(req.session.user.username, null);
+      console.log(`[Urlaub] ${req.session.user.username} Abwesenheit aufgehoben`);
+      res.json({ ok: true, abwesend_bis: null });
+    }
+  } catch (err) {
+    console.error('[Urlaub] setzen FEHLER:', err.message);
+    res.status(500).json({ error: 'Interner Fehler.' });
+  }
+});
+
+// ── Routen ────────────────────────────────────────────────────────────────────
 app.use('/', authRoutes);
 app.use('/', uploadsRoute);
 app.use('/', stoerungRoutes);

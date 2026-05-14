@@ -1,14 +1,13 @@
 'use strict';
 /**
- * reminder.js – läuft jede Minute:
- *   1. Erinnerungen (Reminder) für Admins
- *   2. Eskalations-Prüfung für unbearbeitete Störungen
+ * reminder.js
+ * – Prüft jede Minute ob Erinnerungen fällig sind
+ * – Prüft stündlich ob Tickets eskaliert werden müssen
  */
 const db     = require('./database');
 const mailer = require('./mailer');
 
-const ESKALATIONS_STUNDEN = parseInt(process.env.ESKALATION_STUNDEN || '24', 10);
-
+// ── Erinnerungs-Cron ──────────────────────────────────────────────────────────
 async function checkReminders() {
   try {
     const due = await db.getDueReminders();
@@ -19,7 +18,7 @@ async function checkReminders() {
       full._alterSchwere     = null;
       full._schwereGeaendert = false;
       await mailer.sendReminderMail(full, to);
-      console.log(`[Reminder] Erinnerung gesendet: ${storung.id} \u2192 ${to}`);
+      console.log(`[Reminder] Erinnerung gesendet: ${storung.id} → ${to}`);
       await db.clearReminder(storung.id);
     }
   } catch (err) {
@@ -27,44 +26,56 @@ async function checkReminders() {
   }
 }
 
-async function checkEskalation() {
-  try {
-    const kette = mailer.getEskalationsKette();
-    if (!kette.length) return; // keine Kette konfiguriert → kein Eskalations-Job
+// ── Eskalations-Cron ──────────────────────────────────────────────────────────
+/**
+ * Eskalationsintervall in Stunden (Standard: 24h).
+ * Kann per ENV überschrieben werden: ESKALATION_STUNDEN=8
+ */
+const ESKALATION_STUNDEN = parseInt(process.env.ESKALATION_STUNDEN || '24', 10);
 
-    const faellig = await db.getEskalationsFaellige(ESKALATIONS_STUNDEN);
+async function checkEskalationen() {
+  try {
+    const liste = mailer.getEskalationsListe();
+    if (!liste.length) return; // keine Eskalationsliste konfiguriert
+
+    const faellig = await db.getEskalationsFaellige(ESKALATION_STUNDEN);
     if (!faellig.length) return;
 
-    const abwesend = await db.getAbwesendeAdmins();
-    const abwesendeUsernames = abwesend.map(a => a.username);
+    // Aktuell abwesende Admins laden
+    const abwesende = await db.getAbwesendeAdmins();
+    const abwesendeUsernames = abwesende.map(a => a.username);
 
-    for (const s of faellig) {
-      const naechsteStufe = (Number(s.eskalation_stufe) || 0) + 1;
-      const empfaenger    = mailer.getEskalationsEmpfaenger(naechsteStufe - 1, abwesendeUsernames);
+    for (const row of faellig) {
+      const full = await db.getStorungById(row.id);
+      if (!full || full.status !== 'gesendet') continue;
 
-      if (!empfaenger) {
-        console.warn(`[Eskalation] Keine verf\u00fcgbaren Admins mehr f\u00fcr Ticket ${s.id} (Stufe ${naechsteStufe})`);
-        // Stufe trotzdem hochsetzen damit nicht ewig re-eskaliert wird
-        await db.setEskalationsStufe(s.id, naechsteStufe);
-        continue;
+      const naechsteStufe = (full.eskalation_stufe || 0) + 1;
+
+      // Prüfen ob es noch einen Admin auf dieser Stufe gibt
+      const sent = await mailer.sendEskalationsMail(full, naechsteStufe - 1, abwesendeUsernames);
+      if (sent) {
+        await db.setEskalationsStufe(full.id, naechsteStufe);
+        console.log(`[Eskalation] Ticket ${full.id} → Stufe ${naechsteStufe}`);
+      } else {
+        console.warn(`[Eskalation] Ticket ${full.id}: Keine weiteren Admins verfügbar (Stufe ${naechsteStufe}).`);
       }
-
-      const full = await db.getStorungById(s.id);
-      await mailer.sendEskalationsMail(full, empfaenger, naechsteStufe);
-      await db.setEskalationsStufe(s.id, naechsteStufe);
-      console.log(`[Eskalation] Stufe ${naechsteStufe} f\u00fcr ${s.id} \u2192 ${empfaenger.username}`);
     }
   } catch (err) {
     console.error('[Eskalation] Fehler:', err.message);
   }
 }
 
+// ── Start ─────────────────────────────────────────────────────────────────────
 function start() {
+  // Erinnerungen: sofort + jede Minute
   checkReminders();
-  checkEskalation();
-  setInterval(checkReminders,  60 * 1000);
-  setInterval(checkEskalation, 60 * 60 * 1000); // stündlich
-  console.log('[Reminder] Reminder + Eskalations-Cron gestartet');
+  setInterval(checkReminders, 60 * 1000);
+
+  // Eskalation: sofort + jede Stunde
+  checkEskalationen();
+  setInterval(checkEskalationen, 60 * 60 * 1000);
+
+  console.log(`[Reminder] Cron gestartet (Erinnerungen: 60s | Eskalation: 1h, Schwelle: ${ESKALATION_STUNDEN}h)`);
 }
 
 module.exports = { start };

@@ -47,59 +47,55 @@ th{background:#f7f7f7;width:38%}
 .changed-by{background:#eaf4fb;border-left:3px solid #2980b9;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
 .reminder-banner{background:#fff3cd;border-left:4px solid #e6a817;padding:10px 14px;border-radius:4px;font-size:14px;margin-bottom:12px;font-weight:bold}
 .klasse-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;background:#e8f4f8;color:#1a6080}
-.eskalation-banner{background:#fff0f0;border-left:4px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:14px;margin-bottom:12px;font-weight:bold}`;
+.eskalation-banner{background:#fdecea;border-left:4px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;font-weight:bold}`;
 
 function extractMelderMail(kontakt) {
   const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
   return match ? match[0].trim() : null;
 }
 
-function getAdminMailMap() {
-  const raw = process.env.ADMIN_MAILS || '';
-  const map = {};
-  raw.split(',').forEach(entry => {
+/**
+ * Liefert die geordnete Eskalationsliste aus ADMIN_ESCALATION.
+ * Format: username1:mail1,username2:mail2,...
+ * Gibt [{username, email}, ...] zurück.
+ */
+function getEskalationsListe() {
+  const raw = process.env.ADMIN_ESCALATION || '';
+  return raw.split(',').reduce((acc, entry) => {
     const [username, email] = entry.trim().split(':').map(s => s.trim());
-    if (username && email && email.includes('@')) map[username] = email;
-  });
-  return map;
+    if (username && email && email.includes('@')) acc.push({ username, email });
+    return acc;
+  }, []);
 }
 
+/**
+ * Gibt die E-Mail eines Admins anhand seines Usernames zurück.
+ * Basis: ADMIN_ESCALATION.
+ */
 function resolveAdminMail(username) {
   if (!username) return null;
-  const map = getAdminMailMap();
-  return map[username] || null;
+  const liste = getEskalationsListe();
+  const entry = liste.find(e => e.username === username);
+  return entry ? entry.email : null;
 }
 
 /**
- * Gibt die geordnete Eskalationskette zurück.
- * ADMIN_ESCALATION=admin1:mail1,admin2:mail2,...
- * Gibt Array von { username, email } zurück.
+ * Ermittelt den nächsten verfügbaren Admin für Eskalationsstufe `stufe`.
+ * Abwesende Admins (aus der DB) werden übersprungen.
+ * Gibt { username, email } oder null zurück.
  */
-function getEskalationsKette() {
-  const raw = process.env.ADMIN_ESCALATION || process.env.ADMIN_MAILS || '';
-  return raw.split(',').map(entry => {
-    const [username, email] = entry.trim().split(':').map(s => s.trim());
-    if (username && email && email.includes('@')) return { username, email };
-    return null;
-  }).filter(Boolean);
+async function resolveEskalationsEmpfaenger(stufe, abwesendeUsernames) {
+  const liste = getEskalationsListe();
+  const abwesendSet = new Set(abwesendeUsernames || []);
+  const verfuegbare = liste.filter(e => !abwesendSet.has(e.username));
+  return verfuegbare[stufe] || null;
 }
 
 /**
- * Gibt die Empfänger zurück, die für Eskalationsstufe `stufe` zuständig sind.
- * Überspringe Admins, die aktuell abwesend sind (Liste aus DB).
- * stufe=0 → Admin[0], stufe=1 → Admin[1], usw.
+ * Gibt die Werkstatt-Empfänger je nach Klasse zurück.
+ * MAIL_KFZ   → für Klasse 'kfz'
+ * MAIL_GERAET → für Klasse 'geraet'
  */
-function getEskalationsEmpfaenger(stufe, abwesendeUsernames) {
-  const kette = getEskalationsKette();
-  if (!kette.length) return null;
-  const absent = new Set(abwesendeUsernames || []);
-  // Suche ab `stufe` den nächsten nicht-abwesenden Admin
-  for (let i = stufe; i < kette.length; i++) {
-    if (!absent.has(kette[i].username)) return kette[i];
-  }
-  return null;
-}
-
 function getWerkstattRecipients(klasse) {
   const envKey = klasse === 'geraet' ? 'MAIL_GERAET' : 'MAIL_KFZ';
   const raw = process.env[envKey] || '';
@@ -107,7 +103,7 @@ function getWerkstattRecipients(klasse) {
 }
 
 // ── HTML-Builder ───────────────────────────────────────────────────────────────
-function buildAdminHtml(storung, alterSchwere, changedBy) {
+function buildAdminHtml(storung, alterSchwere, changedBy, eskalationsStufe) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
@@ -115,14 +111,18 @@ function buildAdminHtml(storung, alterSchwere, changedBy) {
   const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
   const schwereChangeHtml = alterSchwere
-    ? `<tr><th>Schweregrad ge\u00e4ndert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${schwere}</strong> <span style="color:#e67e22">(vom Admin angepasst)</span></td></tr>`
+    ? `<tr><th>Schweregrad ge\u00e4ndert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${schwere}</strong></td></tr>`
     : '';
   const changedByHtml = changedBy
     ? `<tr><th>Status ge\u00e4ndert von</th><td><strong>${escHtml(changedBy)}</strong></td></tr>`
     : '';
+  const eskalationsBanner = eskalationsStufe && eskalationsStufe > 0
+    ? `<div class="eskalation-banner">\u26A0\uFE0F Eskalationsstufe ${eskalationsStufe}: Bisher keine Reaktion auf diese Meldung.</div>`
+    : '';
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>\uD83D\uDEA8 St\u00f6rungsmeldung \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Eingegangen: ${datum}</p></div>
   <div class="body">
+    ${eskalationsBanner}
     <table>
       <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
       <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
@@ -139,32 +139,6 @@ function buildAdminHtml(storung, alterSchwere, changedBy) {
     ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
     ${storung.attachments && storung.attachments.length > 0 ? `<p style="font-size:13px;color:#666">\uD83D\uDCCE ${storung.attachments.length} Anhang/Anh\u00e4nge</p>` : ''}
     <a href="${detailUrl}" class="btn">Detail ansehen \u2192</a>
-  </div>
-  <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
-</div></body></html>`;
-}
-
-function buildEskalationsHtml(storung, stufe) {
-  const baseUrl   = process.env.APP_BASE_URL;
-  const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
-  const klasse    = KLASSE_LABEL[storung.klasse]    || storung.klasse || 'KFZ';
-  const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-  const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
-  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
-  <div class="header"><h1>\uD83D\uDD14 Eskalation Stufe ${stufe} \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Eingegangen: ${datum}</p></div>
-  <div class="body">
-    <div class="eskalation-banner">\u26A0\uFE0F Diese St\u00f6rung wurde noch nicht bearbeitet und wird daher an Sie eskaliert.</div>
-    <table>
-      <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
-      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
-      <tr><th>Schweregrad</th><td>${schwere}</td></tr>
-      <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
-      <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} \u2013 ${escHtml(storung.melderKontakt)}</td></tr>
-      <tr><th>Ticket-Nr.</th><td><code>${storung.id}</code></td></tr>
-      <tr><th>Eskalationsstufe</th><td><strong>${stufe}</strong></td></tr>
-    </table>
-    ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
-    <a href="${detailUrl}" class="btn">Jetzt bearbeiten \u2192</a>
   </div>
   <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
 </div></body></html>`;
@@ -213,7 +187,7 @@ function buildMelderBestaetigung(storung) {
     <p style="font-size:13px;color:#666;margin-top:16px">
       ${benachrichtigt
         ? 'Sie erhalten automatisch eine E-Mail, sobald sich der Status Ihrer Meldung \u00e4ndert.'
-        : 'Sie erhalten keine weiteren automatischen Benachrichtigungen zu Status\u00e4nderungen.<br>Bei R\u00fcckfragen verwenden Sie bitte Ihre Ticket-Nummer.'}
+        : 'Sie erhalten keine weiteren automatischen Benachrichtigungen.<br>Bei R\u00fcckfragen verwenden Sie bitte Ihre Ticket-Nummer.'}
     </p>
   </div>
   <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
@@ -290,152 +264,160 @@ function buildReminderHtml(storung) {
 </div></body></html>`;
 }
 
+function buildDeleteHtml(storung, deletedBy, grund) {
+  const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
+  const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
+  const datum = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
+  <div class="header"><h1>\uD83D\uDDD1\uFE0F Ticket gel\u00f6scht \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Ticket: ${escHtml(storung.id)}</p></div>
+  <div class="body">
+    <table>
+      <tr><th>Fahrzeug</th><td>${escHtml(storung.fahrzeug)}</td></tr>
+      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
+      <tr><th>Schweregrad</th><td>${schwere}</td></tr>
+      <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
+      <tr><th>Gel\u00f6scht von</th><td><strong>${escHtml(deletedBy)}</strong></td></tr>
+      <tr><th>Grund</th><td>${escHtml(grund)}</td></tr>
+      <tr><th>Erfasst am</th><td>${datum}</td></tr>
+      <tr><th>Ticket-Nr.</th><td><code>${storung.id}</code></td></tr>
+    </table>
+  </div>
+  <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
+</div></body></html>`;
+}
+
 // ── Öffentliche Funktionen ─────────────────────────────────────────────────────
 
-/** Neue Störung → Eskalationskette Stufe 0 (erster nicht-abwesender Admin) */
+/**
+ * Neue Störung → geht an den ersten verfügbaren Admin der Eskalationsliste.
+ * Abwesende Admins werden übersprungen.
+ */
 async function sendStorungMail(storung, abwesendeUsernames) {
-  const kette    = getEskalationsKette();
-  const empfaenger = getEskalationsEmpfaenger(0, abwesendeUsernames || []);
-
-  // Fallback: wenn keine Kette konfiguriert → alle MAIL_RECIPIENTS
-  if (!kette.length) {
-    const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
-    if (!recipients.length) { console.warn('[Mailer] Keine Empf\u00e4nger (MAIL_RECIPIENTS)'); return; }
-    const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
-    const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
-    try {
-      await getTransport().sendMail({
-        from: process.env.MAIL_FROM, to: recipients.join(', '),
-        subject: `[St\u00f6rung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0,50)}`,
-        html: buildAdminHtml(storung, null, null),
-        text: `St\u00f6rung: ${storung.fahrzeug} (${klasse})\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
-      });
-      console.log(`[Mailer] Admin-Mail gesendet an: ${recipients.join(', ')}`);
-    } catch (err) {
-      console.error('[Mailer] sendStorungMail FEHLER:', err.message);
-    }
-    return;
-  }
-
+  const empfaenger = await resolveEskalationsEmpfaenger(0, abwesendeUsernames || []);
   if (!empfaenger) {
-    console.warn('[Mailer] Alle Admins abwesend \u2013 Fallback auf MAIL_RECIPIENTS');
-    const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
-    if (recipients.length) {
-      const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
-      const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
-      await getTransport().sendMail({
-        from: process.env.MAIL_FROM, to: recipients.join(', '),
-        subject: `[St\u00f6rung \u26A0 alle abwesend] ${storung.fahrzeug} \u2013 ${storung.fehlerBeschreibung.slice(0,50)}`,
-        html: buildAdminHtml(storung, null, null),
-        text: `St\u00f6rung: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nID: ${storung.id}`,
-      });
-    }
+    console.warn('[Mailer] Keine verfügbaren Admins in ADMIN_ESCALATION für neue Störung.');
     return;
   }
-
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
   const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
   try {
     await getTransport().sendMail({
-      from: process.env.MAIL_FROM, to: empfaenger.email,
-      subject: `[St\u00f6rung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0,50)}`,
-      html: buildAdminHtml(storung, null, null),
+      from: process.env.MAIL_FROM,
+      to:   empfaenger.email,
+      subject: `[St\u00f6rung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 50)}`,
+      html: buildAdminHtml(storung, null, null, 0),
       text: `St\u00f6rung: ${storung.fahrzeug} (${klasse})\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
     });
-    console.log(`[Mailer] Neue St\u00f6rung an Admin (${empfaenger.username}): ${empfaenger.email}`);
+    console.log(`[Mailer] Neue Störung an: ${empfaenger.username} <${empfaenger.email}>`);
   } catch (err) {
     console.error('[Mailer] sendStorungMail FEHLER:', err.message);
   }
 }
 
-/** Eskalations-Mail an einen bestimmten Admin senden. */
-async function sendEskalationsMail(storung, empfaenger, stufe) {
-  const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
-  const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
-  try {
-    await getTransport().sendMail({
-      from: process.env.MAIL_FROM, to: empfaenger.email,
-      subject: `[Eskalation Stufe ${stufe}] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0,50)}`,
-      html: buildEskalationsHtml(storung, stufe),
-      text: `Eskalation Stufe ${stufe}\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}`,
-    });
-    console.log(`[Mailer] Eskalation Stufe ${stufe} an ${empfaenger.username} (${empfaenger.email})`);
-  } catch (err) {
-    console.error('[Mailer] sendEskalationsMail FEHLER:', err.message);
-  }
-}
-
 async function sendMelderBestaetigung(storung) {
   const melderMail = extractMelderMail(storung.melderKontakt);
-  if (!melderMail) { console.log('[Mailer] Keine Melder-Mail, Best\u00e4tigung \u00fcbersprungen'); return; }
+  if (!melderMail) { console.log('[Mailer] Keine Melder-Mail, Best\u00e4tigung übersprungen'); return; }
   try {
     await getTransport().sendMail({
-      from: process.env.MAIL_FROM, to: melderMail,
+      from: process.env.MAIL_FROM,
+      to:   melderMail,
       subject: `\u2705 St\u00f6rungsmeldung eingegangen \u2013 Ticket ${storung.id}`,
       html: buildMelderBestaetigung(storung),
       text: `Hallo ${storung.melderName},\nIhre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}`,
     });
-    console.log(`[Mailer] Best\u00e4tigung an Melder: ${melderMail}`);
+    console.log(`[Mailer] Bestätigung an Melder: ${melderMail}`);
   } catch (err) {
     console.error('[Mailer] sendMelderBestaetigung FEHLER:', err.message);
   }
 }
 
+/**
+ * Eskalations-Mail → geht an den Admin der entsprechenden Stufe.
+ * Wird vom Reminder-Cron aufgerufen.
+ */
+async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
+  const empfaenger = await resolveEskalationsEmpfaenger(stufe, abwesendeUsernames || []);
+  if (!empfaenger) {
+    console.warn(`[Mailer] Eskalation Stufe ${stufe}: Keine weiteren verfügbaren Admins.`);
+    return false;
+  }
+  const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
+  const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM,
+      to:   empfaenger.email,
+      subject: `[\u26A0\uFE0F Eskalation ${stufe}] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 45)}`,
+      html: buildAdminHtml(storung, null, null, stufe),
+      text: `Eskalation Stufe ${stufe}:\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}\nBisher keine Reaktion.`,
+    });
+    console.log(`[Mailer] Eskalation Stufe ${stufe} an: ${empfaenger.username} <${empfaenger.email}>`);
+    return true;
+  } catch (err) {
+    console.error(`[Mailer] sendEskalationsMail Stufe ${stufe} FEHLER:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Statuswechsel-Mail:
+ * - an den zuständigen Admin der aktuellen Eskalationsstufe
+ * - bei 'bestaetigt': zusätzlich an Werkstatt (MAIL_KFZ / MAIL_GERAET)
+ * - bei Opt-in oder Zurückweisung: an Melder
+ */
 async function sendStatusMail(storung, changedBy, note) {
   const alterSchwere = storung._schwereGeaendert ? storung._alterSchwere : null;
   const status = STATUS_LABEL[storung.status] || storung.status;
   const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
 
-  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
-  if (recipients.length) {
-    const schwereHinweis = alterSchwere ? ` [Schwere: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${SCHWERE_LABEL[storung.schwere] || storung.schwere}]` : '';
-    try {
-      await getTransport().sendMail({
-        from: process.env.MAIL_FROM, to: recipients.join(', '),
-        subject: `[Status] ${storung.fahrzeug} | ${klasse} \u2192 ${status}${schwereHinweis} | von: ${changedBy} | Melder: ${storung.melderName}`,
-        html: buildAdminHtml(storung, alterSchwere, changedBy),
-        text: `Statuswechsel: ${storung.fahrzeug} (${klasse}) \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}\nMelder: ${storung.melderName}`,
-      });
-    } catch (err) { console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message); }
-  }
-
+  // 1. Admin der aktuellen Eskalationsstufe (oder changedBy direkt)
   const changedByMail = resolveAdminMail(changedBy);
-  if (changedByMail && !recipients.includes(changedByMail)) {
+  if (changedByMail) {
+    const schwereHinweis = alterSchwere
+      ? ` [Schwere: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${SCHWERE_LABEL[storung.schwere] || storung.schwere}]`
+      : '';
     try {
       await getTransport().sendMail({
-        from: process.env.MAIL_FROM, to: changedByMail,
-        subject: `[Dein Status-Update] ${storung.fahrzeug} \u2192 ${status} | ${storung.id}`,
-        html: buildAdminHtml(storung, alterSchwere, changedBy),
-        text: `Du hast den Status von ${storung.id} auf "${status}" gesetzt.`,
+        from: process.env.MAIL_FROM,
+        to:   changedByMail,
+        subject: `[Status] ${storung.fahrzeug} | ${klasse} \u2192 ${status}${schwereHinweis} | ${storung.id}`,
+        html: buildAdminHtml(storung, alterSchwere, changedBy, 0),
+        text: `Statuswechsel: ${storung.fahrzeug} (${klasse}) \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}`,
       });
-      console.log(`[Mailer] Pers\u00f6nliche Status-Mail an ${changedBy}: ${changedByMail}`);
-    } catch (err) { console.error('[Mailer] sendStatusMail pers\u00f6nlich FEHLER:', err.message); }
+      console.log(`[Mailer] Status-Mail an: ${changedBy} <${changedByMail}>`);
+    } catch (err) { console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message); }
+  } else {
+    console.warn(`[Mailer] sendStatusMail: Keine Mail für Admin '${changedBy}' in ADMIN_ESCALATION.`);
   }
 
+  // 2. Werkstatt-Mail bei 'bestaetigt'
   if (storung.status === 'bestaetigt') {
     const werkstattRecipients = getWerkstattRecipients(storung.klasse);
     if (werkstattRecipients.length) {
       try {
         await getTransport().sendMail({
-          from: process.env.MAIL_FROM, to: werkstattRecipients.join(', '),
-          subject: `[Auftrag ${klasse}] ${storung.fahrzeug} \u2013 ${storung.fehlerBeschreibung.slice(0,50)} | ${storung.id}`,
+          from: process.env.MAIL_FROM,
+          to:   werkstattRecipients.join(', '),
+          subject: `[Auftrag ${klasse}] ${storung.fahrzeug} \u2013 ${storung.fehlerBeschreibung.slice(0, 50)} | ${storung.id}`,
           html: buildWerkstattHtml(storung, changedBy),
           text: `Auftrag f\u00fcr ${klasse}-Werkstatt:\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}\nFreigegeben von: ${changedBy}`,
         });
-        console.log(`[Mailer] Werkstatt-Mail (${klasse}) gesendet an: ${werkstattRecipients.join(', ')}`);
+        console.log(`[Mailer] Werkstatt-Mail (${klasse}) an: ${werkstattRecipients.join(', ')}`);
       } catch (err) { console.error('[Mailer] sendStatusMail Werkstatt FEHLER:', err.message); }
     } else {
-      console.warn(`[Mailer] Keine Werkstatt-Empf\u00e4nger f\u00fcr Klasse '${storung.klasse}'.`);
+      console.warn(`[Mailer] Keine Werkstatt-Empfänger für Klasse '${storung.klasse}' (${klasse === 'KFZ' ? 'MAIL_KFZ' : 'MAIL_GERAET'} nicht gesetzt).`);
     }
   }
 
+  // 3. Melder (Opt-in oder Zurückweisung)
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) return;
   const isZurueck = storung.status === 'zurueckgewiesen';
   if (!isZurueck && Number(storung.melderBenachrichtigung) !== 1) return;
   try {
     await getTransport().sendMail({
-      from: process.env.MAIL_FROM, to: melderMail,
+      from: process.env.MAIL_FROM,
+      to:   melderMail,
       subject: isZurueck
         ? `\u274C Ihre St\u00f6rungsmeldung wurde zur\u00fcckgewiesen \u2013 Ticket ${storung.id}`
         : `\uD83D\uDD14 Status\u00e4nderung Ihrer St\u00f6rungsmeldung \u2013 ${status}`,
@@ -449,56 +431,44 @@ async function sendReminderMail(storung, toEmail) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   try {
     await getTransport().sendMail({
-      from: process.env.MAIL_FROM, to: toEmail,
+      from: process.env.MAIL_FROM,
+      to:   toEmail,
       subject: `\u23F0 Erinnerung: Ticket ${storung.id} \u2013 ${storung.fahrzeug} (${status})`,
       html: buildReminderHtml(storung),
       text: `Erinnerung f\u00fcr Ticket ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nStatus: ${status}\nFehler: ${storung.fehlerBeschreibung}`,
     });
-    console.log(`[Mailer] Erinnerungs-Mail gesendet an: ${toEmail}`);
+    console.log(`[Mailer] Reminder-Mail an: ${toEmail}`);
   } catch (err) {
     console.error('[Mailer] sendReminderMail FEHLER:', err.message);
   }
 }
 
 async function sendDeleteMail(storung, deletedBy, grund) {
-  const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
-  const klasse  = KLASSE_LABEL[storung.klasse]   || storung.klasse || 'KFZ';
-  const datum   = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-  const subject = `[Gel\u00f6scht] St\u00f6rung ${storung.id} \u2013 ${storung.fahrzeug} | ${klasse} | Gel\u00f6scht von: ${deletedBy} | Melder: ${storung.melderName}`;
-  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}
-  .grund{background:#fff3f3;border-left:3px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:14px;white-space:pre-wrap;margin-top:12px}
-  </style></head><body><div class="wrap">
-  <div class="header"><h1>\uD83D\uDDD1\uFE0F St\u00f6rung gel\u00f6scht \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Gel\u00f6scht von: ${escHtml(deletedBy)}</p></div>
-  <div class="body">
-    <table>
-      <tr><th>Fahrzeug</th><td>${escHtml(storung.fahrzeug)}</td></tr>
-      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
-      <tr><th>Schweregrad</th><td>${schwere}</td></tr>
-      <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
-      <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)}</td></tr>
-      <tr><th>Erfasst am</th><td>${datum}</td></tr>
-      <tr><th>Gel\u00f6scht von</th><td><strong>${escHtml(deletedBy)}</strong></td></tr>
-    </table>
-    <div class="grund"><strong>Begr\u00fcndung:</strong><br>${escHtml(grund)}</div>
-  </div>
-  <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
-</div></body></html>`;
-  const recipients = (process.env.MAIL_RECIPIENTS || '').split(',').map(e => e.trim()).filter(Boolean);
-  if (recipients.length) {
-    try { await getTransport().sendMail({ from: process.env.MAIL_FROM, to: recipients.join(', '), subject, html, text: `Gel\u00f6scht: ${storung.id} \u2013 ${grund}` }); }
-    catch (err) { console.error('[Mailer] sendDeleteMail Admin FEHLER:', err.message); }
-  }
-  if (Number(storung.melderBenachrichtigung) === 1 && storung.status !== 'erledigt') {
-    const melderMail = extractMelderMail(storung.melderKontakt);
-    if (melderMail) {
-      try { await getTransport().sendMail({ from: process.env.MAIL_FROM, to: melderMail, subject: `Ihre St\u00f6rungsmeldung wurde entfernt \u2013 ${storung.fahrzeug}`, html, text: `Ihre Meldung ${storung.id} wurde gel\u00f6scht.\nGel\u00f6scht von: ${deletedBy}\nBegr\u00fcndung: ${grund}` }); }
-      catch (err) { console.error('[Mailer] sendDeleteMail Melder FEHLER:', err.message); }
-    }
+  const liste = getEskalationsListe();
+  if (!liste.length) { console.warn('[Mailer] sendDeleteMail: ADMIN_ESCALATION leer.'); return; }
+  const empfaenger = liste.map(e => e.email).join(', ');
+  const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM,
+      to:   empfaenger,
+      subject: `[Gel\u00f6scht] ${storung.fahrzeug} | ${klasse} | ${storung.id} \u2013 von ${deletedBy}`,
+      html: buildDeleteHtml(storung, deletedBy, grund),
+      text: `Ticket gel\u00f6scht:\nFahrzeug: ${storung.fahrzeug}\nTicket: ${storung.id}\nGel\u00f6scht von: ${deletedBy}\nGrund: ${grund}`,
+    });
+    console.log(`[Mailer] Delete-Mail an alle Admins: ${empfaenger}`);
+  } catch (err) {
+    console.error('[Mailer] sendDeleteMail FEHLER:', err.message);
   }
 }
 
 module.exports = {
-  sendStorungMail, sendMelderBestaetigung, sendStatusMail,
-  sendReminderMail, sendDeleteMail, sendEskalationsMail,
-  resolveAdminMail, getAdminMailMap, getEskalationsKette, getEskalationsEmpfaenger,
+  sendStorungMail,
+  sendMelderBestaetigung,
+  sendEskalationsMail,
+  sendStatusMail,
+  sendReminderMail,
+  sendDeleteMail,
+  resolveAdminMail,
+  getEskalationsListe,
 };

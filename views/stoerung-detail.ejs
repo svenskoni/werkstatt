@@ -9,15 +9,13 @@ const STATUS_LABEL = {
   erledigt:        'Erledigt',
   zurueckgewiesen: 'Zurückgewiesen',
 };
-const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Gerät' };
+const SCHWERE = {
+  klein:        { label: 'Klein',        icon: '🟢' },
+  normal:       { label: 'Normal',       icon: '🟡' },
+  totalausfall: { label: 'Totalausfall', icon: '🔴' },
+};
 const hasReminder  = !!storung.reminderAt;
 const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'}) : null;
-function toLocalInput(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 %>
 <div class="form-container">
   <div class="form-header">
@@ -57,7 +55,7 @@ function toLocalInput(iso) {
         </td></tr>
         <% if (hasReminder) { %>
         <tr><th>&#9201; Erinnerung</th><td>
-          <span id="reminderDisplay" style="font-size:var(--text-sm);color:var(--color-warning)">
+          <span style="font-size:var(--text-sm);color:var(--color-warning)">
             <strong><%= reminderDate %></strong>
           </span>
           <% if (user && user.role === 'admin') { %>
@@ -133,10 +131,10 @@ function toLocalInput(iso) {
           data-klasse="<%= storung.klasse || 'kfz' %>"
           data-mit-schwere="1"
           data-mit-klasse="1"
+          data-with-reminder="1"
           data-title="&#10003; Störung bestätigen"
           data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad und Klasse optional korrigieren."
-          data-label="Bestätigen"
-          data-with-reminder="1">
+          data-label="Bestätigen">
           &#10003; Bestätigen
         </button>
         <button class="btn btn-sm status-change-btn"
@@ -185,6 +183,21 @@ function toLocalInput(iso) {
       </div>
       <% } %>
 
+      <% if (storung.status === 'erledigt' || storung.status === 'zurueckgewiesen') { %>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+        <button class="btn btn-xs btn-ghost status-change-btn"
+          data-id="<%= storung.id %>"
+          data-target="gesendet"
+          data-schwere="<%= storung.schwere %>"
+          data-klasse="<%= storung.klasse || 'kfz' %>"
+          data-title="&#8617; Wiederöffnen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-label="Wiederöffnen">
+          &larrhk; Wiederöffnen
+        </button>
+      </div>
+      <% } %>
+
       <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-3)">
         Löscht diese Störung <strong>vollständig</strong>: alle Anhänge und alle Datenbankeinträge.
       </p>
@@ -201,61 +214,6 @@ function toLocalInput(iso) {
 </div>
 
 <% if (user && user.role === 'admin') { %>
-
-<!-- Status-Änderungs-Modal -->
-<div class="modal-backdrop" id="statusModal" hidden role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" tabindex="-1">
-  <div class="modal" style="max-width:520px">
-    <h3 id="statusModalTitle" style="margin-bottom:var(--space-2)"></h3>
-    <p id="statusModalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
-
-    <!-- Klasse ändern -->
-    <div id="klasseRow" style="display:none;margin-bottom:var(--space-4)">
-      <p style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-2)">Klasse anpassen:</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)">
-        <button type="button" class="klasse-modal-btn" data-value="kfz"
-          style="padding:var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;gap:var(--space-2);transition:border-color 180ms,background 180ms">
-          🚒 KFZ
-        </button>
-        <button type="button" class="klasse-modal-btn" data-value="geraet"
-          style="padding:var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;gap:var(--space-2);transition:border-color 180ms,background 180ms">
-          🔧 Gerät
-        </button>
-      </div>
-    </div>
-
-    <!-- Schweregrad ändern -->
-    <div id="schwereRow" style="display:none;margin-bottom:var(--space-4)">
-      <p style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-2)">Schweregrad anpassen:</p>
-      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
-        <% [['klein','🟢 Klein'],['normal','🟡 Normal'],['totalausfall','🔴 Totalausfall']].forEach(([v,l]) => { %>
-          <button type="button" class="schwere-modal-btn" data-value="<%= v %>"
-            style="padding:var(--space-2) var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);transition:border-color 180ms,background 180ms">
-            <%= l %>
-          </button>
-        <% }); %>
-      </div>
-    </div>
-
-    <!-- Erinnerung -->
-    <div id="reminderRow" style="display:none;margin-bottom:var(--space-4)">
-      <label style="font-size:var(--text-sm);font-weight:600;display:block;margin-bottom:var(--space-2)">Erinnerung setzen (optional):</label>
-      <input type="datetime-local" id="modalReminderAt" class="form-control" style="max-width:260px">
-    </div>
-
-    <!-- Notiz -->
-    <div class="form-group">
-      <label class="form-label" for="statusNote">Notiz (optional)</label>
-      <textarea class="form-control" id="statusNote" rows="2" maxlength="500"
-        placeholder="Interne Bemerkung…" style="resize:vertical"></textarea>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="statusCancelBtn">Abbrechen</button>
-      <button class="btn btn-sm" id="statusConfirmBtn"
-        style="background:var(--color-primary);border-color:var(--color-primary);color:#fff"></button>
-    </div>
-  </div>
-</div>
-
 <!-- Lösch-Modal -->
 <div class="modal-backdrop" id="deleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle" tabindex="-1">
   <div class="modal" style="max-width:500px">
@@ -298,151 +256,18 @@ function toLocalInput(iso) {
     </div>
   </div>
 </div>
-
 <% } %>
 
 <script>
 (function () {
-  const STOERUNG_ID = '<%= storung.id %>';
+  var STOERUNG_ID = '<%= storung.id %>';
 
-  // ── STATUS-MODAL ───────────────────────────────────────────────────────
-  const statusModal      = document.getElementById('statusModal');
-  const statusModalTitle = document.getElementById('statusModalTitle');
-  const statusModalDesc  = document.getElementById('statusModalDesc');
-  const statusNote       = document.getElementById('statusNote');
-  const statusCancelBtn  = document.getElementById('statusCancelBtn');
-  const statusConfirmBtn = document.getElementById('statusConfirmBtn');
-  const klasseRow        = document.getElementById('klasseRow');
-  const schwereRow       = document.getElementById('schwereRow');
-  const reminderRow      = document.getElementById('reminderRow');
-  const modalReminderAt  = document.getElementById('modalReminderAt');
-
-  let pendingAction   = null;
-  let selectedSchwere = '<%= storung.schwere %>';
-  let selectedKlasse  = '<%= storung.klasse || "kfz" %>';
-
-  function setKlasseActive(val) {
-    document.querySelectorAll('.klasse-modal-btn').forEach(function (b) {
-      var active = b.dataset.value === val;
-      b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
-      b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
-      b.style.fontWeight  = active ? '700' : '';
-    });
-  }
-
-  function setSchwereActive(val) {
-    document.querySelectorAll('.schwere-modal-btn').forEach(function (b) {
-      var active = b.dataset.value === val;
-      b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
-      b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
-      b.style.fontWeight  = active ? '700' : '';
-    });
-  }
-
-  document.querySelectorAll('.klasse-modal-btn').forEach(function (b) {
-    b.addEventListener('click', function () {
-      selectedKlasse = b.dataset.value;
-      setKlasseActive(selectedKlasse);
-    });
-  });
-
-  document.querySelectorAll('.schwere-modal-btn').forEach(function (b) {
-    b.addEventListener('click', function () {
-      selectedSchwere = b.dataset.value;
-      setSchwereActive(selectedSchwere);
-    });
-  });
-
-  function openStatusModal(btn) {
-    pendingAction = {
-      id:           btn.dataset.id,
-      target:       btn.dataset.target,
-      label:        btn.dataset.label        || 'Speichern',
-      mitSchwere:   btn.dataset.mitSchwere   === '1',
-      mitKlasse:    btn.dataset.mitKlasse    === '1',
-      withReminder: btn.dataset.withReminder === '1',
-    };
-    selectedSchwere = btn.dataset.schwere || '<%= storung.schwere %>';
-    selectedKlasse  = btn.dataset.klasse  || '<%= storung.klasse || "kfz" %>';
-
-    statusModalTitle.innerHTML   = btn.dataset.title || 'Aktion bestätigen';
-    statusModalDesc.innerHTML    = btn.dataset.desc  || '';
-    statusConfirmBtn.textContent = pendingAction.label;
-    statusNote.value = '';
-
-    klasseRow.style.display  = pendingAction.mitKlasse  ? 'block' : 'none';
-    schwereRow.style.display = pendingAction.mitSchwere ? 'block' : 'none';
-
-    if (pendingAction.mitKlasse)  setKlasseActive(selectedKlasse);
-    if (pendingAction.mitSchwere) setSchwereActive(selectedSchwere);
-
-    if (reminderRow) {
-      reminderRow.style.display = pendingAction.withReminder ? 'block' : 'none';
-      if (pendingAction.withReminder && modalReminderAt) {
-        var d   = new Date();
-        d.setDate(d.getDate() + 1);
-        var pad = function (n) { return String(n).padStart(2, '0'); };
-        modalReminderAt.value = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T08:00';
-      }
-    }
-
-    statusModal.hidden = false;
-    setTimeout(function () { statusNote.focus(); }, 50);
-  }
-
-  document.querySelectorAll('.status-change-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () { openStatusModal(btn); });
-  });
-
-  if (statusCancelBtn) statusCancelBtn.addEventListener('click', function () { statusModal.hidden = true; });
-  if (statusModal) {
-    statusModal.addEventListener('click', function (e) { if (e.target === statusModal) statusModal.hidden = true; });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !statusModal.hidden) statusModal.hidden = true; });
-  }
-
-  if (statusConfirmBtn) {
-    statusConfirmBtn.addEventListener('click', function () {
-      if (!pendingAction) return;
-      statusConfirmBtn.disabled     = true;
-      statusConfirmBtn.textContent  = 'Speichere…';
-
-      var body = {
-        status:  pendingAction.target,
-        note:    statusNote.value.trim(),
-        schwere: pendingAction.mitSchwere ? selectedSchwere : undefined,
-        klasse:  pendingAction.mitKlasse  ? selectedKlasse  : undefined,
-      };
-      if (pendingAction.withReminder && modalReminderAt && modalReminderAt.value) {
-        body.reminderAt = modalReminderAt.value;
-      }
-
-      fetch('/stoerung/' + pendingAction.id + '/status', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) { window.location.reload(); }
-        else {
-          alert('Fehler: ' + (data.error || 'Unbekannt'));
-          statusConfirmBtn.disabled    = false;
-          statusConfirmBtn.textContent = pendingAction.label;
-        }
-      })
-      .catch(function () {
-        alert('Netzwerkfehler.');
-        statusConfirmBtn.disabled    = false;
-        statusConfirmBtn.textContent = pendingAction.label;
-      });
-    });
-  }
-
-  // ── LÖSCHEN ─────────────────────────────────────────────────────────────
-  const deleteBtn   = document.getElementById('deleteBtn');
-  const deleteModal = document.getElementById('deleteModal');
-  const cancelBtn   = document.getElementById('deleteCancelBtn');
-  const confirmBtn  = document.getElementById('deleteConfirmBtn');
-  const grundField  = document.getElementById('deleteGrund');
+  // ── LÖSCHEN ─────────────────────────────────────────────────────
+  var deleteBtn   = document.getElementById('deleteBtn');
+  var deleteModal = document.getElementById('deleteModal');
+  var cancelBtn   = document.getElementById('deleteCancelBtn');
+  var confirmBtn  = document.getElementById('deleteConfirmBtn');
+  var grundField  = document.getElementById('deleteGrund');
 
   if (deleteBtn) {
     var erledigt = deleteBtn.dataset.erledigt === '1';
@@ -487,13 +312,13 @@ function toLocalInput(iso) {
     });
   }
 
-  // ── ERINNERUNG ─────────────────────────────────────────────────────────
-  const setReminderBtn    = document.getElementById('setReminderBtn');
-  const reminderModal     = document.getElementById('reminderModal');
-  const reminderAtInput   = document.getElementById('reminderAtInput');
-  const reminderFeedback  = document.getElementById('reminderFeedback');
-  const reminderCancelBtn = document.getElementById('reminderCancelBtn');
-  const reminderSaveBtn   = document.getElementById('reminderSaveBtn');
+  // ── ERINNERUNG (separates Modal für "Erinnerung setzen"-Button) ───────────
+  var setReminderBtn    = document.getElementById('setReminderBtn');
+  var reminderModal     = document.getElementById('reminderModal');
+  var reminderAtInput   = document.getElementById('reminderAtInput');
+  var reminderFeedback  = document.getElementById('reminderFeedback');
+  var reminderCancelBtn = document.getElementById('reminderCancelBtn');
+  var reminderSaveBtn   = document.getElementById('reminderSaveBtn');
 
   function defaultReminderTime() {
     var d = new Date(); d.setDate(d.getDate() + 1);
@@ -513,7 +338,7 @@ function toLocalInput(iso) {
   if (reminderCancelBtn) reminderCancelBtn.addEventListener('click', function () { reminderModal.hidden = true; });
   if (reminderModal) {
     reminderModal.addEventListener('click', function (e) { if (e.target === reminderModal) reminderModal.hidden = true; });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !reminderModal.hidden) reminderModal.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && reminderModal && !reminderModal.hidden) reminderModal.hidden = true; });
   }
   if (reminderSaveBtn) {
     reminderSaveBtn.addEventListener('click', function () {
@@ -544,7 +369,7 @@ function toLocalInput(iso) {
     });
   }
 
-  const clearReminderBtn = document.getElementById('clearReminderBtn');
+  var clearReminderBtn = document.getElementById('clearReminderBtn');
   if (clearReminderBtn) {
     clearReminderBtn.addEventListener('click', function () {
       if (!confirm('Erinnerung wirklich löschen?')) return;

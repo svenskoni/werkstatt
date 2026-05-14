@@ -217,7 +217,7 @@ function toLocalInput(iso) {
   </div>
 </div>
 
-<!-- Erinnerungs-Modal (nur für eingeloggten Admin – keine Auswahl anderer Admins) -->
+<!-- Erinnerungs-Modal -->
 <div class="modal-backdrop" id="reminderModal" hidden role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle" tabindex="-1">
   <div class="modal" style="max-width:420px">
     <h3 id="reminderModalTitle" style="margin-bottom:var(--space-2)">&#9201; Erinnerung setzen</h3>
@@ -239,52 +239,61 @@ function toLocalInput(iso) {
   </div>
 </div>
 
+<% } %>
+
 <script>
 (function() {
   const STOERUNG_ID = '<%= storung.id %>';
+  const IS_ADMIN = <%= (user && user.role === 'admin') ? 'true' : 'false' %>;
 
   // ── Löschen ────────────────────────────────────────────────────
-  const erledigt    = document.getElementById('deleteBtn')?.dataset.erledigt === '1';
   const deleteBtn   = document.getElementById('deleteBtn');
   const deleteModal = document.getElementById('deleteModal');
   const cancelBtn   = document.getElementById('deleteCancelBtn');
   const confirmBtn  = document.getElementById('deleteConfirmBtn');
   const grundField  = document.getElementById('deleteGrund');
+
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', () => {
+    const erledigt = deleteBtn.dataset.erledigt === '1';
+    deleteBtn.addEventListener('click', function() {
       if (erledigt) {
-        deleteBtn.disabled = true; deleteBtn.textContent = 'Lösche…';
-        doDelete('Erledigt – automatisch bereinigt');
+        deleteBtn.disabled = true; deleteBtn.textContent = 'Lösche\u2026';
+        doDelete('Erledigt \u2013 automatisch bereinigt');
       } else {
         grundField.value = ''; deleteModal.hidden = false;
-        setTimeout(() => grundField.focus(), 50);
+        setTimeout(function() { grundField.focus(); }, 50);
       }
     });
-    cancelBtn.addEventListener('click', () => { deleteModal.hidden = true; });
-    deleteModal.addEventListener('click', e => { if (e.target === deleteModal) deleteModal.hidden = true; });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
-    confirmBtn.addEventListener('click', () => {
+    cancelBtn.addEventListener('click', function() { deleteModal.hidden = true; });
+    deleteModal.addEventListener('click', function(e) { if (e.target === deleteModal) deleteModal.hidden = true; });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
+    confirmBtn.addEventListener('click', function() {
       const grund = grundField.value.trim();
       if (!grund) { grundField.style.borderColor = 'var(--color-primary)'; grundField.focus(); return; }
       grundField.style.borderColor = '';
-      confirmBtn.disabled = true; confirmBtn.textContent = 'Lösche…';
+      confirmBtn.disabled = true; confirmBtn.textContent = 'L\u00f6sche\u2026';
       doDelete(grund);
     });
   }
-  async function doDelete(grund) {
-    try {
-      const r = await fetch('/stoerung/' + STOERUNG_ID + '/loeschen', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grund }),
-      });
-      const data = await r.json();
+
+  function doDelete(grund) {
+    fetch('/stoerung/' + STOERUNG_ID + '/loeschen', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grund: grund }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
       if (data.ok) { window.location.href = '/?success=deleted'; }
       else {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
         if (deleteBtn) deleteBtn.disabled = false;
-        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Endgültig löschen'; }
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Endg\u00fcltig l\u00f6schen'; }
       }
-    } catch(e) { alert('Netzwerkfehler.'); if (deleteBtn) deleteBtn.disabled = false; }
+    })
+    .catch(function() {
+      alert('Netzwerkfehler.');
+      if (deleteBtn) deleteBtn.disabled = false;
+    });
   }
 
   // ── Erinnerung setzen ───────────────────────────────────────────────
@@ -298,42 +307,41 @@ function toLocalInput(iso) {
   function defaultReminderTime() {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T08:00`;
+    const pad = function(n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T08:00';
   }
 
   if (setReminderBtn) {
-    setReminderBtn.addEventListener('click', () => {
+    setReminderBtn.addEventListener('click', function() {
       reminderAtInput.value = defaultReminderTime();
       reminderFeedback.textContent = '';
       reminderAtInput.style.borderColor = '';
       reminderModal.hidden = false;
-      setTimeout(() => reminderAtInput.focus(), 50);
+      setTimeout(function() { reminderAtInput.focus(); }, 50);
     });
   }
   if (reminderCancelBtn) {
-    reminderCancelBtn.addEventListener('click', () => { reminderModal.hidden = true; });
+    reminderCancelBtn.addEventListener('click', function() { reminderModal.hidden = true; });
   }
   if (reminderModal) {
-    reminderModal.addEventListener('click', e => { if (e.target === reminderModal) reminderModal.hidden = true; });
-    document.addEventListener('keydown', e => {
+    reminderModal.addEventListener('click', function(e) { if (e.target === reminderModal) reminderModal.hidden = true; });
+    document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && !reminderModal.hidden) reminderModal.hidden = true;
     });
   }
   if (reminderSaveBtn) {
-    reminderSaveBtn.addEventListener('click', async () => {
+    reminderSaveBtn.addEventListener('click', function() {
       const at = reminderAtInput.value;
-      if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
+      if (!at) { reminderFeedback.textContent = 'Bitte ein Datum ausw\u00e4hlen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
       reminderFeedback.textContent = '';
       reminderAtInput.style.borderColor = '';
-      reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere…';
-      try {
-        const r = await fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          // reminderTo leer lassen – Server nimmt eingeloggten Admin
-          body: JSON.stringify({ reminderAt: at, reminderTo: '' }),
-        });
-        const data = await r.json();
+      reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere\u2026';
+      fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reminderAt: at, reminderTo: '' }),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
         if (data.ok) {
           reminderModal.hidden = true;
           window.location.reload();
@@ -343,30 +351,31 @@ function toLocalInput(iso) {
           reminderSaveBtn.disabled = false;
           reminderSaveBtn.textContent = '\u23F0 Erinnerung speichern';
         }
-      } catch(e) {
+      })
+      .catch(function() {
         reminderFeedback.textContent = 'Netzwerkfehler.';
         reminderSaveBtn.disabled = false;
         reminderSaveBtn.textContent = '\u23F0 Erinnerung speichern';
-      }
+      });
     });
   }
 
   // ── Erinnerung löschen ───────────────────────────────────────────────
   const clearReminderBtn = document.getElementById('clearReminderBtn');
   if (clearReminderBtn) {
-    clearReminderBtn.addEventListener('click', async () => {
-      if (!confirm('Erinnerung wirklich löschen?')) return;
-      try {
-        const r = await fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reminderAt: '', reminderTo: '' }),
-        });
-        const data = await r.json();
+    clearReminderBtn.addEventListener('click', function() {
+      if (!confirm('Erinnerung wirklich l\u00f6schen?')) return;
+      fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reminderAt: '', reminderTo: '' }),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
         if (data.ok) window.location.reload();
         else alert('Fehler: ' + (data.error || 'Unbekannt'));
-      } catch(e) { alert('Netzwerkfehler.'); }
+      })
+      .catch(function() { alert('Netzwerkfehler.'); });
     });
   }
 })();
 </script>
-<% } %>

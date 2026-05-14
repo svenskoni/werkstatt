@@ -161,8 +161,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           data-target="erledigt"
           data-schwere="<%= storung.schwere %>"
           data-klasse="<%= storung.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="&#10003; Störung erledigen"
-          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
+          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert. Klasse und Schweregrad optional korrigieren."
           data-label="Erledigt setzen">
           &#10003; Erledigt
         </button>
@@ -171,8 +173,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           data-target="gesendet"
           data-schwere="<%= storung.schwere %>"
           data-klasse="<%= storung.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="&#8617; Zurück zu Eingegangen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt. Klasse und Schweregrad optional korrigieren."
           data-label="Zurücksetzen">
           &larrhk; Zurück zu Eingegangen
         </button>
@@ -190,8 +194,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           data-target="gesendet"
           data-schwere="<%= storung.schwere %>"
           data-klasse="<%= storung.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="&#8617; Wiederöffnen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt. Klasse und Schweregrad optional korrigieren."
           data-label="Wiederöffnen">
           &larrhk; Wiederöffnen
         </button>

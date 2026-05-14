@@ -72,8 +72,10 @@ const SCHWERE = {
           data-target="erledigt"
           data-schwere="<%= s.schwere %>"
           data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="✓ Störung erledigen"
-          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
+          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert. Klasse und Schweregrad optional korrigieren."
           data-label="Erledigt setzen">
           ✓ Erledigt
         </button>
@@ -82,8 +84,10 @@ const SCHWERE = {
           data-target="gesendet"
           data-schwere="<%= s.schwere %>"
           data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="↩ Zurück zu Eingegangen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt. Klasse und Schweregrad optional korrigieren."
           data-label="Zurücksetzen">
           ↩ Zurück
         </button>
@@ -94,8 +98,10 @@ const SCHWERE = {
           data-target="gesendet"
           data-schwere="<%= s.schwere %>"
           data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="↩ Wiederöffnen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt. Klasse und Schweregrad optional korrigieren."
           data-label="Wiederöffnen">
           ↩ Wiederöffnen
         </button>

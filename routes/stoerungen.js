@@ -211,53 +211,6 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Info-Notiz hinzufügen (nur Admin) ────────────────────────────────────────────────────
-router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
-  try {
-    const { notiz } = req.body;
-    if (!notiz || !notiz.trim()) return res.status(400).json({ error: 'Notiz darf nicht leer sein.' });
-    const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-    if (storung.status !== 'bestaetigt') return res.status(400).json({ error: 'Nur bei Status "In Bearbeitung" möglich.' });
-    await db.addHistoryNote(storung.id, req.session.user.username, notiz.trim());
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[Notiz]', err);
-    res.status(500).json({ error: 'Interner Fehler.' });
-  }
-});
-
-// ── Erinnerung setzen (nur Admin) ───────────────────────────────────────────────────────────────
-router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
-  try {
-    const { reminderAt, reminderTo } = req.body;
-    const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-    if (!reminderAt) {
-      await db.clearReminder(storung.id);
-      return res.json({ ok: true, cleared: true });
-    }
-    let dt;
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(reminderAt)) {
-      const localDate = new Date(reminderAt + ':00');
-      const berlin = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
-      const diff = localDate - berlin;
-      dt = new Date(localDate.getTime() - diff);
-    } else {
-      dt = new Date(reminderAt);
-    }
-    if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ungültiges Datum.' });
-    if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
-    const to = mailer.resolveAdminMail(req.session.user.username);
-    if (!to) return res.status(400).json({ error: 'Keine gültige Admin-E-Mail gefunden. Bitte ADMIN_ESCALATION in der .env prüfen.' });
-    await db.setReminder(storung.id, dt.toISOString(), to);
-    res.json({ ok: true, reminderAt: dt.toISOString(), reminderTo: to, localTime: dt.toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) });
-  } catch (err) {
-    console.error('[Reminder]', err);
-    res.status(500).json({ error: 'Interner Fehler.' });
-  }
-});
-
 // ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {

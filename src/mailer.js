@@ -45,7 +45,6 @@ th{background:#f7f7f7;width:38%}
 .footer{padding:12px 28px;background:#f7f7f7;font-size:12px;color:#888;border-top:1px solid #e0e0e0}
 .schwere-change{background:#fff8e1;border-left:3px solid #e67e22;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
 .changed-by{background:#eaf4fb;border-left:3px solid #2980b9;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
-.reminder-banner{background:#fff3cd;border-left:4px solid #e6a817;padding:10px 14px;border-radius:4px;font-size:14px;margin-bottom:12px;font-weight:bold}
 .klasse-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;background:#e8f4f8;color:#1a6080}
 .eskalation-banner{background:#fdecea;border-left:4px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;font-weight:bold}`;
 
@@ -236,34 +235,6 @@ function buildMelderStatusHtml(storung, note, changedBy, alterSchwere) {
 </div></body></html>`;
 }
 
-function buildReminderHtml(storung) {
-  const baseUrl   = process.env.APP_BASE_URL;
-  const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
-  const status    = STATUS_LABEL[storung.status]    || storung.status;
-  const klasse    = KLASSE_LABEL[storung.klasse]    || storung.klasse || 'KFZ';
-  const datum     = new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-  const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
-  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
-  <div class="header"><h1>\u23F0 Erinnerung: offenes Ticket \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Ticket: ${escHtml(storung.id)}</p></div>
-  <div class="body">
-    <div class="reminder-banner">\u23F0 Du hast dir eine Erinnerung f\u00fcr dieses Ticket gesetzt.</div>
-    <table>
-      <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
-      <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
-      <tr><th>Schweregrad</th><td>${schwere}</td></tr>
-      <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
-      <tr><th>Aktueller Status</th><td><strong>${status}</strong></td></tr>
-      <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} \u2013 ${escHtml(storung.melderKontakt)}</td></tr>
-      <tr><th>Erfasst am</th><td>${datum}</td></tr>
-      <tr><th>Ticket-Nr.</th><td><code>${storung.id}</code></td></tr>
-    </table>
-    ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
-    <a href="${detailUrl}" class="btn">Ticket \u00f6ffnen \u2192</a>
-  </div>
-  <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
-</div></body></html>`;
-}
-
 function buildDeleteHtml(storung, deletedBy, grund) {
   const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
@@ -333,7 +304,8 @@ async function sendMelderBestaetigung(storung) {
 
 /**
  * Eskalations-Mail → geht an den Admin der entsprechenden Stufe.
- * Wird vom Reminder-Cron aufgerufen.
+ * Abwesende Admins werden übersprungen.
+ * Wird vom Eskalations-Cron in reminder.js aufgerufen.
  */
 async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
   const empfaenger = await resolveEskalationsEmpfaenger(stufe, abwesendeUsernames || []);
@@ -361,7 +333,7 @@ async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
 
 /**
  * Statuswechsel-Mail:
- * - an den zuständigen Admin der aktuellen Eskalationsstufe
+ * - Bestätigung an den Admin der die Aktion ausgeführt hat
  * - bei 'bestaetigt': zusätzlich an Werkstatt (MAIL_KFZ / MAIL_GERAET)
  * - bei Opt-in oder Zurückweisung: an Melder
  */
@@ -370,7 +342,7 @@ async function sendStatusMail(storung, changedBy, note) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
 
-  // 1. Admin der aktuellen Eskalationsstufe (oder changedBy direkt)
+  // 1. Bestätigung an den Admin der die Änderung vorgenommen hat
   const changedByMail = resolveAdminMail(changedBy);
   if (changedByMail) {
     const schwereHinweis = alterSchwere
@@ -427,22 +399,6 @@ async function sendStatusMail(storung, changedBy, note) {
   } catch (err) { console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message); }
 }
 
-async function sendReminderMail(storung, toEmail) {
-  const status = STATUS_LABEL[storung.status] || storung.status;
-  try {
-    await getTransport().sendMail({
-      from: process.env.MAIL_FROM,
-      to:   toEmail,
-      subject: `\u23F0 Erinnerung: Ticket ${storung.id} \u2013 ${storung.fahrzeug} (${status})`,
-      html: buildReminderHtml(storung),
-      text: `Erinnerung f\u00fcr Ticket ${storung.id}\nFahrzeug: ${storung.fahrzeug}\nStatus: ${status}\nFehler: ${storung.fehlerBeschreibung}`,
-    });
-    console.log(`[Mailer] Reminder-Mail an: ${toEmail}`);
-  } catch (err) {
-    console.error('[Mailer] sendReminderMail FEHLER:', err.message);
-  }
-}
-
 async function sendDeleteMail(storung, deletedBy, grund) {
   const liste = getEskalationsListe();
   if (!liste.length) { console.warn('[Mailer] sendDeleteMail: ADMIN_ESCALATION leer.'); return; }
@@ -467,7 +423,6 @@ module.exports = {
   sendMelderBestaetigung,
   sendEskalationsMail,
   sendStatusMail,
-  sendReminderMail,
   sendDeleteMail,
   resolveAdminMail,
   getEskalationsListe,

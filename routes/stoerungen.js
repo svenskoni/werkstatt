@@ -116,17 +116,21 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
 }, async (req, res) => {
   const old = req.body || {};
   try {
-    const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
+    const { fahrzeug, klasse, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
     const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
     const kontaktTeile = [];
     if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
     if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
     const melderKontakt = kontaktTeile.join(' / ');
 
+    const validKlasse = ['kfz', 'geraet'];
+    const safeKlasse  = validKlasse.includes(klasse) ? klasse : null;
+
     const errors = [];
     if (!melderName || melderName.trim().length < 3) errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
-    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
-    if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
+    if (!fahrzeug)          errors.push('Bitte ein Fahrzeug auswählen.');
+    if (!safeKlasse)        errors.push('Bitte eine Klasse wählen: KFZ oder Gerät.');
+    if (!schwere)           errors.push('Bitte einen Schweregrad auswählen.');
     if (!fehlerBeschreibung || fehlerBeschreibung.trim().length < 6) errors.push('Fehlerbeschreibung ist erforderlich (mind. 6 Zeichen).');
     if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
 
@@ -151,7 +155,7 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
       .map(f => ({ filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size }));
 
     const storung = await db.createStorung({
-      fahrzeug, schwere, fehlerBeschreibung,
+      fahrzeug, klasse: safeKlasse, schwere, fehlerBeschreibung,
       beschreibung: beschreibung || '',
       createdBy: req.session.user.username,
       melderName: melderName.trim(),
@@ -184,14 +188,16 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
 // ── Status ändern (nur Admin) ──────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
-    const { status, notiz, neuSchwere } = req.body;
+    const { status, notiz, neuSchwere, neuKlasse } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-    const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
+    const validSchwere = ['klein', 'normal', 'totalausfall'];
     const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere);
+    const validKlasse = ['kfz', 'geraet'];
+    const geprüfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere, geprüfteKlasse);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
@@ -248,23 +254,25 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API (Fahrzeug-Pflicht + Monat/ID/Freitext optional) ──────────────────────────────────────────
+// ── Such-API (Issue #19: klasse-Filter) ──────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
-    const { fahrzeug, monat, status, ticketId, q } = req.query;
+    const { fahrzeug, monat, status, ticketId, q, klasse } = req.query;
     if (!fahrzeug) return res.status(400).json({ error: 'Fahrzeug fehlt.' });
     const statusList = status
       ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
+    const validKlasse = ['kfz', 'geraet'];
+    const klasseFilter = klasse && validKlasse.includes(klasse) ? klasse : null;
     const rows = await db.searchByFahrzeugMonat(
-      fahrzeug,
-      monat || null,
-      statusList,
-      ticketId || null,
-      q || null
+      fahrzeug, monat || null, statusList, ticketId || null, q || null
     );
-    res.json(rows.map(r => ({
-      id: r.id, fahrzeug: r.fahrzeug, fehlerBeschreibung: r.fehlerBeschreibung,
+    const filtered = klasseFilter
+      ? rows.filter(r => (r.klasse || 'kfz') === klasseFilter)
+      : rows;
+    res.json(filtered.map(r => ({
+      id: r.id, fahrzeug: r.fahrzeug, klasse: r.klasse || 'kfz',
+      fehlerBeschreibung: r.fehlerBeschreibung,
       schwere: r.schwere, status: r.status, createdAt: r.createdAt,
     })));
   } catch (err) {
@@ -273,7 +281,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ───────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

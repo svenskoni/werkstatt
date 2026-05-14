@@ -4,26 +4,28 @@ function formatCardDate(iso) {
   return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
     + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
 }
-
 const SCHWERE = {
-  klein:        { label: 'Klein',        icon: '🟢' },
-  normal:       { label: 'Normal',       icon: '🟡' },
-  schwer:       { label: 'Schwer',       icon: '🟠' },
-  totalausfall: { label: 'Totalausfall', icon: '🔴' },
+  klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
+  normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
+  totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
+const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00E4t' };
 %>
 <article class="stoerung-card card-<%= s.status %>" role="article">
   <div class="card-top">
     <span class="card-fahrzeug"><%= s.fahrzeug %></span>
-    <span class="schwere-badge schwere-<%= s.schwere.toLowerCase() %>">
-      <%= SCHWERE[s.schwere]?.icon %> <%= SCHWERE[s.schwere]?.label %>
-    </span>
+    <div style="display:flex;gap:var(--space-1);align-items:center">
+      <span class="klasse-chip"><%= KLASSE_LABEL[s.klasse] || s.klasse || 'KFZ' %></span>
+      <span class="schwere-badge schwere-<%= s.schwere.toLowerCase() %>">
+        <%= SCHWERE[s.schwere]?.icon %> <%= SCHWERE[s.schwere]?.label %>
+      </span>
+    </div>
   </div>
 
   <p class="card-fehler"><%= s.fehlerBeschreibung %></p>
 
   <% if (s.beschreibung) { %>
-    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '…' : '' %></p>
+    <p class="card-beschreibung"><%= s.beschreibung.slice(0, 100) %><%= s.beschreibung.length > 100 ? '\u2026' : '' %></p>
   <% } %>
 
   <div class="card-bottom">
@@ -31,7 +33,7 @@ const SCHWERE = {
     <span class="card-meta">&middot;</span>
     <span class="card-meta"><%= formatCardDate(s.createdAt) %></span>
     <% if (s.attachments.length > 0) { %>
-      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anhänge">📌 <%= s.attachments.length %></span>
+      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anh\u00E4nge">\uD83D\uDCCC <%= s.attachments.length %></span>
     <% } %>
   </div>
 
@@ -44,22 +46,27 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="bestaetigt"
           data-schwere="<%= s.schwere %>"
+          data-klasse="<%= s.klasse || 'kfz' %>"
           data-mit-schwere="1"
+          data-mit-klasse="1"
           data-with-reminder="1"
-          data-title="✓ Störung bestätigen"
-          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad optional korrigieren."
-          data-label="Bestätigen">
-          ✓ Bestätigen
+          data-title="\u2713 St\u00F6rung best\u00E4tigen"
+          data-desc="St\u00F6rung wird als &raquo;In Bearbeitung&laquo; markiert."
+          data-label="Best\u00E4tigen">
+          \u2713 Best\u00E4tigen
         </button>
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-primary);color:#fff;border:none"
           data-id="<%= s.id %>"
           data-target="zurueckgewiesen"
           data-schwere="<%= s.schwere %>"
-          data-title="✕ Ticket zurückweisen"
-          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
-          data-label="Zurückweisen">
-          ✕ Zurückweisen
+          data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
+          data-title="\u2715 Ticket zur\u00FCckweisen"
+          data-desc="Das Ticket wird als &raquo;Zur\u00FCckgewiesen&laquo; geschlossen."
+          data-label="Zur\u00FCckweisen">
+          \u2715 Zur\u00FCckweisen
         </button>
       <% } %>
       <% if (s.status === 'bestaetigt') { %>
@@ -68,19 +75,25 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="erledigt"
           data-schwere="<%= s.schwere %>"
-          data-title="✓ Störung erledigen"
-          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
+          data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
+          data-title="\u2713 St\u00F6rung erledigen"
+          data-desc="St\u00F6rung wird als &raquo;Erledigt&laquo; markiert."
           data-label="Erledigt setzen">
-          ✓ Erledigt
+          \u2713 Erledigt
         </button>
         <button class="btn btn-xs btn-ghost status-change-btn"
           data-id="<%= s.id %>"
           data-target="gesendet"
           data-schwere="<%= s.schwere %>"
-          data-title="↩ Zurück zu Eingegangen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
-          data-label="Zurücksetzen">
-          ↩ Zurück
+          data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
+          data-title="\u21A9 Zur\u00FCck zu Eingegangen"
+          data-desc="Status wird zur\u00FCckgesetzt."
+          data-label="Zur\u00FCcksetzen">
+          \u21A9 Zur\u00FCck
         </button>
       <% } %>
       <% if (s.status === 'erledigt' || s.status === 'zurueckgewiesen') { %>
@@ -88,12 +101,29 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="gesendet"
           data-schwere="<%= s.schwere %>"
-          data-title="↩ Wiederерöffnen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
-          data-label="Wiederерöffnen">
-          ↩ Wiederöffnen
+          data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
+          data-title="\u21A9 Wieder\u00F6ffnen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zur\u00FCckgesetzt."
+          data-label="Wieder\u00F6ffnen">
+          \u21A9 Wieder\u00F6ffnen
         </button>
       <% } %>
     <% } %>
   </div>
 </article>
+
+<style>
+.klasse-chip {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-offset);
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+  border: 1px solid var(--color-border);
+}
+</style>

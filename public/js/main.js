@@ -24,18 +24,19 @@
 
 // ─── Globales Status-Modal ──────────────────────────────────────────────────
 (function () {
-  const modal          = document.getElementById('statusModal');
-  const modalTitle     = document.getElementById('modalTitle');
-  const modalDesc      = document.getElementById('modalDesc');
-  const modalConfirm   = document.getElementById('modalConfirm');
-  const modalCancel    = document.getElementById('modalCancel');
-  const statusNote     = document.getElementById('statusNote');
-  const schwereWrap    = document.getElementById('schwereWrap');
-  const schwereSelect  = document.getElementById('schwereSelect');
-  const reminderWrap   = document.getElementById('reminderWrap');
-  const reminderEnabled= document.getElementById('reminderEnabled');
-  const reminderFields = document.getElementById('reminderFields');
-  const reminderAtInput= document.getElementById('modalReminderAt');
+  const modal           = document.getElementById('statusModal');
+  const modalTitle      = document.getElementById('modalTitle');
+  const modalDesc       = document.getElementById('modalDesc');
+  const modalConfirm    = document.getElementById('modalConfirm');
+  const modalCancel     = document.getElementById('modalCancel');
+  const statusNote      = document.getElementById('statusNote');
+  const klasseWrap      = document.getElementById('klasseWrap');
+  const schwereWrap     = document.getElementById('schwereWrap');
+  const schwereSelect   = document.getElementById('schwereSelect');
+  const reminderWrap    = document.getElementById('reminderWrap');
+  const reminderEnabled = document.getElementById('reminderEnabled');
+  const reminderFields  = document.getElementById('reminderFields');
+  const reminderAtInput = document.getElementById('modalReminderAt');
   if (!modal) return;
 
   const STATUS_LABELS = {
@@ -43,10 +44,11 @@
     erledigt: 'Erledigt',   zurueckgewiesen: 'Zur\u00fcckgewiesen',
   };
 
-  let pendingAction = null;
-  let aktSchwereRef = 'normal';
+  let pendingAction  = null;
+  let aktSchwereRef  = 'normal';
+  let aktKlasseRef   = 'kfz';
+  let selectedKlasse = 'kfz';
 
-  // Morgen 08:00 im Format "YYYY-MM-DDTHH:MM" (lokale Zeit)
   function defaultReminderTime() {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -54,29 +56,50 @@
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T08:00`;
   }
 
-  // String-Vergleich in lokaler Zeit – vermeidet Timezone-Probleme mit new Date()
-  function isFuture(datetimeLocalValue) {
-    if (!datetimeLocalValue) return false;
+  function isFuture(val) {
+    if (!val) return false;
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
     const nowStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    return datetimeLocalValue > nowStr;
+    return val > nowStr;
   }
+
+  function setKlasseActive(val) {
+    document.querySelectorAll('.klasse-modal-btn').forEach(b => {
+      const active = b.dataset.value === val;
+      b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
+      b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
+      b.style.fontWeight  = active ? '700' : '400';
+    });
+  }
+
+  document.querySelectorAll('.klasse-modal-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      selectedKlasse = b.dataset.value;
+      setKlasseActive(selectedKlasse);
+    });
+  });
 
   if (reminderEnabled) {
     reminderEnabled.addEventListener('change', () => {
-      reminderFields.style.display = reminderEnabled.checked ? '' : 'none';
+      reminderFields.style.display = reminderEnabled.checked ? 'block' : 'none';
       if (reminderEnabled.checked && !reminderAtInput.value) {
         reminderAtInput.value = defaultReminderTime();
       }
     });
   }
 
+  function show(el) { el.style.display = 'block'; }
+  function hide(el) { el.style.display = 'none';  }
+
   function openModal(btn) {
     const target       = btn.dataset.target;
-    const mitSchwere   = btn.dataset.mitSchwere === '1';
+    const mitSchwere   = btn.dataset.mitSchwere   === '1';
+    const mitKlasse    = btn.dataset.mitKlasse    === '1';
     const withReminder = btn.dataset.withReminder === '1';
     aktSchwereRef      = btn.dataset.schwere || 'normal';
+    aktKlasseRef       = btn.dataset.klasse  || 'kfz';
+    selectedKlasse     = aktKlasseRef;
     const label        = btn.dataset.label || STATUS_LABELS[target] || target;
     const color        = btn.dataset.color || '';
 
@@ -88,18 +111,24 @@
     modalConfirm.style.cssText = color ? `background:${color};color:#fff;border:none` : '';
     modalConfirm.disabled      = false;
 
-    schwereWrap.style.display  = mitSchwere ? '' : 'none';
-    if (mitSchwere) schwereSelect.value = aktSchwereRef;
+    // Klasse — explizit block/none statt leer/'none'
+    if (mitKlasse) { show(klasseWrap); setKlasseActive(selectedKlasse); }
+    else           { hide(klasseWrap); }
 
-    reminderWrap.style.display        = withReminder ? '' : 'none';
-    reminderEnabled.checked           = false;
-    reminderFields.style.display      = 'none';
-    reminderAtInput.value             = '';
+    // Schweregrad
+    if (mitSchwere) { show(schwereWrap); schwereSelect.value = aktSchwereRef; }
+    else            { hide(schwereWrap); }
+
+    // Erinnerung
+    if (withReminder) { show(reminderWrap); } else { hide(reminderWrap); }
+    reminderEnabled.checked      = false;
+    reminderFields.style.display = 'none';
+    reminderAtInput.value        = '';
     reminderAtInput.style.borderColor = '';
 
     statusNote.value = '';
     modal.hidden = false;
-    setTimeout(() => (mitSchwere ? schwereSelect : statusNote).focus(), 50);
+    setTimeout(() => (mitKlasse ? document.querySelector('.klasse-modal-btn') : mitSchwere ? schwereSelect : statusNote).focus(), 50);
   }
 
   document.addEventListener('click', e => {
@@ -116,7 +145,6 @@
   modalConfirm.addEventListener('click', async () => {
     if (!pendingAction) return;
 
-    // Reminder-Validierung: nur wenn Checkbox aktiv
     const wantsReminder = reminderEnabled.checked;
     if (wantsReminder && !isFuture(reminderAtInput.value)) {
       reminderAtInput.style.borderColor = 'var(--color-error)';
@@ -126,17 +154,21 @@
     if (wantsReminder) reminderAtInput.style.borderColor = '';
 
     const notiz      = statusNote.value.trim() || null;
-    const mitSchwere = schwereWrap.style.display !== 'none';
+    const mitSchwere = schwereWrap.style.display === 'block';
+    const mitKlasse  = klasseWrap.style.display  === 'block';
     const payload    = { status: pendingAction.target, notiz };
+
     if (mitSchwere && schwereSelect.value !== aktSchwereRef) {
       payload.neuSchwere = schwereSelect.value;
+    }
+    if (mitKlasse && selectedKlasse !== aktKlasseRef) {
+      payload.neuKlasse = selectedKlasse;
     }
 
     modalConfirm.disabled    = true;
     modalConfirm.textContent = 'Wird gespeichert\u2026';
 
     try {
-      // 1. Status setzen
       const res  = await fetch(`/stoerung/${pendingAction.id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -146,11 +178,10 @@
       if (!data.ok) {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
         modalConfirm.disabled    = false;
-        modalConfirm.textContent = 'Best\u00e4tigen';
+        modalConfirm.textContent = label;
         return;
       }
 
-      // 2. Reminder setzen – geht an eingeloggten Admin (Server löst Username → Mail auf)
       if (wantsReminder) {
         await fetch(`/stoerung/${pendingAction.id}/reminder`, {
           method: 'POST',

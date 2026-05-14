@@ -14,6 +14,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS stoerungen (
       id                     TEXT PRIMARY KEY,
       fahrzeug               TEXT NOT NULL,
+      klasse                 TEXT NOT NULL DEFAULT 'kfz',
       schwere                TEXT NOT NULL,
       fehlerBeschreibung     TEXT NOT NULL,
       beschreibung           TEXT,
@@ -48,22 +49,6 @@ async function initDb() {
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
   `);
-
-  for (const migration of [
-    `ALTER TABLE stoerungen ADD COLUMN melderBenachrichtigung INTEGER NOT NULL DEFAULT 0`,
-    `ALTER TABLE stoerungen ADD COLUMN updatedAt TEXT`,
-    `ALTER TABLE stoerungen ADD COLUMN reminderAt TEXT`,
-    `ALTER TABLE stoerungen ADD COLUMN reminderTo TEXT`,
-  ]) {
-    try { await db.execute(migration); } catch { /* already exists */ }
-  }
-
-  await db.execute(`UPDATE stoerungen SET updatedAt = createdAt WHERE updatedAt IS NULL`);
-  await db.execute(
-    `UPDATE stoerungen SET melderBenachrichtigung = 0
-     WHERE melderBenachrichtigung = 1
-       AND (melderKontakt NOT LIKE '%@%' OR melderKontakt IS NULL OR melderKontakt = '')`
-  );
 }
 
 async function run(sql, args = []) { return db.execute({ sql, args }); }
@@ -74,6 +59,7 @@ function normalizeRow(row) {
   if (!row) return row;
   const out = Object.assign({}, row);
   out.melderBenachrichtigung = Number(out.melderBenachrichtigung ?? 0);
+  out.klasse = out.klasse || 'kfz';
   return out;
 }
 
@@ -90,13 +76,18 @@ async function generateTicketId(fahrzeug, isoDate) {
   return prefix + String(next).padStart(3, '0');
 }
 
-async function createStorung({ fahrzeug, schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
+async function createStorung({ fahrzeug, klasse = 'kfz', schwere, fehlerBeschreibung, beschreibung, createdBy, melderName, melderKontakt, melderBenachrichtigung = 0, attachments = [] }) {
   const now     = new Date().toISOString();
   const id      = await generateTicketId(fahrzeug, now);
   const benFlag = Number(melderBenachrichtigung) === 1 ? 1 : 0;
+  // Issue #13: 'schwer' nicht mehr gültig
+  const validKlasse  = ['kfz', 'geraet'];
+  const safeKlasse   = validKlasse.includes(klasse) ? klasse : 'kfz';
+  const validSchwere = ['klein', 'normal', 'totalausfall'];
+  const safeSchwere  = validSchwere.includes(schwere) ? schwere : 'normal';
   await run(
-    `INSERT INTO stoerungen (id,fahrzeug,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,updatedAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [id, fahrzeug, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, now, melderName, melderKontakt, benFlag]
+    `INSERT INTO stoerungen (id,fahrzeug,klasse,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,updatedAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, fahrzeug, safeKlasse, safeSchwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, now, melderName, melderKontakt, benFlag]
   );
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
@@ -143,34 +134,48 @@ async function getByStatus(status) {
   }));
 }
 
-async function updateStatus(id, newStatus, changedBy, note, neuSchwere) {
+async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlasse) {
   const now = new Date().toISOString();
-  const current = await get(`SELECT schwere FROM stoerungen WHERE id = ?`, [id]);
+  const current = await get(`SELECT schwere, klasse FROM stoerungen WHERE id = ?`, [id]);
   const alterSchwere = current ? current.schwere : null;
-  const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
+  // Issue #13: 'schwer' nicht mehr gültig
+  const validSchwere = ['klein', 'normal', 'totalausfall'];
   const schwereGeaendert = neuSchwere && validSchwere.includes(neuSchwere) && neuSchwere !== alterSchwere;
 
-  if (schwereGeaendert) {
-    await run(`UPDATE stoerungen SET status = ?, schwere = ?, updatedAt = ? WHERE id = ?`, [newStatus, neuSchwere, now, id]);
-  } else {
-    await run(`UPDATE stoerungen SET status = ?, updatedAt = ? WHERE id = ?`, [newStatus, now, id]);
-  }
+  const validKlasse = ['kfz', 'geraet'];
+  const alterKlasse = current ? current.klasse : 'kfz';
+  const klasseGeaendert = neuKlasse && validKlasse.includes(neuKlasse) && neuKlasse !== alterKlasse;
+
+  let setClauses = 'status = ?, updatedAt = ?';
+  let setArgs    = [newStatus, now];
+  if (schwereGeaendert) { setClauses += ', schwere = ?'; setArgs.push(neuSchwere); }
+  if (klasseGeaendert)  { setClauses += ', klasse = ?';  setArgs.push(neuKlasse); }
+  setArgs.push(id);
+  await run(`UPDATE stoerungen SET ${setClauses} WHERE id = ?`, setArgs);
 
   const SCHWERE_LABEL = {
-    klein: '\uD83D\uDFE2 Klein', normal: '\uD83D\uDFE1 Normal', schwer: '\uD83D\uDFE0 Schwer', totalausfall: '\uD83D\uDD34 Totalausfall',
+    klein: '\uD83D\uDFE2 Klein', normal: '\uD83D\uDFE1 Normal', totalausfall: '\uD83D\uDD34 Totalausfall',
   };
+  const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
+
   let historyNote = note || null;
-  if (schwereGeaendert) {
-    const aenderung = `[Schweregrad ge\u00e4ndert: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${SCHWERE_LABEL[neuSchwere] || neuSchwere}]`;
-    historyNote = historyNote ? `${historyNote} ${aenderung}` : aenderung;
+  const aenderungen = [];
+  if (schwereGeaendert) aenderungen.push(`Schweregrad: ${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${SCHWERE_LABEL[neuSchwere] || neuSchwere}`);
+  if (klasseGeaendert)  aenderungen.push(`Klasse: ${KLASSE_LABEL[alterKlasse] || alterKlasse} \u2192 ${KLASSE_LABEL[neuKlasse] || neuKlasse}`);
+  if (aenderungen.length) {
+    const hinweis = '[' + aenderungen.join(' | ') + ']';
+    historyNote = historyNote ? `${historyNote} ${hinweis}` : hinweis;
   }
+
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
     [id, newStatus, changedBy, now, historyNote]
   );
   const updated = await getStorungById(id);
-  updated._alterSchwere     = schwereGeaendert ? alterSchwere : null;
-  updated._schwereGeaendert = schwereGeaendert;
+  updated._alterSchwere      = schwereGeaendert ? alterSchwere : null;
+  updated._schwereGeaendert  = schwereGeaendert;
+  updated._alterKlasse       = klasseGeaendert ? alterKlasse : null;
+  updated._klasseGeaendert   = klasseGeaendert;
   return updated;
 }
 
@@ -197,9 +202,6 @@ async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
-/**
- * Suche nach Fahrzeug (Pflicht) + optional: Monat, Ticket-ID, Freitext in Fehlerbeschreibung, Status-Filter
- */
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
@@ -208,7 +210,7 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freite
   const placeholders = filtered.map(() => '?').join(',');
   const args = [fahrzeug, ...filtered];
 
-  let sql = `SELECT id, fahrzeug, fehlerBeschreibung, schwere, status, createdAt
+  let sql = `SELECT id, fahrzeug, klasse, fehlerBeschreibung, schwere, status, createdAt
              FROM stoerungen
              WHERE fahrzeug = ? AND status IN (${placeholders})`;
 

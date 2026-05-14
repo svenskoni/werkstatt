@@ -30,25 +30,32 @@
     <% } %>
   </div>
 
-  <!-- Fahrzeug-Filter -->
-  <div class="vehicle-filter" role="group" aria-label="Nach Fahrzeug filtern" style="
-    display:flex;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-3) var(--space-4);
+  <!-- Filter-Leiste: Fahrzeug + Klasse -->
+  <div class="filter-bar" role="group" aria-label="Filter" style="
+    display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);
     background:var(--color-surface);border-bottom:1px solid var(--color-divider);">
-    <button class="vf-btn" data-vf="" aria-pressed="false">
-      Alle Fahrzeuge
-    </button>
-    <% VEHICLES.forEach(v => { %>
-      <button class="vf-btn" data-vf="<%= v %>" aria-pressed="false">
-        <%= v %>
-      </button>
-    <% }); %>
+
+    <div class="filter-group" role="group" aria-label="Nach Fahrzeug filtern" style="display:flex;flex-wrap:wrap;gap:var(--space-2);">
+      <button class="vf-btn" data-vf="" aria-pressed="false">Alle Fahrzeuge</button>
+      <% VEHICLES.forEach(v => { %>
+        <button class="vf-btn" data-vf="<%= v %>" aria-pressed="false"><%= v %></button>
+      <% }); %>
+    </div>
+
+    <span style="width:1px;height:20px;background:var(--color-divider);flex-shrink:0;margin:0 var(--space-1)" aria-hidden="true"></span>
+
+    <div class="filter-group" role="group" aria-label="Nach Klasse filtern" style="display:flex;gap:var(--space-2);">
+      <button class="kf-btn kf-active" data-kf="" aria-pressed="true">Alle</button>
+      <button class="kf-btn" data-kf="kfz" aria-pressed="false">KFZ</button>
+      <button class="kf-btn" data-kf="geraet" aria-pressed="false">Ger&auml;t</button>
+    </div>
+
     <span class="vf-count" style="margin-left:auto;font-size:var(--text-xs);color:var(--color-text-muted);align-self:center"></span>
   </div>
 
   <!-- Kanban -->
   <div class="kanban-board" role="main">
 
-    <!-- SPALTE: Eingegangen -->
     <section class="kanban-col" aria-label="Eingegangene Störungen">
       <div class="kanban-header kanban-header-new">
         <div class="kanban-title-wrap">
@@ -63,15 +70,14 @@
           <div class="empty-state-card">&#x2714; Keine offenen Meldungen</div>
         <% } %>
         <% gesendet.forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>">
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
             <%- include('partials/stoerung-card', { s, user }) %>
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für dieses Fahrzeug</div>
+      <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
-    <!-- SPALTE: In Bearbeitung -->
     <section class="kanban-col" aria-label="Störungen in Bearbeitung">
       <div class="kanban-header kanban-header-active">
         <div class="kanban-title-wrap">
@@ -86,15 +92,14 @@
           <div class="empty-state-card">&mdash; Nichts in Bearbeitung</div>
         <% } %>
         <% bestaetigt.forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>">
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
             <%- include('partials/stoerung-card', { s, user }) %>
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für dieses Fahrzeug</div>
+      <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
-    <!-- SPALTE: Erledigt + Zurückgewiesen -->
     <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
       <div class="kanban-header kanban-header-done">
         <div class="kanban-title-wrap">
@@ -109,12 +114,12 @@
           <div class="empty-state-card">&mdash; Noch nichts erledigt</div>
         <% } %>
         <% erledigt.forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>">
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
             <%- include('partials/stoerung-card', { s, user }) %>
           </div>
         <% }); %>
         <% zurueckgewiesen.forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>">
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
             <div style="margin-bottom:var(--space-1)">
               <span style="display:inline-block;font-size:var(--text-xs);font-weight:600;padding:2px 8px;border-radius:var(--radius-full);background:var(--color-primary-highlight);color:var(--color-primary);letter-spacing:0.02em">✕ Ticket zurückgewiesen</span>
             </div>
@@ -122,14 +127,14 @@
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für dieses Fahrzeug</div>
+      <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
   </div>
 </div>
 
 <style>
-.vf-btn {
+.vf-btn, .kf-btn {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border);
@@ -140,8 +145,12 @@
   cursor: pointer;
   transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
 }
-.vf-btn:hover { background: var(--color-surface-offset); color: var(--color-text); }
+.vf-btn:hover, .kf-btn:hover { background: var(--color-surface-offset); color: var(--color-text); }
 .vf-btn.vf-active {
+  background: var(--color-primary); border-color: var(--color-primary);
+  color: #fff; font-weight: 600;
+}
+.kf-btn.kf-active {
   background: var(--color-primary); border-color: var(--color-primary);
   color: #fff; font-weight: 600;
 }
@@ -149,7 +158,8 @@
 
 <script>
 (function () {
-  const btns = document.querySelectorAll('.vf-btn');
+  const vfBtns = document.querySelectorAll('.vf-btn');
+  const kfBtns = document.querySelectorAll('.kf-btn');
   const cols  = [
     { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
     { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt' },
@@ -157,7 +167,10 @@
   ];
   const countEl = document.querySelector('.vf-count');
 
-  function applyFilter(fahrzeug) {
+  let activeVf = '';
+  let activeKf = '';
+
+  function applyFilter() {
     let totalVisible = 0;
     cols.forEach(({ cards, cnt, empty }) => {
       const col     = document.getElementById(cards);
@@ -166,7 +179,9 @@
       const wraps   = col.querySelectorAll('.kanban-card-wrap');
       let visible   = 0;
       wraps.forEach(w => {
-        const show = !fahrzeug || w.dataset.fahrzeug === fahrzeug;
+        const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
+        const matchKf = !activeKf || w.dataset.klasse   === activeKf;
+        const show = matchVf && matchKf;
         w.style.display = show ? '' : 'none';
         if (show) visible++;
       });
@@ -174,27 +189,50 @@
       totalVisible += visible;
       emptyEl.hidden = !(wraps.length > 0 && visible === 0);
     });
-    countEl.textContent = fahrzeug
-      ? `${totalVisible} Einträge für »${fahrzeug}«`
-      : '';
+
+    const parts = [];
+    if (activeVf) parts.push(`»${activeVf}«`);
+    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Gerät');
+    countEl.textContent = parts.length ? `${totalVisible} Einträge · ${parts.join(' + ')}` : '';
   }
 
-  function setActive(fahrzeug) {
-    btns.forEach(b => {
-      const match = b.dataset.vf === fahrzeug;
+  function setVf(val) {
+    activeVf = val;
+    vfBtns.forEach(b => {
+      const match = b.dataset.vf === val;
       b.classList.toggle('vf-active', match);
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
-    applyFilter(fahrzeug);
-    try { sessionStorage.setItem('vf_active', fahrzeug); } catch {}
+    try { sessionStorage.setItem('vf_active', val); } catch {}
+    applyFilter();
   }
 
-  let saved = '';
-  try { saved = sessionStorage.getItem('vf_active') || ''; } catch {}
-  const validValues = Array.from(btns).map(b => b.dataset.vf);
-  if (!validValues.includes(saved)) saved = '';
-  setActive(saved);
+  function setKf(val) {
+    activeKf = val;
+    kfBtns.forEach(b => {
+      const match = b.dataset.kf === val;
+      b.classList.toggle('kf-active', match);
+      b.setAttribute('aria-pressed', match ? 'true' : 'false');
+    });
+    try { sessionStorage.setItem('kf_active', val); } catch {}
+    applyFilter();
+  }
 
-  btns.forEach(btn => btn.addEventListener('click', () => setActive(btn.dataset.vf)));
+  let savedVf = '', savedKf = '';
+  try { savedVf = sessionStorage.getItem('vf_active') || ''; } catch {}
+  try { savedKf = sessionStorage.getItem('kf_active') || ''; } catch {}
+  const validVf = Array.from(vfBtns).map(b => b.dataset.vf);
+  const validKf = Array.from(kfBtns).map(b => b.dataset.kf);
+  if (!validVf.includes(savedVf)) savedVf = '';
+  if (!validKf.includes(savedKf)) savedKf = '';
+
+  activeVf = savedVf;
+  activeKf = savedKf;
+  vfBtns.forEach(b => { const m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
+  kfBtns.forEach(b => { const m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
+  applyFilter();
+
+  vfBtns.forEach(btn => btn.addEventListener('click', () => setVf(btn.dataset.vf)));
+  kfBtns.forEach(btn => btn.addEventListener('click', () => setKf(btn.dataset.kf)));
 })();
 </script>

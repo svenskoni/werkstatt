@@ -4,8 +4,6 @@ function formatCardDate(iso) {
   return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
     + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
 }
-
-// Issue #13: 'schwer' entfernt
 const SCHWERE = {
   klein:        { label: 'Klein',        icon: '🟢' },
   normal:       { label: 'Normal',       icon: '🟡' },
@@ -59,8 +57,10 @@ const SCHWERE = {
           data-target="zurueckgewiesen"
           data-schwere="<%= s.schwere %>"
           data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="✕ Ticket zurückweisen"
-          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
+          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen. Klasse und Schweregrad optional korrigieren."
           data-label="Zurückweisen">
           ✕ Zurückweisen
         </button>

@@ -80,28 +80,20 @@ function toLocalInput(iso) {
         <% storung.attachments.forEach(function(a) { %>
           <% if (a.mimetype && a.mimetype.startsWith('image/')) { %>
             <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer">
-              <img
-                src="/uploads/<%= encodeURIComponent(a.filename) %>"
-                alt="<%= a.originalname %>"
-                loading="lazy"
-                width="200" height="150"
+              <img src="/uploads/<%= encodeURIComponent(a.filename) %>" alt="<%= a.originalname %>"
+                loading="lazy" width="200" height="150"
                 style="object-fit:cover;border-radius:var(--radius-md);border:1px solid var(--color-border);max-height:150px;display:block">
             </a>
           <% } else if (a.mimetype && a.mimetype.startsWith('video/')) { %>
             <div style="border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--color-border)">
-              <video
-                src="/uploads/<%= encodeURIComponent(a.filename) %>"
-                controls
-                preload="none"
+              <video src="/uploads/<%= encodeURIComponent(a.filename) %>" controls preload="none"
                 style="width:100%;max-width:320px;max-height:200px;display:block;background:#000"
                 aria-label="<%= a.originalname %>">
                 <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">
                   &#127910; <%= a.originalname %> herunterladen
                 </a>
               </video>
-              <p style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-1) var(--space-2);margin:0">
-                <%= a.originalname %>
-              </p>
+              <p style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-1) var(--space-2);margin:0"><%= a.originalname %></p>
             </div>
           <% } else { %>
             <a href="/uploads/<%= encodeURIComponent(a.filename) %>" target="_blank" rel="noopener noreferrer" class="btn btn-ghost">
@@ -153,13 +145,16 @@ function toLocalInput(iso) {
           data-target="zurueckgewiesen"
           data-schwere="<%= storung.schwere %>"
           data-klasse="<%= storung.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
           data-title="&#10007; Ticket zurückweisen"
-          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
+          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen. Klasse und Schweregrad optional korrigieren."
           data-label="Zurückweisen">
           &#10007; Zurückweisen
         </button>
       </div>
       <% } %>
+
       <% if (storung.status === 'bestaetigt') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
         <button class="btn btn-sm status-change-btn"
@@ -189,26 +184,6 @@ function toLocalInput(iso) {
         </button>
       </div>
       <% } %>
-
-      <!-- Klasse direkt bearbeiten (immer sichtbar für Admin) -->
-      <div style="margin-bottom:var(--space-4);padding:var(--space-3);background:var(--color-surface-offset);border-radius:var(--radius-md);border:1px solid var(--color-border)">
-        <p style="font-size:var(--text-xs);font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--space-2)">Klasse &amp; Schweregrad ändern</p>
-        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center">
-          <button class="btn btn-xs status-change-btn"
-            data-id="<%= storung.id %>"
-            data-target="<%= storung.status %>"
-            data-schwere="<%= storung.schwere %>"
-            data-klasse="<%= storung.klasse || 'kfz' %>"
-            data-mit-schwere="1"
-            data-mit-klasse="1"
-            data-title="✏️ Klasse / Schweregrad ändern"
-            data-desc="Klasse (KFZ / Gerät) und Schweregrad anpassen ohne Statuswechsel."
-            data-label="Speichern"
-            style="background:var(--color-surface);border:1px solid var(--color-border)">
-            ✏️ Klasse / Schweregrad bearbeiten
-          </button>
-        </div>
-      </div>
 
       <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-3)">
         Löscht diese Störung <strong>vollständig</strong>: alle Anhänge und alle Datenbankeinträge.
@@ -329,11 +304,8 @@ function toLocalInput(iso) {
 <script>
 (function () {
   const STOERUNG_ID = '<%= storung.id %>';
-  const IS_ADMIN    = <%= (user && user.role === 'admin') ? 'true' : 'false' %>;
 
-  // ────────────────────────────────────────────────────────────
-  // STATUS-MODAL
-  // ────────────────────────────────────────────────────────────
+  // ── STATUS-MODAL ───────────────────────────────────────────────────────
   const statusModal      = document.getElementById('statusModal');
   const statusModalTitle = document.getElementById('statusModalTitle');
   const statusModalDesc  = document.getElementById('statusModalDesc');
@@ -345,31 +317,39 @@ function toLocalInput(iso) {
   const reminderRow      = document.getElementById('reminderRow');
   const modalReminderAt  = document.getElementById('modalReminderAt');
 
-  let pendingAction = null;   // { id, target, label, mitSchwere, mitKlasse, withReminder }
+  let pendingAction   = null;
   let selectedSchwere = '<%= storung.schwere %>';
   let selectedKlasse  = '<%= storung.klasse || "kfz" %>';
 
-  // Klasse-Buttons im Modal
+  function setKlasseActive(val) {
+    document.querySelectorAll('.klasse-modal-btn').forEach(function (b) {
+      var active = b.dataset.value === val;
+      b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
+      b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
+      b.style.fontWeight  = active ? '700' : '';
+    });
+  }
+
+  function setSchwereActive(val) {
+    document.querySelectorAll('.schwere-modal-btn').forEach(function (b) {
+      var active = b.dataset.value === val;
+      b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
+      b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
+      b.style.fontWeight  = active ? '700' : '';
+    });
+  }
+
   document.querySelectorAll('.klasse-modal-btn').forEach(function (b) {
     b.addEventListener('click', function () {
       selectedKlasse = b.dataset.value;
-      document.querySelectorAll('.klasse-modal-btn').forEach(function (btn) {
-        btn.style.borderColor = btn.dataset.value === selectedKlasse ? 'var(--color-primary)' : 'var(--color-border)';
-        btn.style.background  = btn.dataset.value === selectedKlasse ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
-        btn.style.fontWeight  = btn.dataset.value === selectedKlasse ? '700' : '';
-      });
+      setKlasseActive(selectedKlasse);
     });
   });
 
-  // Schwere-Buttons im Modal
   document.querySelectorAll('.schwere-modal-btn').forEach(function (b) {
     b.addEventListener('click', function () {
       selectedSchwere = b.dataset.value;
-      document.querySelectorAll('.schwere-modal-btn').forEach(function (btn) {
-        btn.style.borderColor = btn.dataset.value === selectedSchwere ? 'var(--color-primary)' : 'var(--color-border)';
-        btn.style.background  = btn.dataset.value === selectedSchwere ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
-        btn.style.fontWeight  = btn.dataset.value === selectedSchwere ? '700' : '';
-      });
+      setSchwereActive(selectedSchwere);
     });
   });
 
@@ -377,51 +357,32 @@ function toLocalInput(iso) {
     pendingAction = {
       id:           btn.dataset.id,
       target:       btn.dataset.target,
-      label:        btn.dataset.label  || 'Speichern',
-      mitSchwere:   btn.dataset.mitSchwere  === '1',
-      mitKlasse:    btn.dataset.mitKlasse   === '1',
+      label:        btn.dataset.label        || 'Speichern',
+      mitSchwere:   btn.dataset.mitSchwere   === '1',
+      mitKlasse:    btn.dataset.mitKlasse    === '1',
       withReminder: btn.dataset.withReminder === '1',
     };
-
-    // Startwerte aus data-Attributen des auslösenden Buttons übernehmen
     selectedSchwere = btn.dataset.schwere || '<%= storung.schwere %>';
     selectedKlasse  = btn.dataset.klasse  || '<%= storung.klasse || "kfz" %>';
 
-    statusModalTitle.innerHTML = btn.dataset.title  || 'Aktion bestätigen';
-    statusModalDesc.innerHTML  = btn.dataset.desc   || '';
+    statusModalTitle.innerHTML   = btn.dataset.title || 'Aktion bestätigen';
+    statusModalDesc.innerHTML    = btn.dataset.desc  || '';
     statusConfirmBtn.textContent = pendingAction.label;
     statusNote.value = '';
 
-    // Klasse-Row anzeigen und Auswahl setzen
-    klasseRow.style.display = pendingAction.mitKlasse ? 'block' : 'none';
-    if (pendingAction.mitKlasse) {
-      document.querySelectorAll('.klasse-modal-btn').forEach(function (b) {
-        const active = b.dataset.value === selectedKlasse;
-        b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
-        b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
-        b.style.fontWeight  = active ? '700' : '';
-      });
-    }
-
-    // Schwere-Row anzeigen und Auswahl setzen
+    klasseRow.style.display  = pendingAction.mitKlasse  ? 'block' : 'none';
     schwereRow.style.display = pendingAction.mitSchwere ? 'block' : 'none';
-    if (pendingAction.mitSchwere) {
-      document.querySelectorAll('.schwere-modal-btn').forEach(function (b) {
-        const active = b.dataset.value === selectedSchwere;
-        b.style.borderColor = active ? 'var(--color-primary)' : 'var(--color-border)';
-        b.style.background  = active ? 'color-mix(in oklch, var(--color-primary) 8%, var(--color-surface))' : 'var(--color-surface)';
-        b.style.fontWeight  = active ? '700' : '';
-      });
-    }
 
-    // Erinnerungs-Row
+    if (pendingAction.mitKlasse)  setKlasseActive(selectedKlasse);
+    if (pendingAction.mitSchwere) setSchwereActive(selectedSchwere);
+
     if (reminderRow) {
       reminderRow.style.display = pendingAction.withReminder ? 'block' : 'none';
       if (pendingAction.withReminder && modalReminderAt) {
-        const d   = new Date();
+        var d   = new Date();
         d.setDate(d.getDate() + 1);
-        const pad = function (n) { return String(n).padStart(2, '0'); };
-        modalReminderAt.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T08:00';
+        var pad = function (n) { return String(n).padStart(2, '0'); };
+        modalReminderAt.value = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T08:00';
       }
     }
 
@@ -429,21 +390,14 @@ function toLocalInput(iso) {
     setTimeout(function () { statusNote.focus(); }, 50);
   }
 
-  // Alle Status-Buttons verdrahten
   document.querySelectorAll('.status-change-btn').forEach(function (btn) {
     btn.addEventListener('click', function () { openStatusModal(btn); });
   });
 
-  if (statusCancelBtn) {
-    statusCancelBtn.addEventListener('click', function () { statusModal.hidden = true; });
-  }
+  if (statusCancelBtn) statusCancelBtn.addEventListener('click', function () { statusModal.hidden = true; });
   if (statusModal) {
-    statusModal.addEventListener('click', function (e) {
-      if (e.target === statusModal) statusModal.hidden = true;
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !statusModal.hidden) statusModal.hidden = true;
-    });
+    statusModal.addEventListener('click', function (e) { if (e.target === statusModal) statusModal.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !statusModal.hidden) statusModal.hidden = true; });
   }
 
   if (statusConfirmBtn) {
@@ -452,26 +406,24 @@ function toLocalInput(iso) {
       statusConfirmBtn.disabled     = true;
       statusConfirmBtn.textContent  = 'Speichere…';
 
-      const body = {
+      var body = {
         status:  pendingAction.target,
         note:    statusNote.value.trim(),
-        schwere: pendingAction.mitSchwere  ? selectedSchwere : undefined,
-        klasse:  pendingAction.mitKlasse   ? selectedKlasse  : undefined,
+        schwere: pendingAction.mitSchwere ? selectedSchwere : undefined,
+        klasse:  pendingAction.mitKlasse  ? selectedKlasse  : undefined,
       };
       if (pendingAction.withReminder && modalReminderAt && modalReminderAt.value) {
         body.reminderAt = modalReminderAt.value;
       }
 
       fetch('/stoerung/' + pendingAction.id + '/status', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.ok) {
-          window.location.reload();
-        } else {
+        if (data.ok) { window.location.reload(); }
+        else {
           alert('Fehler: ' + (data.error || 'Unbekannt'));
           statusConfirmBtn.disabled    = false;
           statusConfirmBtn.textContent = pendingAction.label;
@@ -485,58 +437,47 @@ function toLocalInput(iso) {
     });
   }
 
-  // ────────────────────────────────────────────────────────────
-  // LÖSCHEN
-  // ────────────────────────────────────────────────────────────
-  const deleteBtn    = document.getElementById('deleteBtn');
-  const deleteModal  = document.getElementById('deleteModal');
-  const cancelBtn    = document.getElementById('deleteCancelBtn');
-  const confirmBtn   = document.getElementById('deleteConfirmBtn');
-  const grundField   = document.getElementById('deleteGrund');
+  // ── LÖSCHEN ─────────────────────────────────────────────────────────────
+  const deleteBtn   = document.getElementById('deleteBtn');
+  const deleteModal = document.getElementById('deleteModal');
+  const cancelBtn   = document.getElementById('deleteCancelBtn');
+  const confirmBtn  = document.getElementById('deleteConfirmBtn');
+  const grundField  = document.getElementById('deleteGrund');
 
   if (deleteBtn) {
-    const erledigt = deleteBtn.dataset.erledigt === '1';
+    var erledigt = deleteBtn.dataset.erledigt === '1';
     deleteBtn.addEventListener('click', function () {
       if (erledigt) {
-        deleteBtn.disabled    = true;
-        deleteBtn.textContent = 'Lösche…';
+        deleteBtn.disabled = true; deleteBtn.textContent = 'Lösche…';
         doDelete('Erledigt – automatisch bereinigt');
       } else {
-        grundField.value = '';
-        deleteModal.hidden = false;
+        grundField.value = ''; deleteModal.hidden = false;
         setTimeout(function () { grundField.focus(); }, 50);
       }
     });
     cancelBtn.addEventListener('click', function () { deleteModal.hidden = true; });
-    deleteModal.addEventListener('click', function (e) {
-      if (e.target === deleteModal) deleteModal.hidden = true;
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true;
-    });
+    deleteModal.addEventListener('click', function (e) { if (e.target === deleteModal) deleteModal.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !deleteModal.hidden) deleteModal.hidden = true; });
     confirmBtn.addEventListener('click', function () {
-      const grund = grundField.value.trim();
+      var grund = grundField.value.trim();
       if (!grund) { grundField.style.borderColor = 'var(--color-primary)'; grundField.focus(); return; }
       grundField.style.borderColor = '';
-      confirmBtn.disabled    = true;
-      confirmBtn.textContent = 'Lösche…';
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Lösche…';
       doDelete(grund);
     });
   }
 
   function doDelete(grund) {
     fetch('/stoerung/' + STOERUNG_ID + '/loeschen', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ grund: grund }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grund: grund }),
     })
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      if (data.ok) {
-        window.location.href = '/?success=deleted';
-      } else {
+      if (data.ok) { window.location.href = '/?success=deleted'; }
+      else {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
-        if (deleteBtn)    deleteBtn.disabled    = false;
+        if (deleteBtn)  deleteBtn.disabled = false;
         if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Endgültig löschen'; }
       }
     })
@@ -546,9 +487,7 @@ function toLocalInput(iso) {
     });
   }
 
-  // ────────────────────────────────────────────────────────────
-  // ERINNERUNG
-  // ────────────────────────────────────────────────────────────
+  // ── ERINNERUNG ─────────────────────────────────────────────────────────
   const setReminderBtn    = document.getElementById('setReminderBtn');
   const reminderModal     = document.getElementById('reminderModal');
   const reminderAtInput   = document.getElementById('reminderAtInput');
@@ -557,78 +496,61 @@ function toLocalInput(iso) {
   const reminderSaveBtn   = document.getElementById('reminderSaveBtn');
 
   function defaultReminderTime() {
-    const d   = new Date();
-    d.setDate(d.getDate() + 1);
-    const pad = function (n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T08:00';
+    var d = new Date(); d.setDate(d.getDate() + 1);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T08:00';
   }
 
   if (setReminderBtn) {
     setReminderBtn.addEventListener('click', function () {
-      reminderAtInput.value         = defaultReminderTime();
-      reminderFeedback.textContent  = '';
+      reminderAtInput.value = defaultReminderTime();
+      reminderFeedback.textContent = '';
       reminderAtInput.style.borderColor = '';
       reminderModal.hidden = false;
       setTimeout(function () { reminderAtInput.focus(); }, 50);
     });
   }
-  if (reminderCancelBtn) {
-    reminderCancelBtn.addEventListener('click', function () { reminderModal.hidden = true; });
-  }
+  if (reminderCancelBtn) reminderCancelBtn.addEventListener('click', function () { reminderModal.hidden = true; });
   if (reminderModal) {
-    reminderModal.addEventListener('click', function (e) {
-      if (e.target === reminderModal) reminderModal.hidden = true;
-    });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && !reminderModal.hidden) reminderModal.hidden = true;
-    });
+    reminderModal.addEventListener('click', function (e) { if (e.target === reminderModal) reminderModal.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !reminderModal.hidden) reminderModal.hidden = true; });
   }
   if (reminderSaveBtn) {
     reminderSaveBtn.addEventListener('click', function () {
-      const at = reminderAtInput.value;
-      if (!at) {
-        reminderFeedback.textContent      = 'Bitte ein Datum auswählen.';
-        reminderAtInput.style.borderColor = 'var(--color-error)';
-        return;
-      }
+      var at = reminderAtInput.value;
+      if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
       reminderFeedback.textContent = '';
       reminderAtInput.style.borderColor = '';
-      reminderSaveBtn.disabled    = true;
-      reminderSaveBtn.textContent = 'Speichere…';
+      reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere…';
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ reminderAt: at, reminderTo: '' }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reminderAt: at, reminderTo: '' }),
       })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.ok) {
-          reminderModal.hidden = true;
-          window.location.reload();
-        } else {
-          reminderFeedback.textContent      = data.error || 'Fehler beim Speichern.';
+        if (data.ok) { reminderModal.hidden = true; window.location.reload(); }
+        else {
+          reminderFeedback.textContent = data.error || 'Fehler beim Speichern.';
           reminderAtInput.style.borderColor = 'var(--color-error)';
-          reminderSaveBtn.disabled    = false;
-          reminderSaveBtn.innerHTML   = '&#9201; Erinnerung speichern';
+          reminderSaveBtn.disabled = false;
+          reminderSaveBtn.innerHTML = '&#9201; Erinnerung speichern';
         }
       })
       .catch(function () {
         reminderFeedback.textContent = 'Netzwerkfehler.';
-        reminderSaveBtn.disabled    = false;
-        reminderSaveBtn.innerHTML   = '&#9201; Erinnerung speichern';
+        reminderSaveBtn.disabled = false;
+        reminderSaveBtn.innerHTML = '&#9201; Erinnerung speichern';
       });
     });
   }
 
-  // Erinnerung löschen
   const clearReminderBtn = document.getElementById('clearReminderBtn');
   if (clearReminderBtn) {
     clearReminderBtn.addEventListener('click', function () {
       if (!confirm('Erinnerung wirklich löschen?')) return;
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ reminderAt: '', reminderTo: '' }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reminderAt: '', reminderTo: '' }),
       })
       .then(function (r) { return r.json(); })
       .then(function (data) {

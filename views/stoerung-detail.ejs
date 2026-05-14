@@ -111,8 +111,12 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       <h3 style="margin-bottom:var(--space-3)">Statusverlauf</h3>
       <ol class="history-list" style="list-style:none">
         <% storung.history.forEach(function(h) { %>
-          <li class="history-item">
-            <span class="history-status"><%= STATUS_LABEL[h.status] || h.status %></span>
+          <li class="history-item<%= h.status === 'notiz' ? ' history-item-notiz' : '' %>">
+            <% if (h.status === 'notiz') { %>
+              <span class="history-status" style="color:var(--color-text-muted)">&#128172; Info</span>
+            <% } else { %>
+              <span class="history-status"><%= STATUS_LABEL[h.status] || h.status %></span>
+            <% } %>
             <span class="history-by">von <%= h.changedBy %></span>
             <span class="history-date"><%= formatDate(h.changedAt) %></span>
             <% if (h.note) { %><span class="history-note">&bdquo;<%= h.note %>&ldquo;</span><% } %>
@@ -171,17 +175,9 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           data-label="Erledigt setzen">
           &#10003; Erledigt
         </button>
-        <button class="btn btn-xs btn-ghost status-change-btn"
-          data-id="<%= storung.id %>"
-          data-target="gesendet"
-          data-schwere="<%= storung.schwere %>"
-          data-klasse="<%= storung.klasse || 'kfz' %>"
-          data-mit-schwere="1"
-          data-mit-klasse="1"
-          data-title="Zurück zu Eingegangen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt. Klasse und Schweregrad optional korrigieren."
-          data-label="Zurücksetzen">
-          &larrhk; Zurück zu Eingegangen
+        <button class="btn btn-sm btn-ghost" id="addInfoBtn"
+          title="Info zum Statusverlauf hinzufügen">
+          &#128172; Info hinzufügen
         </button>
         <button class="btn btn-xs btn-ghost" id="setReminderBtn"
           title="Erinnerung setzen" style="color:var(--color-warning)">
@@ -297,6 +293,30 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     </div>
   </div>
 </div>
+
+<!-- Info-Notiz-Modal (Issue #21) -->
+<div class="modal-backdrop" id="infoModal" hidden role="dialog" aria-modal="true" aria-labelledby="infoModalTitle" tabindex="-1">
+  <div class="modal" style="max-width:480px">
+    <h3 id="infoModalTitle" style="margin-bottom:var(--space-2)">&#128172; Info hinzufügen</h3>
+    <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
+      Der Eintrag wird unter deinem Namen im Statusverlauf gespeichert, ohne den Status zu ändern.
+    </p>
+    <div class="form-group">
+      <label class="form-label required" for="infoText">Info / Notiz</label>
+      <textarea class="form-control" id="infoText" rows="4"
+        placeholder="z. B. Fahrzeug ist in der Werkstatt, Rückgabe voraussichtlich Freitag."
+        maxlength="500" style="resize:vertical"></textarea>
+    </div>
+    <div id="infoFeedback" style="font-size:var(--text-xs);color:var(--color-error);margin-top:var(--space-2);min-height:1.2em"></div>
+    <div class="modal-actions" style="margin-top:var(--space-4)">
+      <button class="btn btn-ghost" id="infoCancelBtn">Abbrechen</button>
+      <button class="btn btn-sm" id="infoSaveBtn"
+        style="background:var(--color-active);border-color:var(--color-active);color:#fff">
+        &#128172; Info speichern
+      </button>
+    </div>
+  </div>
+</div>
 <% } %>
 
 <script>
@@ -304,7 +324,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   var IS_ADMIN = <%= isAdmin ? 'true' : 'false' %>;
   var STOERUNG_ID = '<%= storung.id %>';
 
-  if (!IS_ADMIN) return; // Melder braucht kein JS auf dieser Seite
+  if (!IS_ADMIN) return;
 
   // ── LÖSCHEN ─────────────────────────────────────────────────────
   var deleteBtn   = document.getElementById('deleteBtn');
@@ -427,6 +447,63 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         else alert('Fehler: ' + (data.error || 'Unbekannt'));
       })
       .catch(function () { alert('Netzwerkfehler.'); });
+    });
+  }
+
+  // ── INFO-NOTIZ (Issue #21) ────────────────────────────────────────
+  var addInfoBtn    = document.getElementById('addInfoBtn');
+  var infoModal     = document.getElementById('infoModal');
+  var infoText      = document.getElementById('infoText');
+  var infoFeedback  = document.getElementById('infoFeedback');
+  var infoCancelBtn = document.getElementById('infoCancelBtn');
+  var infoSaveBtn   = document.getElementById('infoSaveBtn');
+
+  if (addInfoBtn && infoModal) {
+    addInfoBtn.addEventListener('click', function () {
+      infoText.value = '';
+      infoFeedback.textContent = '';
+      infoText.style.borderColor = '';
+      infoModal.hidden = false;
+      setTimeout(function () { infoText.focus(); }, 50);
+    });
+    infoCancelBtn.addEventListener('click', function () { infoModal.hidden = true; });
+    infoModal.addEventListener('click', function (e) { if (e.target === infoModal) infoModal.hidden = true; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !infoModal.hidden) infoModal.hidden = true; });
+
+    infoSaveBtn.addEventListener('click', function () {
+      var text = infoText.value.trim();
+      if (!text) {
+        infoFeedback.textContent = 'Bitte eine Info eingeben.';
+        infoText.style.borderColor = 'var(--color-error)';
+        infoText.focus();
+        return;
+      }
+      infoFeedback.textContent = '';
+      infoText.style.borderColor = '';
+      infoSaveBtn.disabled = true;
+      infoSaveBtn.textContent = 'Speichere\u2026';
+      fetch('/stoerung/' + STOERUNG_ID + '/notiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notiz: text }),
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          infoModal.hidden = true;
+          window.location.reload();
+        } else {
+          infoFeedback.textContent = data.error || 'Fehler beim Speichern.';
+          infoText.style.borderColor = 'var(--color-error)';
+          infoSaveBtn.disabled = false;
+          infoSaveBtn.innerHTML = '&#128172; Info speichern';
+        }
+      })
+      .catch(function () {
+        infoFeedback.textContent = 'Netzwerkfehler.';
+        infoSaveBtn.disabled = false;
+        infoSaveBtn.innerHTML = '&#128172; Info speichern';
+      });
     });
   }
 

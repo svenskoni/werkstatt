@@ -179,6 +179,15 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlass
   return updated;
 }
 
+// ── Info-Notiz ohne Statuswechsel (Issue #21) ──────────────────────────────────
+async function addHistoryNote(stoerungId, changedBy, note) {
+  const now = new Date().toISOString();
+  await run(
+    `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
+    [stoerungId, 'notiz', changedBy, now, note]
+  );
+}
+
 async function setReminder(id, reminderAt, reminderTo) {
   await run(
     `UPDATE stoerungen SET reminderAt = ?, reminderTo = ? WHERE id = ?`,
@@ -265,6 +274,7 @@ async function deleteStorung(id) {
 module.exports = {
   initDb,
   createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
+  addHistoryNote,
   setReminder, getDueReminders, clearReminder,
   searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,

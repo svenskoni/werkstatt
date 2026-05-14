@@ -5,11 +5,11 @@ function formatCardDate(iso) {
     + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
 }
 const SCHWERE = {
-  klein:        { label: 'Klein',        icon: '🟢' },
-  normal:       { label: 'Normal',       icon: '🟡' },
-  totalausfall: { label: 'Totalausfall', icon: '🔴' },
+  klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
+  normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
+  totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
-const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Gerät' };
+const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
 %>
 <article class="stoerung-card card-<%= s.status %>" role="article">
   <div class="card-top">
@@ -82,18 +82,6 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Gerät' };
           data-desc="St&ouml;rung wird als &raquo;Erledigt&laquo; markiert."
           data-label="Erledigt setzen">
           &#10003; Erledigt
-        </button>
-        <button class="btn btn-xs btn-ghost status-change-btn"
-          data-id="<%= s.id %>"
-          data-target="gesendet"
-          data-schwere="<%= s.schwere %>"
-          data-klasse="<%= s.klasse || 'kfz' %>"
-          data-mit-schwere="1"
-          data-mit-klasse="1"
-          data-title="Zur&uuml;ck zu Eingegangen"
-          data-desc="Status wird zur&uuml;ckgesetzt."
-          data-label="Zur&uuml;cksetzen">
-          &larrhk; Zur&uuml;ck
         </button>
       <% } %>
       <% if (s.status === 'erledigt' || s.status === 'zurueckgewiesen') { %>

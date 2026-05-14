@@ -254,19 +254,24 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API ──────────────────────────────────────────────────────────────────
+// ── Such-API (Issue #19: klasse-Filter) ──────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
-    const { fahrzeug, monat, status, ticketId, q } = req.query;
+    const { fahrzeug, monat, status, ticketId, q, klasse } = req.query;
     if (!fahrzeug) return res.status(400).json({ error: 'Fahrzeug fehlt.' });
     const statusList = status
       ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
+    const validKlasse = ['kfz', 'geraet'];
+    const klasseFilter = klasse && validKlasse.includes(klasse) ? klasse : null;
     const rows = await db.searchByFahrzeugMonat(
       fahrzeug, monat || null, statusList, ticketId || null, q || null
     );
-    res.json(rows.map(r => ({
-      id: r.id, fahrzeug: r.fahrzeug, klasse: r.klasse,
+    const filtered = klasseFilter
+      ? rows.filter(r => (r.klasse || 'kfz') === klasseFilter)
+      : rows;
+    res.json(filtered.map(r => ({
+      id: r.id, fahrzeug: r.fahrzeug, klasse: r.klasse || 'kfz',
       fehlerBeschreibung: r.fehlerBeschreibung,
       schwere: r.schwere, status: r.status, createdAt: r.createdAt,
     })));

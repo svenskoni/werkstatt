@@ -163,6 +163,19 @@
         </select>
       </div>
 
+      <!-- Issue #19: Klasse-Filter in der Hauptsuche -->
+      <div class="form-group">
+        <label class="form-label" for="searchKlasse">
+          Klasse
+          <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional)</span>
+        </label>
+        <select class="form-control" id="searchKlasse">
+          <option value="">Alle Klassen</option>
+          <option value="kfz">&#128692; KFZ</option>
+          <option value="geraet">&#128295; Ger&auml;t</option>
+        </select>
+      </div>
+
       <div class="form-group">
         <label class="form-label" for="searchFreitext">
           Fehlerbeschreibung enth&auml;lt
@@ -235,6 +248,7 @@
     const ticketEl   = document.getElementById('searchTicketId');
     const fahrzeugEl = document.getElementById('searchFahrzeug');
     const ticketHint = document.getElementById('searchTicketIdHint');
+    const klasseEl   = document.getElementById('searchKlasse');
 
     const VEHICLES = Array.from(fahrzeugEl.options)
       .map(o => o.value).filter(v => v !== '');
@@ -261,7 +275,8 @@
       }
     });
 
-    const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
+    const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', totalausfall:'\uD83D\uDD34' };
+    const KLASSE_LABEL = { kfz:'\uD83D\uDE92\u00A0KFZ', geraet:'\uD83D\uDD27\u00A0Ger\u00E4t' };
     const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt', zurueckgewiesen:'Zur\u00FCckgewiesen' };
     const STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)', zurueckgewiesen:'var(--color-primary)' };
 
@@ -274,6 +289,7 @@
       const ticketId = ticketEl.value.trim();
       const freitext = document.getElementById('searchFreitext').value.trim();
       const monat    = document.getElementById('searchMonat').value.trim();
+      const klasse   = klasseEl.value.trim();
 
       const checkedStatuses = Array.from(document.querySelectorAll('.search-status-cb:checked'))
         .map(cb => cb.value);
@@ -299,6 +315,7 @@
         if (monat)    params.set('monat',    monat);
         if (ticketId) params.set('ticketId', ticketId);
         if (freitext) params.set('q',        freitext);
+        if (klasse)   params.set('klasse',   klasse);
 
         const res  = await fetch('/api/suche?' + params);
         const data = await res.json();
@@ -308,14 +325,15 @@
         } else {
           const header = `<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-2)">${data.length} Ergebnis${data.length !== 1 ? 'se' : ''}</p>`;
           const rows = data.map(s => {
-            const icon   = SCHWERE_ICON[s.schwere] || '';
-            const status = STATUS_LABEL[s.status]  || s.status;
-            const color  = STATUS_COLOR[s.status]  || 'var(--color-text-muted)';
-            const datum  = new Date(s.createdAt).toLocaleDateString('de-DE');
+            const schweIcon = SCHWERE_ICON[s.schwere] || '';
+            const klLabel   = KLASSE_LABEL[s.klasse]  || s.klasse || '';
+            const status    = STATUS_LABEL[s.status]  || s.status;
+            const color     = STATUS_COLOR[s.status]  || 'var(--color-text-muted)';
+            const datum     = new Date(s.createdAt).toLocaleDateString('de-DE');
             return `<a href="/stoerung/${encodeURIComponent(s.id)}" class="search-result-item">
               <span class="search-result-id">${escHtml(s.id)}</span>
               <span class="search-result-fehler">${escHtml(s.fehlerBeschreibung)}</span>
-              <span class="search-result-meta">${icon}&nbsp;${datum}&nbsp;&middot;&nbsp;<span style="color:${color};font-weight:600">${status}</span></span>
+              <span class="search-result-meta">${schweIcon}&nbsp;${klLabel}&nbsp;&middot;&nbsp;${datum}&nbsp;&middot;&nbsp;<span style="color:${color};font-weight:600">${status}</span></span>
             </a>`;
           });
           results.innerHTML = header + '<div class="search-result-list">' + rows.join('') + '</div>';
@@ -328,7 +346,7 @@
       }
     });
 
-    ['searchTicketId','searchFahrzeug','searchFreitext','searchMonat'].forEach(id => {
+    ['searchTicketId','searchFahrzeug','searchKlasse','searchFreitext','searchMonat'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
     });

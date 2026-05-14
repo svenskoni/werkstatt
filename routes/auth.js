@@ -10,30 +10,34 @@ router.get('/login', (req, res) => {
   res.render('login', { tab: 'crew', error: null });
 });
 
-// POST /login  (Melder)
-router.post('/login/crew', async (req, res) => {
-  const { password } = req.body;
-  const user = await verifyCrewPassword(password);
-  if (!user) {
-    return res.render('login', { tab: 'crew', error: 'Passwort falsch.' });
-  }
-  req.session.user = user;
-  const returnTo = req.session.returnTo || '/';
-  delete req.session.returnTo;
-  res.redirect(returnTo);
-});
+// POST /login  – type=crew oder type=admin (Hidden-Feld im Formular)
+router.post('/login', async (req, res) => {
+  const { type, username, password } = req.body;
 
-// POST /login  (Admin)
-router.post('/login/admin', async (req, res) => {
-  const { username, password } = req.body;
-  const user = await verifyAdmin(username, password);
-  if (!user) {
-    return res.render('login', { tab: 'admin', error: 'Benutzername oder Passwort falsch.' });
+  if (type === 'crew') {
+    const user = await verifyCrewPassword(password);
+    if (!user) {
+      return res.render('login', { tab: 'crew', error: 'Passwort falsch.' });
+    }
+    req.session.user = user;
+    const returnTo = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    return res.redirect(returnTo);
   }
-  req.session.user = user;
-  const returnTo = req.session.returnTo || '/';
-  delete req.session.returnTo;
-  res.redirect(returnTo);
+
+  if (type === 'admin') {
+    const user = await verifyAdmin(username, password);
+    if (!user) {
+      return res.render('login', { tab: 'admin', error: 'Benutzername oder Passwort falsch.' });
+    }
+    req.session.user = user;
+    const returnTo = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    return res.redirect(returnTo);
+  }
+
+  // Unbekannter type
+  res.render('login', { tab: 'crew', error: 'Ungültige Anfrage.' });
 });
 
 // POST /logout
@@ -41,7 +45,7 @@ router.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
 });
 
-// ── Urlaub / Abwesenheit ────────────────────────────────────────────────────────
+// ── Urlaub / Abwesenheit ─────────────────────────────────────────────────────
 
 /** GET /api/urlaub/status – eigener Abwesenheitsstatus */
 router.get('/api/urlaub/status', requireRole('admin'), async (req, res) => {

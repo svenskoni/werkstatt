@@ -9,7 +9,7 @@ const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer ──────────────────────────────────────────────────────────────────
+// ── Multer ────────────────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const ALLOWED_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
@@ -71,7 +71,7 @@ function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────
+// ── Dashboard ──────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
     const [gesendet, bestaetigt, erledigt, zurueckgewiesen] = await Promise.all([
@@ -93,7 +93,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung ──────────────────────────────────────────────────────────────────────
+// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -164,7 +164,6 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
       attachments,
     });
 
-    // Abwesende Admins beim Versand berücksichtigen
     const abwesende = await db.getAbwesendeAdmins();
     const abwesendeUsernames = abwesende.map(a => a.username);
     mailer.sendStorungMail(storung, abwesendeUsernames).catch(err => console.error('[Route] sendStorungMail:', err.message));
@@ -177,7 +176,7 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
   }
 });
 
-// ── Störung-Detail ────────────────────────────────────────────────────────────────────────
+// ── Störung-Detail ─────────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
@@ -189,7 +188,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ──────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere, neuKlasse } = req.body;
@@ -211,7 +210,39 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────
+// ── Info-Notiz hinzufügen (nur Admin) ─────────────────────────────────────────────────────────────────────────
+router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
+  try {
+    const { notiz } = req.body;
+    if (!notiz || !notiz.trim()) return res.status(400).json({ error: 'Notiz darf nicht leer sein.' });
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Störung nicht gefunden.' });
+    await db.addHistoryNote(storung.id, req.session.user.username, notiz.trim());
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Notiz]', err);
+    res.status(500).json({ error: 'Notiz konnte nicht gespeichert werden.' });
+  }
+});
+
+// ── Erinnerung setzen/löschen (nur Admin) ──────────────────────────────────────────────────────────────────────
+router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
+  try {
+    const { reminderAt, reminderTo } = req.body;
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Störung nicht gefunden.' });
+    // Leerer reminderAt löscht die Erinnerung
+    const safeAt  = reminderAt  && reminderAt.trim()  ? new Date(reminderAt).toISOString()  : null;
+    const safeTo  = reminderTo  && reminderTo.trim()  ? reminderTo.trim()                   : null;
+    await db.setReminder(storung.id, safeAt, safeTo);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Reminder]', err);
+    res.status(500).json({ error: 'Erinnerung konnte nicht gespeichert werden.' });
+  }
+});
+
+// ── Störung löschen (nur Admin) ─────────────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -227,7 +258,7 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API ──────────────────────────────────────────────────────────────────────────────────
+// ── Such-API ─────────────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status, ticketId, q, klasse } = req.query;
@@ -254,7 +285,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ───────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ─────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

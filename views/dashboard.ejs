@@ -200,7 +200,6 @@
 }
 .load-more-btn svg {
   flex-shrink: 0;
-  transition: transform 200ms ease;
 }
 </style>
 
@@ -220,87 +219,74 @@
   let activeVf = '';
   let activeKf = '';
 
-  // visibleCount pro Spalte – wie viele Karten aktuell aufgeklappt sind
   const visibleCount = { gesendet: PAGE_SIZE, bestaetigt: PAGE_SIZE, erledigt: PAGE_SIZE };
 
   function applyFilter() {
     let totalVisible = 0;
 
-    cols.forEach(({ cards, cnt, empty, more }) => {
-      const col     = document.getElementById(cards);
-      const cntEl   = document.getElementById(cnt);
-      const emptyEl = document.getElementById(empty);
-      const moreEl  = document.getElementById(more);
-      const wraps   = Array.from(col.querySelectorAll('.kanban-card-wrap'));
+    cols.forEach(function (col) {
+      const colEl   = document.getElementById(col.cards);
+      const cntEl   = document.getElementById(col.cnt);
+      const emptyEl = document.getElementById(col.empty);
+      const moreEl  = document.getElementById(col.more);
+      const wraps   = Array.from(colEl.querySelectorAll('.kanban-card-wrap'));
 
-      // Filtere zuerst – welche Karten matchen überhaupt?
-      const matching = wraps.filter(w => {
+      const matching = wraps.filter(function (w) {
         const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         const matchKf = !activeKf || w.dataset.klasse   === activeKf;
         return matchVf && matchKf;
       });
 
-      // Welche sind hidden wegen Paging?
-      const colKey = cards.replace('col-', '');
+      const colKey = col.cards.replace('col-', '');
       const limit  = visibleCount[colKey] || PAGE_SIZE;
 
       let shown = 0;
-      wraps.forEach(w => {
+      wraps.forEach(function (w) {
         const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         const matchKf = !activeKf || w.dataset.klasse   === activeKf;
         const matches = matchVf && matchKf;
-        // Innerhalb der matching-Liste: nur bis limit anzeigen
-        const rankInMatching = matches ? matching.indexOf(w) : -1;
-        const withinLimit    = rankInMatching >= 0 && rankInMatching < limit;
-        w.style.display = withinLimit ? '' : 'none';
-        if (withinLimit) shown++;
+        const rank    = matches ? matching.indexOf(w) : -1;
+        const show    = rank >= 0 && rank < limit;
+        w.style.display = show ? '' : 'none';
+        if (show) shown++;
       });
 
       cntEl.textContent = matching.length;
       totalVisible += shown;
-
       emptyEl.hidden = !(wraps.length > 0 && matching.length === 0);
 
-      // More-Button
       const remaining = matching.length - limit;
       if (remaining > 0) {
-        const btn = moreEl.querySelector('.load-more-btn');
+        const btn   = moreEl.querySelector('.load-more-btn');
         const label = btn.querySelector('.load-more-label');
         label.textContent = remaining <= PAGE_SIZE
-          ? `${remaining} weitere anzeigen`
-          : `${PAGE_SIZE} weitere laden (noch ${remaining})`;
+          ? remaining + ' weitere anzeigen'
+          : PAGE_SIZE + ' weitere laden (noch ' + remaining + ')';
         moreEl.hidden = false;
       } else {
         moreEl.hidden = true;
       }
     });
 
-    const parts = [];
-    if (activeVf) parts.push(`»${activeVf}«`);
-    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Gerät');
-    countEl.textContent = parts.length ? `${totalVisible} sichtbar · ${parts.join(' + ')}` : '';
+    var parts = [];
+    if (activeVf) parts.push('\u00bb' + activeVf + '\u00ab');
+    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Ger\u00e4t');
+    countEl.textContent = parts.length ? totalVisible + ' sichtbar \u00b7 ' + parts.join(' + ') : '';
   }
 
-  // Load-more Buttons
-  document.querySelectorAll('.load-more-btn').forEach(btn => {
+  document.querySelectorAll('.load-more-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      const col = this.dataset.col;
+      var col = this.dataset.col;
       visibleCount[col] = (visibleCount[col] || PAGE_SIZE) + PAGE_SIZE;
       applyFilter();
-      // Scroll zur ersten neu sichtbaren Karte
-      const colEl = document.getElementById('col-' + col);
-      const newCards = colEl.querySelectorAll('.kanban-card-wrap:not([style*="none"])');
-      const target   = newCards[newCards.length - PAGE_SIZE];
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   });
 
   function setVf(val) {
     activeVf = val;
-    // Filter-Wechsel: Paging zurücksetzen
-    Object.keys(visibleCount).forEach(k => visibleCount[k] = PAGE_SIZE);
-    vfBtns.forEach(b => {
-      const match = b.dataset.vf === val;
+    Object.keys(visibleCount).forEach(function (k) { visibleCount[k] = PAGE_SIZE; });
+    vfBtns.forEach(function (b) {
+      var match = b.dataset.vf === val;
       b.classList.toggle('vf-active', match);
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
@@ -310,9 +296,9 @@
 
   function setKf(val) {
     activeKf = val;
-    Object.keys(visibleCount).forEach(k => visibleCount[k] = PAGE_SIZE);
-    kfBtns.forEach(b => {
-      const match = b.dataset.kf === val;
+    Object.keys(visibleCount).forEach(function (k) { visibleCount[k] = PAGE_SIZE; });
+    kfBtns.forEach(function (b) {
+      var match = b.dataset.kf === val;
       b.classList.toggle('kf-active', match);
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
@@ -320,21 +306,21 @@
     applyFilter();
   }
 
-  let savedVf = '', savedKf = '';
+  var savedVf = '', savedKf = '';
   try { savedVf = sessionStorage.getItem('vf_active') || ''; } catch {}
   try { savedKf = sessionStorage.getItem('kf_active') || ''; } catch {}
-  const validVf = Array.from(vfBtns).map(b => b.dataset.vf);
-  const validKf = Array.from(kfBtns).map(b => b.dataset.kf);
+  var validVf = Array.from(vfBtns).map(function (b) { return b.dataset.vf; });
+  var validKf = Array.from(kfBtns).map(function (b) { return b.dataset.kf; });
   if (!validVf.includes(savedVf)) savedVf = '';
   if (!validKf.includes(savedKf)) savedKf = '';
 
   activeVf = savedVf;
   activeKf = savedKf;
-  vfBtns.forEach(b => { const m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
-  kfBtns.forEach(b => { const m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
+  vfBtns.forEach(function (b) { var m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
+  kfBtns.forEach(function (b) { var m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
   applyFilter();
 
-  vfBtns.forEach(btn => btn.addEventListener('click', () => setVf(btn.dataset.vf)));
-  kfBtns.forEach(btn => btn.addEventListener('click', () => setKf(btn.dataset.kf)));
+  vfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setVf(btn.dataset.vf); }); });
+  kfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setKf(btn.dataset.kf); }); });
 })();
 </script>

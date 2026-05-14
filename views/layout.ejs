@@ -120,21 +120,15 @@
         <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
       </div>
 
-      <!-- 1. Ticket-ID (optional, ganz oben) -->
+      <!-- 1. Ticket-ID -->
       <div class="form-group">
         <label class="form-label" for="searchTicketId">
           Ticket-ID
           <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional &ndash; Teilsuche m&ouml;glich)</span>
         </label>
-        <input
-          type="text"
-          class="form-control"
-          id="searchTicketId"
+        <input type="text" class="form-control" id="searchTicketId"
           placeholder="z.&thinsp;B.&nbsp;LKW1-2026-05 oder LKW1-2026-05-003"
-          maxlength="60"
-          autocomplete="off"
-          spellcheck="false"
-        >
+          maxlength="60" autocomplete="off" spellcheck="false">
         <p id="searchTicketIdHint" style="font-size:var(--text-xs);color:var(--color-primary);margin-top:var(--space-1);display:none">
           &#10003; Fahrzeug automatisch erkannt
         </p>
@@ -153,23 +147,18 @@
         </select>
       </div>
 
-      <!-- 3. Freisuche in Fehlerbeschreibung (optional) -->
+      <!-- 3. Freisuche -->
       <div class="form-group">
         <label class="form-label" for="searchFreitext">
           Fehlerbeschreibung enth&auml;lt
           <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional)</span>
         </label>
-        <input
-          type="text"
-          class="form-control"
-          id="searchFreitext"
+        <input type="text" class="form-control" id="searchFreitext"
           placeholder="z.&thinsp;B.&nbsp;Bremse, Motor&hellip;"
-          maxlength="120"
-          autocomplete="off"
-        >
+          maxlength="120" autocomplete="off">
       </div>
 
-      <!-- 4. Monat (optional) -->
+      <!-- 4. Monat -->
       <div class="form-group">
         <label class="form-label" for="searchMonat">
           Monat
@@ -178,24 +167,29 @@
         <input type="month" class="form-control" id="searchMonat">
       </div>
 
-      <!-- 5. Status -->
+      <!-- 5. Status – alle vier inkl. Zurückgewiesen -->
       <div class="form-group" style="margin-bottom:var(--space-5)">
         <span class="form-label" style="display:block;margin-bottom:var(--space-2)">Status</span>
         <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="statusGesendet" value="gesendet" checked>
+            <input type="checkbox" class="search-status-cb" value="gesendet" checked>
             <span style="width:10px;height:10px;border-radius:50%;background:var(--color-new);display:inline-block"></span>
             Eingegangen
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="statusBestaetigt" value="bestaetigt" checked>
+            <input type="checkbox" class="search-status-cb" value="bestaetigt" checked>
             <span style="width:10px;height:10px;border-radius:50%;background:var(--color-active);display:inline-block"></span>
             In Bearbeitung
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
-            <input type="checkbox" id="statusErledigt" value="erledigt" checked>
+            <input type="checkbox" class="search-status-cb" value="erledigt" checked>
             <span style="width:10px;height:10px;border-radius:50%;background:var(--color-done);display:inline-block"></span>
             Erledigt
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-sm);cursor:pointer">
+            <input type="checkbox" class="search-status-cb" value="zurueckgewiesen" checked>
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--color-primary);display:inline-block"></span>
+            Zur&uuml;ckgewiesen
           </label>
         </div>
       </div>
@@ -229,10 +223,8 @@
     const fahrzeugEl = document.getElementById('searchFahrzeug');
     const ticketHint = document.getElementById('searchTicketIdHint');
 
-    // Fahrzeugliste aus Dropdown auslesen
     const VEHICLES = Array.from(fahrzeugEl.options)
-      .map(o => o.value)
-      .filter(v => v !== '');
+      .map(o => o.value).filter(v => v !== '');
 
     function openModal()  { modal.hidden = false; ticketEl.focus(); }
     function closeModal() { modal.hidden = true; results.innerHTML = ''; }
@@ -242,19 +234,14 @@
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
 
-    // Fahrzeug automatisch aus Ticket-ID erkennen
-    // Ticket-Format: <FAHRZEUG>-<JAHR>-<MONAT>[-<NR>]
     ticketEl.addEventListener('input', () => {
       const val = ticketEl.value.trim();
       ticketHint.style.display = 'none';
       fahrzeugEl.style.borderColor = '';
       if (!val) return;
-
-      // Längstes passendes Fahrzeug am Anfang der Eingabe gewinnt
       const matched = VEHICLES
         .filter(v => val.toLowerCase().startsWith(v.toLowerCase()))
         .sort((a, b) => b.length - a.length)[0];
-
       if (matched) {
         fahrzeugEl.value = matched;
         ticketHint.style.display = 'block';
@@ -274,9 +261,10 @@
       const ticketId = ticketEl.value.trim();
       const freitext = document.getElementById('searchFreitext').value.trim();
       const monat    = document.getElementById('searchMonat').value.trim();
-      const checkedStatuses = ['statusGesendet','statusBestaetigt','statusErledigt']
-        .filter(id => document.getElementById(id).checked)
-        .map(id => document.getElementById(id).value);
+
+      // Alle Status-Checkboxen über gemeinsame Klasse einlesen
+      const checkedStatuses = Array.from(document.querySelectorAll('.search-status-cb:checked'))
+        .map(cb => cb.value);
 
       fahrzeugEl.style.borderColor = '';
       if (!fahrzeug) {
@@ -328,7 +316,6 @@
       }
     });
 
-    // Enter in jedem Feld löst Suche aus
     ['searchTicketId','searchFahrzeug','searchFreitext','searchMonat'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });

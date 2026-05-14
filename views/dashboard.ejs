@@ -30,12 +30,11 @@
     <% } %>
   </div>
 
-  <!-- Filter-Leiste: Fahrzeug + Klasse (Issue #18) -->
+  <!-- Filter-Leiste: Fahrzeug + Klasse -->
   <div class="filter-bar" role="group" aria-label="Filter" style="
     display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);
     background:var(--color-surface);border-bottom:1px solid var(--color-divider);">
 
-    <!-- Fahrzeug-Filter -->
     <div class="filter-group" role="group" aria-label="Nach Fahrzeug filtern" style="display:flex;flex-wrap:wrap;gap:var(--space-2);">
       <button class="vf-btn" data-vf="" aria-pressed="false">Alle Fahrzeuge</button>
       <% VEHICLES.forEach(v => { %>
@@ -43,14 +42,12 @@
       <% }); %>
     </div>
 
-    <!-- Trennstrich -->
     <span style="width:1px;height:20px;background:var(--color-divider);flex-shrink:0;margin:0 var(--space-1)" aria-hidden="true"></span>
 
-    <!-- Klasse-Filter -->
     <div class="filter-group" role="group" aria-label="Nach Klasse filtern" style="display:flex;gap:var(--space-2);">
       <button class="kf-btn kf-active" data-kf="" aria-pressed="true">Alle</button>
-      <button class="kf-btn" data-kf="kfz" aria-pressed="false">&#128692; KFZ</button>
-      <button class="kf-btn" data-kf="geraet" aria-pressed="false">&#128295; Gerät</button>
+      <button class="kf-btn" data-kf="kfz" aria-pressed="false">KFZ</button>
+      <button class="kf-btn" data-kf="geraet" aria-pressed="false">Ger&auml;t</button>
     </div>
 
     <span class="vf-count" style="margin-left:auto;font-size:var(--text-xs);color:var(--color-text-muted);align-self:center"></span>
@@ -59,7 +56,6 @@
   <!-- Kanban -->
   <div class="kanban-board" role="main">
 
-    <!-- SPALTE: Eingegangen -->
     <section class="kanban-col" aria-label="Eingegangene Störungen">
       <div class="kanban-header kanban-header-new">
         <div class="kanban-title-wrap">
@@ -82,7 +78,6 @@
       <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
-    <!-- SPALTE: In Bearbeitung -->
     <section class="kanban-col" aria-label="Störungen in Bearbeitung">
       <div class="kanban-header kanban-header-active">
         <div class="kanban-title-wrap">
@@ -105,7 +100,6 @@
       <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
-    <!-- SPALTE: Erledigt + Zurückgewiesen -->
     <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
       <div class="kanban-header kanban-header-done">
         <div class="kanban-title-wrap">
@@ -224,7 +218,6 @@
     applyFilter();
   }
 
-  // Restore session
   let savedVf = '', savedKf = '';
   try { savedVf = sessionStorage.getItem('vf_active') || ''; } catch {}
   try { savedKf = sessionStorage.getItem('kf_active') || ''; } catch {}
@@ -235,7 +228,6 @@
 
   activeVf = savedVf;
   activeKf = savedKf;
-  // set button states without re-calling applyFilter twice
   vfBtns.forEach(b => { const m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
   kfBtns.forEach(b => { const m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
   applyFilter();

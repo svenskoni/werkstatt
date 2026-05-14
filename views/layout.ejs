@@ -70,7 +70,7 @@
       <h3 id="modalTitle" style="margin-bottom:var(--space-2)">Status &auml;ndern</h3>
       <p id="modalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
 
-      <!-- Klasse ändern -->
+      <!-- Klasse -->
       <div id="klasseWrap" style="display:none;margin-bottom:var(--space-4)">
         <label class="form-label" style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)">
           Klasse
@@ -78,26 +78,26 @@
         </label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)">
           <button type="button" class="klasse-modal-btn" data-value="kfz"
-            style="padding:var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;gap:var(--space-2);transition:border-color 180ms,background 180ms,font-weight 180ms">
-            &#128692; KFZ
+            style="padding:var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;gap:var(--space-2);transition:border-color 180ms,background 180ms">
+            KFZ
           </button>
           <button type="button" class="klasse-modal-btn" data-value="geraet"
-            style="padding:var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;gap:var(--space-2);transition:border-color 180ms,background 180ms,font-weight 180ms">
-            &#128295; Ger&auml;t
+            style="padding:var(--space-3);border:2px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);cursor:pointer;font-size:var(--text-sm);display:flex;align-items:center;gap:var(--space-2);transition:border-color 180ms,background 180ms">
+            Ger&auml;t
           </button>
         </div>
       </div>
 
-      <!-- Schweregrad ändern -->
+      <!-- Schweregrad -->
       <div id="schwereWrap" style="display:none;margin-bottom:var(--space-4)">
         <label class="form-label" for="schwereSelect" style="display:flex;align-items:center;gap:var(--space-2)">
           Schweregrad
           <span style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:400">(Admin kann korrigieren)</span>
         </label>
         <select class="form-control" id="schwereSelect">
-          <option value="klein">&#128994; Klein</option>
-          <option value="normal">&#128993; Normal</option>
-          <option value="totalausfall">&#128308; Totalausfall</option>
+          <option value="klein">Klein</option>
+          <option value="normal">Normal</option>
+          <option value="totalausfall">Totalausfall</option>
         </select>
       </div>
 
@@ -163,7 +163,6 @@
         </select>
       </div>
 
-      <!-- Issue #19: Klasse-Filter in der Hauptsuche -->
       <div class="form-group">
         <label class="form-label" for="searchKlasse">
           Klasse
@@ -171,8 +170,8 @@
         </label>
         <select class="form-control" id="searchKlasse">
           <option value="">Alle Klassen</option>
-          <option value="kfz">&#128692; KFZ</option>
-          <option value="geraet">&#128295; Ger&auml;t</option>
+          <option value="kfz">KFZ</option>
+          <option value="geraet">Ger&auml;t</option>
         </select>
       </div>
 
@@ -276,7 +275,7 @@
     });
 
     const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', totalausfall:'\uD83D\uDD34' };
-    const KLASSE_LABEL = { kfz:'\uD83D\uDE92\u00A0KFZ', geraet:'\uD83D\uDD27\u00A0Ger\u00E4t' };
+    const KLASSE_LABEL = { kfz:'KFZ', geraet:'Ger\u00E4t' };
     const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt', zurueckgewiesen:'Zur\u00FCckgewiesen' };
     const STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)', zurueckgewiesen:'var(--color-primary)' };
 

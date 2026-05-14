@@ -31,11 +31,8 @@ const upload = multer({
   limits: { fileSize: MAX_MB * 1024 * 1024, files: 6 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ALLOWED_MIMES.has(file.mimetype) && ALLOWED_EXTS.has(ext)) {
-      cb(null, true);
-    } else {
-      cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
-    }
+    if (ALLOWED_MIMES.has(file.mimetype) && ALLOWED_EXTS.has(ext)) cb(null, true);
+    else cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
   }
 });
 
@@ -45,12 +42,9 @@ function checkMagicBytesServer(filePath, mime) {
     const buf = Buffer.alloc(12);
     fs.readSync(fd, buf, 0, 12, 0);
     fs.closeSync(fd);
-    if (mime === 'image/jpeg')
-      return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
-    if (mime === 'image/png')
-      return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
-    if (mime === 'image/gif')
-      return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38;
+    if (mime === 'image/jpeg')  return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+    if (mime === 'image/png')   return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+    if (mime === 'image/gif')   return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38;
     if (mime === 'image/webp') {
       const riff = buf[0]===0x52 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x46;
       const webp = buf[8]===0x57 && buf[9]===0x45 && buf[10]===0x42 && buf[11]===0x50;
@@ -102,12 +96,9 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
   upload.array('attachments', 6)(req, res, err => {
     if (err) {
       deleteUploadedFiles(req.files);
-      if (err.code === 'LIMIT_FILE_SIZE')
-        return renderNeu(res, [`Eine oder mehrere Dateien überschreiten das Limit von ${MAX_MB} MB.`], req.body || {}, req.session.user);
-      if (err.code === 'LIMIT_FILE_COUNT')
-        return renderNeu(res, ['Maximal 6 Dateien erlaubt.'], req.body || {}, req.session.user);
-      if (err.code === 'LIMIT_UNEXPECTED_FILE')
-        return renderNeu(res, ['Ungültiger Dateityp. Nur JPG, PNG, GIF, WebP, MP4 und MOV erlaubt.'], req.body || {}, req.session.user);
+      if (err.code === 'LIMIT_FILE_SIZE')       return renderNeu(res, [`Eine oder mehrere Dateien überschreiten das Limit von ${MAX_MB} MB.`], req.body || {}, req.session.user);
+      if (err.code === 'LIMIT_FILE_COUNT')      return renderNeu(res, ['Maximal 6 Dateien erlaubt.'], req.body || {}, req.session.user);
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') return renderNeu(res, ['Ungültiger Dateityp. Nur JPG, PNG, GIF, WebP, MP4 und MOV erlaubt.'], req.body || {}, req.session.user);
       console.error('[Upload] Multer-Fehler:', err.message);
       return renderNeu(res, ['Fehler beim Hochladen. Bitte erneut versuchen.'], req.body || {}, req.session.user);
     }
@@ -117,7 +108,6 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
   const old = req.body || {};
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
-    const melderBenachrichtigung = req.body.melderBenachrichtigung === '1' ? 1 : 0;
     const kontaktTeile = [];
     if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
     if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
@@ -156,11 +146,10 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
       createdBy: req.session.user.username,
       melderName: melderName.trim(),
       melderKontakt,
-      melderBenachrichtigung,
+      melderBenachrichtigung: 0,
       attachments,
     });
     mailer.sendStorungMail(storung).catch(err => console.error('[Route] sendStorungMail:', err.message));
-    mailer.sendMelderBestaetigung(storung).catch(err => console.error('[Route] sendMelderBestaetigung:', err.message));
     res.redirect('/');
   } catch (err) {
     console.error('[Neu]', err);
@@ -191,43 +180,10 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
     const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
     const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere);
-    mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
-      .catch(err => console.error('[Route] sendStatusMail:', err.message));
+    await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere);
     res.json({ ok: true, newStatus: status });
   } catch (err) {
     console.error('[Status]', err);
-    res.status(500).json({ error: 'Interner Fehler.' });
-  }
-});
-
-// ── Erinnerung setzen (nur Admin) ───────────────────────────────────────────────────────────────
-router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
-  try {
-    const { reminderAt, reminderTo } = req.body;
-    const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
-    if (!reminderAt) {
-      await db.clearReminder(storung.id);
-      return res.json({ ok: true, cleared: true });
-    }
-    let dt;
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(reminderAt)) {
-      const localDate = new Date(reminderAt + ':00');
-      const berlin = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
-      const diff = localDate - berlin;
-      dt = new Date(localDate.getTime() - diff);
-    } else {
-      dt = new Date(reminderAt);
-    }
-    if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ungültiges Datum.' });
-    if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
-    const to = mailer.resolveAdminMail(req.session.user.username);
-    if (!to) return res.status(400).json({ error: 'Keine gültige Admin-E-Mail gefunden. Bitte ADMIN_MAILS in der .env konfigurieren.' });
-    await db.setReminder(storung.id, dt.toISOString(), to);
-    res.json({ ok: true, reminderAt: dt.toISOString(), reminderTo: to, localTime: dt.toLocaleString('de-DE', { timeZone: 'Europe/Berlin' }) });
-  } catch (err) {
-    console.error('[Reminder]', err);
     res.status(500).json({ error: 'Interner Fehler.' });
   }
 });
@@ -248,7 +204,7 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Such-API (Fahrzeug-Pflicht + Monat/ID/Freitext optional) ──────────────────────────────────────────
+// ── Such-API ──────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status, ticketId, q } = req.query;
@@ -256,13 +212,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
     const statusList = status
       ? status.split(',').filter(s => ['gesendet','bestaetigt','erledigt','zurueckgewiesen'].includes(s))
       : ['gesendet','bestaetigt','erledigt'];
-    const rows = await db.searchByFahrzeugMonat(
-      fahrzeug,
-      monat || null,
-      statusList,
-      ticketId || null,
-      q || null
-    );
+    const rows = await db.searchByFahrzeugMonat(fahrzeug, monat || null, statusList, ticketId || null, q || null);
     res.json(rows.map(r => ({
       id: r.id, fahrzeug: r.fahrzeug, fehlerBeschreibung: r.fehlerBeschreibung,
       schwere: r.schwere, status: r.status, createdAt: r.createdAt,
@@ -273,7 +223,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ───────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

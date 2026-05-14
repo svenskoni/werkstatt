@@ -12,7 +12,6 @@ const stoerungRoutes = require('../routes/stoerungen');
 const uploadsRoute   = require('../routes/uploads');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
-const reminder       = require('./reminder');
 
 // Pflicht-Variablen prüfen
 const REQUIRED_ENV = [
@@ -107,7 +106,6 @@ app.use((err, req, res, _next) => {
 db.initDb()
   .then(() => {
     cleanup.scheduleDaily();
-    reminder.start();   // Reminder-Cron starten
   })
   .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });
 

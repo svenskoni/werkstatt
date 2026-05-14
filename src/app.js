@@ -30,10 +30,10 @@ if (missing.length > 0) {
 
 const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
 
+// Issue #13: 'schwer' entfernt – nur noch klein / normal / totalausfall
 const SCHWERE = {
   klein:        { label: 'Klein',        icon: '\ud83d\udfe2' },
   normal:       { label: 'Normal',       icon: '\ud83d\udfe1' },
-  schwer:       { label: 'Schwer',       icon: '\ud83d\udfe0' },
   totalausfall: { label: 'Totalausfall', icon: '\ud83d\udd34' },
 };
 
@@ -107,7 +107,7 @@ app.use((err, req, res, _next) => {
 db.initDb()
   .then(() => {
     cleanup.scheduleDaily();
-    reminder.start();   // Reminder-Cron starten
+    reminder.start();
   })
   .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });
 

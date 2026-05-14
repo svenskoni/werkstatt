@@ -80,11 +80,14 @@ async function createStorung({ fahrzeug, klasse = 'kfz', schwere, fehlerBeschrei
   const now     = new Date().toISOString();
   const id      = await generateTicketId(fahrzeug, now);
   const benFlag = Number(melderBenachrichtigung) === 1 ? 1 : 0;
-  const validKlasse = ['kfz', 'geraet'];
-  const safeKlasse  = validKlasse.includes(klasse) ? klasse : 'kfz';
+  // Issue #13: 'schwer' nicht mehr gültig
+  const validKlasse  = ['kfz', 'geraet'];
+  const safeKlasse   = validKlasse.includes(klasse) ? klasse : 'kfz';
+  const validSchwere = ['klein', 'normal', 'totalausfall'];
+  const safeSchwere  = validSchwere.includes(schwere) ? schwere : 'normal';
   await run(
     `INSERT INTO stoerungen (id,fahrzeug,klasse,schwere,fehlerBeschreibung,beschreibung,status,createdBy,createdAt,updatedAt,melderName,melderKontakt,melderBenachrichtigung) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [id, fahrzeug, safeKlasse, schwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, now, melderName, melderKontakt, benFlag]
+    [id, fahrzeug, safeKlasse, safeSchwere, fehlerBeschreibung, beschreibung || '', 'gesendet', createdBy, now, now, melderName, melderKontakt, benFlag]
   );
   await run(
     `INSERT INTO stoerung_history (stoerungId,status,changedBy,changedAt,note) VALUES (?,?,?,?,?)`,
@@ -135,6 +138,7 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlass
   const now = new Date().toISOString();
   const current = await get(`SELECT schwere, klasse FROM stoerungen WHERE id = ?`, [id]);
   const alterSchwere = current ? current.schwere : null;
+  // Issue #13: 'schwer' nicht mehr gültig
   const validSchwere = ['klein', 'normal', 'totalausfall'];
   const schwereGeaendert = neuSchwere && validSchwere.includes(neuSchwere) && neuSchwere !== alterSchwere;
 

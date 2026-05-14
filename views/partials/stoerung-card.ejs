@@ -5,10 +5,10 @@ function formatCardDate(iso) {
     + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
 }
 
+// Issue #13: 'schwer' entfernt
 const SCHWERE = {
   klein:        { label: 'Klein',        icon: '🟢' },
   normal:       { label: 'Normal',       icon: '🟡' },
-  schwer:       { label: 'Schwer',       icon: '🟠' },
   totalausfall: { label: 'Totalausfall', icon: '🔴' },
 };
 %>
@@ -44,10 +44,12 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="bestaetigt"
           data-schwere="<%= s.schwere %>"
+          data-klasse="<%= s.klasse || 'kfz' %>"
           data-mit-schwere="1"
+          data-mit-klasse="1"
           data-with-reminder="1"
           data-title="✓ Störung bestätigen"
-          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad optional korrigieren."
+          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad und Klasse optional korrigieren."
           data-label="Bestätigen">
           ✓ Bestätigen
         </button>
@@ -56,6 +58,7 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="zurueckgewiesen"
           data-schwere="<%= s.schwere %>"
+          data-klasse="<%= s.klasse || 'kfz' %>"
           data-title="✕ Ticket zurückweisen"
           data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
           data-label="Zurückweisen">
@@ -68,6 +71,7 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="erledigt"
           data-schwere="<%= s.schwere %>"
+          data-klasse="<%= s.klasse || 'kfz' %>"
           data-title="✓ Störung erledigen"
           data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
           data-label="Erledigt setzen">
@@ -77,6 +81,7 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="gesendet"
           data-schwere="<%= s.schwere %>"
+          data-klasse="<%= s.klasse || 'kfz' %>"
           data-title="↩ Zurück zu Eingegangen"
           data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
           data-label="Zurücksetzen">
@@ -88,9 +93,10 @@ const SCHWERE = {
           data-id="<%= s.id %>"
           data-target="gesendet"
           data-schwere="<%= s.schwere %>"
-          data-title="↩ Wiederерöffnen"
+          data-klasse="<%= s.klasse || 'kfz' %>"
+          data-title="↩ Wiederöffnen"
           data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
-          data-label="Wiederерöffnen">
+          data-label="Wiederöffnen">
           ↩ Wiederöffnen
         </button>
       <% } %>

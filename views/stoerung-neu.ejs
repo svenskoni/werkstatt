@@ -12,7 +12,6 @@
     </div>
   <% } %>
 
-  <!-- Inline-Validierungsfehler (clientseitig) -->
   <div id="clientErrors" class="alert alert-error" role="alert" style="display:none">
     <ul id="clientErrorList" class="error-list"></ul>
   </div>
@@ -53,12 +52,32 @@
       </select>
     </div>
 
-    <!-- Schweregrad -->
+    <!-- Issue #4: Klasse als 2 Buttons (KFZ / Gerät) -->
+    <div class="form-group">
+      <fieldset class="klasse-fieldset">
+        <legend class="form-label required">Art der Störung</legend>
+        <input type="hidden" id="klasseInput" name="klasse" value="<%= old.klasse || 'kfz' %>">
+        <div class="klasse-grid">
+          <button type="button" class="klasse-option <%= (!old.klasse || old.klasse === 'kfz') ? 'active' : '' %>" data-value="kfz">
+            <span class="klasse-icon">🚒</span>
+            <span class="klasse-label">KFZ</span>
+            <span class="form-hint" style="margin:0;text-align:center">Fahrzeugschaden, Karosserie, Motor</span>
+          </button>
+          <button type="button" class="klasse-option <%= old.klasse === 'geraet' ? 'active' : '' %>" data-value="geraet">
+            <span class="klasse-icon">🔧</span>
+            <span class="klasse-label">Gerät</span>
+            <span class="form-hint" style="margin:0;text-align:center">Gerät auf dem Fahrzeug</span>
+          </button>
+        </div>
+      </fieldset>
+    </div>
+
+    <!-- Issue #13: 'schwer' entfernt – nur noch klein / normal / totalausfall -->
     <div class="form-group">
       <fieldset class="schwere-fieldset">
         <legend class="form-label required">Schweregrad</legend>
         <div class="schwere-grid">
-          <% [['klein','Klein','🟢','Kleinere Schäden, Fahrzeug einsatzbereit'],['normal','Normal','🟡','Eingeschränkte Funktion'],['schwer','Schwer','🟠','Erheblicher Schaden'],['totalausfall','Totalausfall','🔴','Fahrzeug nicht einsatzbereit']].forEach(([val,label,icon,hint]) => { %>
+          <% [['klein','Klein','🟢','Kleinere Schäden, Fahrzeug einsatzbereit'],['normal','Normal','🟡','Eingeschränkte Funktion'],['totalausfall','Totalausfall','🔴','Fahrzeug nicht einsatzbereit']].forEach(([val,label,icon,hint]) => { %>
           <label class="schwere-option <%= old.schwere === val ? 'checked' : '' %>">
             <input type="radio" name="schwere" value="<%= val %>" <%= old.schwere === val ? 'checked' : '' %> required>
             <span class="schwere-icon"><%= icon %></span>
@@ -131,6 +150,40 @@
 
 <style>
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Klasse-Buttons (Issue #4) */
+.klasse-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.klasse-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color 180ms, background 180ms, box-shadow 180ms;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  text-align: center;
+}
+.klasse-option:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface-offset);
+}
+.klasse-option.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-highlight);
+  box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.15);
+}
+.klasse-icon { font-size: 1.75rem; line-height: 1; }
+.klasse-label { font-weight: 700; font-size: var(--text-base); }
+
 .similar-item {
   display: flex;
   align-items: center;
@@ -209,6 +262,19 @@ const ALLOWED_MIMES = new Set([
   'video/mp4', 'video/quicktime',
 ]);
 const ALLOWED_EXTS = new Set(['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov']);
+
+// ═══════════════════════════════════════════════════════════════
+// KLASSE-AUSWAHL (Issue #4)
+// ═══════════════════════════════════════════════════════════════
+const klasseInput   = document.getElementById('klasseInput');
+const klasseButtons = document.querySelectorAll('.klasse-option');
+klasseButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    klasseButtons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    klasseInput.value = btn.dataset.value;
+  });
+});
 
 // ═══════════════════════════════════════════════════════════════
 // MAGIC-BYTES PRÜFUNG

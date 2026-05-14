@@ -224,10 +224,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
          MELDER-ANSICHT: nur Basisdaten, keine Kontaktinfos, kein Verlauf
     ═══════════════════════════════════════════════════════════════════ -->
     <div class="detail-card">
-      <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-4);padding:var(--space-3);background:var(--color-surface-offset);border-radius:var(--radius-md)">
-        &#8505;&#65039; Diese Ansicht zeigt nur die Basisdaten der Meldung.
-        F&uuml;r weitere Details wende dich an einen Admin.
-      </p>
       <table class="detail-table">
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
         <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>

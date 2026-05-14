@@ -207,6 +207,22 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
+// ── Info-Notiz hinzufügen (nur Admin, Issue #21) ────────────────────────────────────────────
+router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
+  try {
+    const { notiz } = req.body;
+    if (!notiz || !notiz.trim()) return res.status(400).json({ error: 'Notiz darf nicht leer sein.' });
+    const storung = await db.getStorungById(req.params.id);
+    if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
+    if (storung.status !== 'bestaetigt') return res.status(400).json({ error: 'Nur bei Status "In Bearbeitung" möglich.' });
+    await db.addHistoryNote(storung.id, req.session.user.username, notiz.trim());
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Notiz]', err);
+    res.status(500).json({ error: 'Interner Fehler.' });
+  }
+});
+
 // ── Erinnerung setzen (nur Admin) ───────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
   try {

@@ -1,6 +1,7 @@
 'use strict';
 const express  = require('express');
 const path     = require('path');
+const fs       = require('fs');
 const multer   = require('multer');
 const db       = require('../src/database');
 const mailer   = require('../src/mailer');
@@ -10,21 +11,73 @@ const router = express.Router();
 
 // ── Multer ──────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
+const ALLOWED_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'video/mp4', 'video/quicktime',
+]);
+const ALLOWED_EXTS = new Set(['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov']);
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, path.join(__dirname, '..', 'public', 'uploads')),
   filename:    (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    // Sicherer Dateiname: nur erlaubte Extension, keine Pfad-Traversal-Zeichen
+    const safeExt = ALLOWED_EXTS.has(ext) ? ext : '';
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${safeExt}`);
   }
 });
+
 const upload = multer({
   storage,
   limits: { fileSize: MAX_MB * 1024 * 1024, files: 6 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) cb(null, true);
-    else cb(new Error('Nur Bild- und Videodateien erlaubt.'));
+    const ext = path.extname(file.originalname).toLowerCase();
+    // Doppelte Prüfung: MIME-Typ UND Dateiendung müssen in der Whitelist sein
+    if (ALLOWED_MIMES.has(file.mimetype) && ALLOWED_EXTS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
+    }
   }
 });
+
+// Magic-Bytes serverseitig prüfen
+// Liest die ersten 12 Bytes der gespeicherten Datei und vergleicht
+// mit bekannten Signaturen. Gibt true zurück wenn OK.
+function checkMagicBytesServer(filePath, mime) {
+  try {
+    const fd  = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(12);
+    fs.readSync(fd, buf, 0, 12, 0);
+    fs.closeSync(fd);
+
+    if (mime === 'image/jpeg')
+      return buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+    if (mime === 'image/png')
+      return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+    if (mime === 'image/gif')
+      return buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38;
+    if (mime === 'image/webp') {
+      const riff = buf[0]===0x52 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x46;
+      const webp = buf[8]===0x57 && buf[9]===0x45 && buf[10]===0x42 && buf[11]===0x50;
+      return riff && webp;
+    }
+    if (mime === 'video/mp4' || mime === 'video/quicktime')
+      return buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Hilfsfunktion: hochgeladene Dateien sicher löschen
+function deleteUploadedFiles(files) {
+  if (!files || !files.length) return;
+  for (const f of files) {
+    try { fs.unlinkSync(f.path); } catch { /* ignore */ }
+  }
+}
 
 function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
@@ -57,7 +110,37 @@ router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
 
-router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async (req, res) => {
+router.post('/stoerung/neu', requireLogin, (req, res, next) => {
+  // Multer mit eigenem Error-Handler wrappen
+  upload.array('attachments', 6)(req, res, err => {
+    if (err) {
+      // Bereits hochgeladene Dateien sofort löschen
+      deleteUploadedFiles(req.files);
+
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return renderNeu(res,
+          [`Eine oder mehrere Dateien überschreiten das Limit von ${MAX_MB} MB.`],
+          req.body || {}, req.session.user);
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return renderNeu(res,
+          ['Maximal 6 Dateien erlaubt.'],
+          req.body || {}, req.session.user);
+      }
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        return renderNeu(res,
+          ['Ungültiger Dateityp. Nur JPG, PNG, GIF, WebP, MP4 und MOV erlaubt.'],
+          req.body || {}, req.session.user);
+      }
+      // Unbekannter Multer-Fehler
+      console.error('[Upload] Multer-Fehler:', err.message);
+      return renderNeu(res,
+        ['Fehler beim Hochladen. Bitte erneut versuchen.'],
+        req.body || {}, req.session.user);
+    }
+    next();
+  });
+}, async (req, res) => {
   const old = req.body || {};
   try {
     const { fahrzeug, schwere, fehlerBeschreibung, beschreibung, melderName, melderHandy, melderMail } = req.body;
@@ -66,21 +149,44 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
     if (melderHandy && melderHandy.trim()) kontaktTeile.push(melderHandy.trim());
     if (melderMail   && melderMail.trim())  kontaktTeile.push(melderMail.trim());
     const melderKontakt = kontaktTeile.join(' / ');
+
     const errors = [];
-    if (!melderName)         errors.push('Name des Melders ist erforderlich.');
-    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug ausw\u00e4hlen.');
-    if (!schwere)            errors.push('Bitte einen Schweregrad ausw\u00e4hlen.');
-    if (!fehlerBeschreibung) errors.push('Fehlerbeschreibung ist erforderlich.');
+    if (!melderName || melderName.trim().length < 3) errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
+    if (!fahrzeug)           errors.push('Bitte ein Fahrzeug auswählen.');
+    if (!schwere)            errors.push('Bitte einen Schweregrad auswählen.');
+    if (!fehlerBeschreibung || fehlerBeschreibung.trim().length < 6) errors.push('Fehlerbeschreibung ist erforderlich (mind. 6 Zeichen).');
     if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
-    if (errors.length) return renderNeu(res, errors, old, req.session.user);
-    const attachments = (req.files || []).map(f => ({
-      filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
-    }));
+
+    // Serverseitige Magic-Bytes-Prüfung
+    const uploadedFiles = req.files || [];
+    const invalidFiles  = [];
+    for (const f of uploadedFiles) {
+      if (!checkMagicBytesServer(f.path, f.mimetype)) {
+        invalidFiles.push(f.originalname);
+        try { fs.unlinkSync(f.path); } catch { /* ignore */ }
+      }
+    }
+    if (invalidFiles.length) {
+      errors.push(`Folgende Dateien wurden abgelehnt (Inhalt stimmt nicht mit Dateityp überein): ${invalidFiles.join(', ')}`);
+    }
+
+    if (errors.length) {
+      // Verbleibende gültige Uploads auch löschen – Client muss neu auswählen
+      deleteUploadedFiles(uploadedFiles.filter(f => !invalidFiles.includes(f.originalname)));
+      return renderNeu(res, errors, old, req.session.user);
+    }
+
+    const attachments = uploadedFiles
+      .filter(f => !invalidFiles.includes(f.originalname))
+      .map(f => ({
+        filename: f.filename, originalname: f.originalname, mimetype: f.mimetype, size: f.size,
+      }));
+
     const storung = await db.createStorung({
       fahrzeug, schwere, fehlerBeschreibung,
       beschreibung: beschreibung || '',
       createdBy: req.session.user.username,
-      melderName: melderName || '',
+      melderName: melderName.trim(),
       melderKontakt,
       melderBenachrichtigung,
       attachments,
@@ -90,6 +196,7 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
     res.redirect('/');
   } catch (err) {
     console.error('[Neu]', err);
+    deleteUploadedFiles(req.files);
     renderNeu(res, ['Speichern fehlgeschlagen. Bitte erneut versuchen.'], old, req.session.user);
   }
 });
@@ -98,11 +205,11 @@ router.post('/stoerung/neu', requireLogin, upload.array('attachments', 6), async
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).render('error', { title: '404', message: 'St\u00f6rung nicht gefunden.' });
+    if (!storung) return res.status(404).render('error', { title: '404', message: 'Störung nicht gefunden.' });
     res.render('stoerung-detail', { storung, user: req.session.user });
   } catch (err) {
     console.error('[Detail]', err);
-    res.status(500).render('error', { title: 'Fehler', message: 'St\u00f6rung konnte nicht geladen werden.' });
+    res.status(500).render('error', { title: 'Fehler', message: 'Störung konnte nicht geladen werden.' });
   }
 });
 
@@ -111,12 +218,12 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
-    if (!allowed.includes(status)) return res.status(400).json({ error: 'Ung\u00fcltiger Status.' });
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
     const validSchwere = ['klein', 'normal', 'schwer', 'totalausfall'];
-    const gepr\u00fcfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, gepr\u00fcfteSchwere);
+    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
@@ -138,28 +245,21 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
       return res.json({ ok: true, cleared: true });
     }
 
-    // datetime-local liefert "YYYY-MM-DDTHH:MM" OHNE Zeitzonenangabe.
-    // new Date() würde das als UTC interpretieren → falsche Zeit.
-    // Korrektur: "+02:00" (CEST) anhängen damit JS lokal rechnet.
-    // Robustere Lösung: String direkt als Europa/Berlin parsen.
     let dt;
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(reminderAt)) {
-      // Kein Timezone-Suffix → als lokale Berliner Zeit behandeln
-      // Offset von Europe/Berlin ermitteln (berücksichtigt Sommer-/Winterzeit)
-      const localDate = new Date(reminderAt + ':00');  // Sekunden ergänzen
+      const localDate = new Date(reminderAt + ':00');
       const berlin = new Date(localDate.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
-      const diff = localDate - berlin;  // Differenz zwischen lokaler JS-Zeit und Berlin-Zeit
-      dt = new Date(localDate.getTime() - diff);       // in UTC umrechnen
+      const diff = localDate - berlin;
+      dt = new Date(localDate.getTime() - diff);
     } else {
       dt = new Date(reminderAt);
     }
 
-    if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ung\u00fcltiges Datum.' });
+    if (isNaN(dt.getTime())) return res.status(400).json({ error: 'Ungültiges Datum.' });
     if (dt <= new Date()) return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
 
-    // reminderTo: immer eingeloggter Admin (Auswahl anderer Admins wurde entfernt)
     const to = mailer.resolveAdminMail(req.session.user.username);
-    if (!to) return res.status(400).json({ error: 'Keine g\u00fcltige Admin-E-Mail gefunden. Bitte ADMIN_MAILS in der .env konfigurieren.' });
+    if (!to) return res.status(400).json({ error: 'Keine gültige Admin-E-Mail gefunden. Bitte ADMIN_MAILS in der .env konfigurieren.' });
 
     await db.setReminder(storung.id, dt.toISOString(), to);
     res.json({
@@ -185,8 +285,8 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
     await db.deleteStorung(storung.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[L\u00f6schen]', err);
-    res.status(500).json({ error: 'L\u00f6schen fehlgeschlagen.' });
+    console.error('[Löschen]', err);
+    res.status(500).json({ error: 'Löschen fehlgeschlagen.' });
   }
 });
 

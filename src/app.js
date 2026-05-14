@@ -13,6 +13,7 @@ const uploadsRoute   = require('../routes/uploads');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
 const reminder       = require('./reminder');
+const { requireLogin, requireRole } = require('../middleware/auth');
 
 // Pflicht-Variablen prüfen
 const REQUIRED_ENV = [
@@ -20,7 +21,10 @@ const REQUIRED_ENV = [
   'VEHICLES',
   'MAX_UPLOAD_MB', 'MAX_UPLOAD_DIR_MB', 'COMPRESS_AFTER_DAYS',
   'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURE',
-  'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM', 'MAIL_RECIPIENTS',
+  'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM',
+  'ADMIN_ESCALATION',
+  'ADMIN_1_NAME', 'ADMIN_1_PASS_HASH',  // mind. ein Admin muss konfiguriert sein
+  'CREW_PASS_HASH',                      // Melder-Passwort
 ];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length > 0) {
@@ -91,15 +95,16 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/', authRoutes);
+// ── Routen ─────────────────────────────────────────────────────────────────────────────
+app.use('/', authRoutes);      // inkl. /login, /logout, /api/urlaub/*
 app.use('/', uploadsRoute);
 app.use('/', stoerungRoutes);
 
-app.use((req, res) => res.status(404).render('error', { title: '404 \u2013 Nicht gefunden', message: 'Die Seite existiert nicht.' }));
+app.use((req, res) => res.status(404).render('error', { title: '404 – Nicht gefunden', message: 'Die Seite existiert nicht.' }));
 app.use((err, req, res, _next) => {
   console.error('[ERROR]', err);
   res.status(err.status || 500).render('error', {
-    title: `${err.status || 500} \u2013 Fehler`,
+    title: `${err.status || 500} – Fehler`,
     message: process.env.NODE_ENV === 'production' ? 'Ein interner Fehler ist aufgetreten.' : err.message,
   });
 });

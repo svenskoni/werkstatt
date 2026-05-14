@@ -30,7 +30,7 @@
     <% } %>
   </div>
 
-  <!-- Filter-Leiste: Fahrzeug + Klasse -->
+  <!-- Filter-Leiste -->
   <div class="filter-bar" role="group" aria-label="Filter" style="
     display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);
     background:var(--color-surface);border-bottom:1px solid var(--color-divider);">
@@ -76,6 +76,12 @@
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
+      <div class="col-load-more" id="more-gesendet" hidden>
+        <button class="load-more-btn" data-col="gesendet">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          <span class="load-more-label"></span>
+        </button>
+      </div>
     </section>
 
     <section class="kanban-col" aria-label="Störungen in Bearbeitung">
@@ -98,6 +104,12 @@
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
+      <div class="col-load-more" id="more-bestaetigt" hidden>
+        <button class="load-more-btn" data-col="bestaetigt">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          <span class="load-more-label"></span>
+        </button>
+      </div>
     </section>
 
     <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
@@ -128,6 +140,12 @@
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
+      <div class="col-load-more" id="more-erledigt" hidden>
+        <button class="load-more-btn" data-col="erledigt">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          <span class="load-more-label"></span>
+        </button>
+      </div>
     </section>
 
   </div>
@@ -154,52 +172,121 @@
   background: var(--color-primary); border-color: var(--color-primary);
   color: #fff; font-weight: 600;
 }
+
+/* Load-more Button */
+.col-load-more {
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+.load-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
+}
+.load-more-btn:hover {
+  background: var(--color-surface-offset);
+  color: var(--color-text);
+  border-color: var(--color-primary);
+}
+.load-more-btn svg {
+  flex-shrink: 0;
+}
 </style>
 
 <script>
 (function () {
+  const PAGE_SIZE = 10;
+
   const vfBtns = document.querySelectorAll('.vf-btn');
   const kfBtns = document.querySelectorAll('.kf-btn');
   const cols  = [
-    { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
-    { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt' },
-    { cards: 'col-erledigt',   cnt: 'cnt-erledigt',   empty: 'empty-erledigt'   },
+    { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet',   more: 'more-gesendet'   },
+    { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt', more: 'more-bestaetigt' },
+    { cards: 'col-erledigt',   cnt: 'cnt-erledigt',   empty: 'empty-erledigt',   more: 'more-erledigt'   },
   ];
   const countEl = document.querySelector('.vf-count');
 
   let activeVf = '';
   let activeKf = '';
 
+  const visibleCount = { gesendet: PAGE_SIZE, bestaetigt: PAGE_SIZE, erledigt: PAGE_SIZE };
+
   function applyFilter() {
     let totalVisible = 0;
-    cols.forEach(({ cards, cnt, empty }) => {
-      const col     = document.getElementById(cards);
-      const cntEl   = document.getElementById(cnt);
-      const emptyEl = document.getElementById(empty);
-      const wraps   = col.querySelectorAll('.kanban-card-wrap');
-      let visible   = 0;
-      wraps.forEach(w => {
+
+    cols.forEach(function (col) {
+      const colEl   = document.getElementById(col.cards);
+      const cntEl   = document.getElementById(col.cnt);
+      const emptyEl = document.getElementById(col.empty);
+      const moreEl  = document.getElementById(col.more);
+      const wraps   = Array.from(colEl.querySelectorAll('.kanban-card-wrap'));
+
+      const matching = wraps.filter(function (w) {
         const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         const matchKf = !activeKf || w.dataset.klasse   === activeKf;
-        const show = matchVf && matchKf;
-        w.style.display = show ? '' : 'none';
-        if (show) visible++;
+        return matchVf && matchKf;
       });
-      cntEl.textContent = visible;
-      totalVisible += visible;
-      emptyEl.hidden = !(wraps.length > 0 && visible === 0);
+
+      const colKey = col.cards.replace('col-', '');
+      const limit  = visibleCount[colKey] || PAGE_SIZE;
+
+      let shown = 0;
+      wraps.forEach(function (w) {
+        const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
+        const matchKf = !activeKf || w.dataset.klasse   === activeKf;
+        const matches = matchVf && matchKf;
+        const rank    = matches ? matching.indexOf(w) : -1;
+        const show    = rank >= 0 && rank < limit;
+        w.style.display = show ? '' : 'none';
+        if (show) shown++;
+      });
+
+      cntEl.textContent = matching.length;
+      totalVisible += shown;
+      emptyEl.hidden = !(wraps.length > 0 && matching.length === 0);
+
+      const remaining = matching.length - limit;
+      if (remaining > 0) {
+        const btn   = moreEl.querySelector('.load-more-btn');
+        const label = btn.querySelector('.load-more-label');
+        label.textContent = remaining <= PAGE_SIZE
+          ? remaining + ' weitere anzeigen'
+          : PAGE_SIZE + ' weitere laden (noch ' + remaining + ')';
+        moreEl.hidden = false;
+      } else {
+        moreEl.hidden = true;
+      }
     });
 
-    const parts = [];
-    if (activeVf) parts.push(`»${activeVf}«`);
-    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Gerät');
-    countEl.textContent = parts.length ? `${totalVisible} Einträge · ${parts.join(' + ')}` : '';
+    var parts = [];
+    if (activeVf) parts.push('\u00bb' + activeVf + '\u00ab');
+    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Ger\u00e4t');
+    countEl.textContent = parts.length ? totalVisible + ' sichtbar \u00b7 ' + parts.join(' + ') : '';
   }
+
+  document.querySelectorAll('.load-more-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var col = this.dataset.col;
+      visibleCount[col] = (visibleCount[col] || PAGE_SIZE) + PAGE_SIZE;
+      applyFilter();
+    });
+  });
 
   function setVf(val) {
     activeVf = val;
-    vfBtns.forEach(b => {
-      const match = b.dataset.vf === val;
+    Object.keys(visibleCount).forEach(function (k) { visibleCount[k] = PAGE_SIZE; });
+    vfBtns.forEach(function (b) {
+      var match = b.dataset.vf === val;
       b.classList.toggle('vf-active', match);
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
@@ -209,8 +296,9 @@
 
   function setKf(val) {
     activeKf = val;
-    kfBtns.forEach(b => {
-      const match = b.dataset.kf === val;
+    Object.keys(visibleCount).forEach(function (k) { visibleCount[k] = PAGE_SIZE; });
+    kfBtns.forEach(function (b) {
+      var match = b.dataset.kf === val;
       b.classList.toggle('kf-active', match);
       b.setAttribute('aria-pressed', match ? 'true' : 'false');
     });
@@ -218,21 +306,21 @@
     applyFilter();
   }
 
-  let savedVf = '', savedKf = '';
+  var savedVf = '', savedKf = '';
   try { savedVf = sessionStorage.getItem('vf_active') || ''; } catch {}
   try { savedKf = sessionStorage.getItem('kf_active') || ''; } catch {}
-  const validVf = Array.from(vfBtns).map(b => b.dataset.vf);
-  const validKf = Array.from(kfBtns).map(b => b.dataset.kf);
+  var validVf = Array.from(vfBtns).map(function (b) { return b.dataset.vf; });
+  var validKf = Array.from(kfBtns).map(function (b) { return b.dataset.kf; });
   if (!validVf.includes(savedVf)) savedVf = '';
   if (!validKf.includes(savedKf)) savedKf = '';
 
   activeVf = savedVf;
   activeKf = savedKf;
-  vfBtns.forEach(b => { const m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
-  kfBtns.forEach(b => { const m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
+  vfBtns.forEach(function (b) { var m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
+  kfBtns.forEach(function (b) { var m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
   applyFilter();
 
-  vfBtns.forEach(btn => btn.addEventListener('click', () => setVf(btn.dataset.vf)));
-  kfBtns.forEach(btn => btn.addEventListener('click', () => setKf(btn.dataset.kf)));
+  vfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setVf(btn.dataset.vf); }); });
+  kfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setKf(btn.dataset.kf); }); });
 })();
 </script>

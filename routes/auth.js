@@ -1,72 +1,83 @@
 'use strict';
 const express = require('express');
-const { verifyAdmin, verifyCrewPassword } = require('../middleware/auth');
-
-const router = express.Router();
-
-/**
- * S3-FIX: Open-Redirect-Schutz.
- * returnTo muss ein relativer Pfad sein (beginnt mit /) und darf kein Protokoll enthalten.
- */
-function isSafeReturnPath(url) {
-  if (!url || typeof url !== 'string') return false;
-  if (!url.startsWith('/'))            return false;   // Kein https://evil.com
-  if (url.startsWith('//'))            return false;   // Kein //evil.com (protocol-relative)
-  if (/[\r\n]/.test(url))             return false;   // Kein Header-Injection
-  return true;
-}
+const router  = express.Router();
+const db      = require('../src/database');
+const { verifyAdmin, verifyCrewPassword, requireRole } = require('../middleware/auth');
 
 // GET /login
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
-  res.render('login', { error: null, tab: 'crew' });
+  res.render('login', { tab: 'crew', error: null });
 });
 
-// POST /login  –  type=crew|admin
+// POST /login  – type=crew oder type=admin (Hidden-Feld im Formular)
 router.post('/login', async (req, res) => {
-  try {
-    const type     = (req.body.type || 'crew').trim();
-    const password = (req.body.password || '').trim();
-    const username = (req.body.username || '').trim();
+  const { type, username, password } = req.body;
 
-    let user = null;
-
-    if (type === 'admin') {
-      user = await verifyAdmin(username, password);
-    } else {
-      user = await verifyCrewPassword(password);
-    }
-
+  if (type === 'crew') {
+    const user = await verifyCrewPassword(password);
     if (!user) {
-      return res.status(401).render('login', {
-        error: type === 'admin'
-          ? 'Name oder Passwort falsch.'
-          : 'Passwort falsch.',
-        tab: type
-      });
+      return res.render('login', { tab: 'crew', error: 'Passwort falsch.' });
     }
-
-    req.session.regenerate(err => {
-      if (err) {
-        console.error('[Login] Session-Fehler:', err);
-        return res.status(500).render('login', { error: 'Session-Fehler.', tab: type });
-      }
-      req.session.user = { username: user.username, role: user.role };
-
-      // S3-FIX: returnTo nur wenn sicherer relativer Pfad
-      const returnTo = isSafeReturnPath(req.session.returnTo) ? req.session.returnTo : '/';
-      delete req.session.returnTo;
-      res.redirect(returnTo);
-    });
-  } catch (err) {
-    console.error('[Login] Fehler:', err);
-    res.status(500).render('login', { error: 'Interner Fehler.', tab: 'crew' });
+    req.session.user = user;
+    const returnTo = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    return res.redirect(returnTo);
   }
+
+  if (type === 'admin') {
+    const user = await verifyAdmin(username, password);
+    if (!user) {
+      return res.render('login', { tab: 'admin', error: 'Benutzername oder Passwort falsch.' });
+    }
+    req.session.user = user;
+    const returnTo = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    return res.redirect(returnTo);
+  }
+
+  // Unbekannter type
+  res.render('login', { tab: 'crew', error: 'Ungültige Anfrage.' });
 });
 
 // POST /logout
 router.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/login'));
+});
+
+// ── Urlaub / Abwesenheit ─────────────────────────────────────────────────────
+
+/** GET /api/urlaub/status – eigener Abwesenheitsstatus */
+router.get('/api/urlaub/status', requireRole('admin'), async (req, res) => {
+  try {
+    const eintrag = await db.getAdminUrlaub(req.session.user.username);
+    res.json({ abwesend: !!eintrag, abwesend_bis: eintrag ? eintrag.abwesend_bis : null });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden des Urlaubs-Status.' });
+  }
+});
+
+/** POST /api/urlaub/setzen – Abwesenheit setzen oder löschen */
+router.post('/api/urlaub/setzen', requireRole('admin'), async (req, res) => {
+  try {
+    const { abwesend_bis } = req.body;
+    const username = req.session.user.username;
+
+    if (!abwesend_bis) {
+      await db.setAdminUrlaub(username, null);
+      return res.json({ ok: true, abwesend: false });
+    }
+
+    const datum = new Date(abwesend_bis);
+    if (isNaN(datum.getTime()) || datum <= new Date()) {
+      return res.status(400).json({ error: 'Datum muss in der Zukunft liegen.' });
+    }
+
+    await db.setAdminUrlaub(username, datum.toISOString());
+    res.json({ ok: true, abwesend: true, abwesend_bis: datum.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Speichern.' });
+  }
 });
 
 module.exports = router;

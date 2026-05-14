@@ -26,7 +26,9 @@ async function initDb() {
       melderKontakt          TEXT NOT NULL,
       melderBenachrichtigung INTEGER NOT NULL DEFAULT 0,
       reminderAt             TEXT,
-      reminderTo             TEXT
+      reminderTo             TEXT,
+      eskalation_stufe       INTEGER NOT NULL DEFAULT 0,
+      eskaliert_at           TEXT
     );
     CREATE TABLE IF NOT EXISTS stoerung_history (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +50,21 @@ async function initDb() {
       compressed   INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS admin_urlaub (
+      username    TEXT PRIMARY KEY,
+      abwesend_bis TEXT NOT NULL
+    );
   `);
+
+  // Migration: Spalten nachrüsten falls DB schon existiert
+  const cols = await all(`PRAGMA table_info(stoerungen)`);
+  const colNames = cols.map(c => c.name);
+  if (!colNames.includes('eskalation_stufe')) {
+    await run(`ALTER TABLE stoerungen ADD COLUMN eskalation_stufe INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!colNames.includes('eskaliert_at')) {
+    await run(`ALTER TABLE stoerungen ADD COLUMN eskaliert_at TEXT`);
+  }
 }
 
 async function run(sql, args = []) { return db.execute({ sql, args }); }
@@ -80,7 +96,6 @@ async function createStorung({ fahrzeug, klasse = 'kfz', schwere, fehlerBeschrei
   const now     = new Date().toISOString();
   const id      = await generateTicketId(fahrzeug, now);
   const benFlag = Number(melderBenachrichtigung) === 1 ? 1 : 0;
-  // Issue #13: 'schwer' nicht mehr gültig
   const validKlasse  = ['kfz', 'geraet'];
   const safeKlasse   = validKlasse.includes(klasse) ? klasse : 'kfz';
   const validSchwere = ['klein', 'normal', 'totalausfall'];
@@ -138,7 +153,6 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlass
   const now = new Date().toISOString();
   const current = await get(`SELECT schwere, klasse FROM stoerungen WHERE id = ?`, [id]);
   const alterSchwere = current ? current.schwere : null;
-  // Issue #13: 'schwer' nicht mehr gültig
   const validSchwere = ['klein', 'normal', 'totalausfall'];
   const schwereGeaendert = neuSchwere && validSchwere.includes(neuSchwere) && neuSchwere !== alterSchwere;
 
@@ -146,7 +160,7 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlass
   const alterKlasse = current ? current.klasse : 'kfz';
   const klasseGeaendert = neuKlasse && validKlasse.includes(neuKlasse) && neuKlasse !== alterKlasse;
 
-  let setClauses = 'status = ?, updatedAt = ?';
+  let setClauses = 'status = ?, updatedAt = ?, eskalation_stufe = 0, eskaliert_at = NULL';
   let setArgs    = [newStatus, now];
   if (schwereGeaendert) { setClauses += ', schwere = ?'; setArgs.push(neuSchwere); }
   if (klasseGeaendert)  { setClauses += ', klasse = ?';  setArgs.push(neuKlasse); }
@@ -179,7 +193,6 @@ async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlass
   return updated;
 }
 
-// ── Info-Notiz ohne Statuswechsel (Issue #21) ──────────────────────────────────
 async function addHistoryNote(stoerungId, changedBy, note) {
   const now = new Date().toISOString();
   await run(
@@ -209,6 +222,71 @@ async function getDueReminders() {
 
 async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
+}
+
+// ── Urlaub / Abwesenheit ────────────────────────────────────────────────────────
+
+/** Setzt oder entfernt den Abwesenheitszeitraum eines Admins. */
+async function setAdminUrlaub(username, abwesendBis) {
+  if (!abwesendBis) {
+    await run(`DELETE FROM admin_urlaub WHERE username = ?`, [username]);
+  } else {
+    await run(
+      `INSERT INTO admin_urlaub (username, abwesend_bis) VALUES (?,?)
+       ON CONFLICT(username) DO UPDATE SET abwesend_bis = excluded.abwesend_bis`,
+      [username, abwesendBis]
+    );
+  }
+}
+
+/** Gibt alle aktuell abwesenden Admins zurück (abwesend_bis in der Zukunft). */
+async function getAbwesendeAdmins() {
+  const now = new Date().toISOString();
+  return all(
+    `SELECT username, abwesend_bis FROM admin_urlaub WHERE abwesend_bis > ?`,
+    [now]
+  );
+}
+
+/** Gibt den Abwesenheitseintrag eines einzelnen Admins zurück (oder null). */
+async function getAdminUrlaub(username) {
+  const now = new Date().toISOString();
+  return get(
+    `SELECT username, abwesend_bis FROM admin_urlaub WHERE username = ? AND abwesend_bis > ?`,
+    [username, now]
+  );
+}
+
+/** Bereinigt abgelaufene Einträge (läuft täglich im cleanup). */
+async function cleanupAbgelaufeneUrlaube() {
+  const now = new Date().toISOString();
+  await run(`DELETE FROM admin_urlaub WHERE abwesend_bis <= ?`, [now]);
+}
+
+// ── Eskalation ──────────────────────────────────────────────────────────────────
+
+/** Liefert alle gesendet-Tickets deren Eskalationsstufe erhöht werden soll. */
+async function getEskalationsFaellige(stunden) {
+  const cutoff = new Date(Date.now() - stunden * 60 * 60 * 1000).toISOString();
+  return all(
+    `SELECT * FROM stoerungen
+     WHERE status = 'gesendet'
+       AND (
+         (eskalation_stufe = 0 AND createdAt  <= ?)
+         OR
+         (eskalation_stufe > 0 AND eskaliert_at <= ?)
+       )`,
+    [cutoff, cutoff]
+  );
+}
+
+/** Setzt die Eskalationsstufe und Zeitstempel. */
+async function setEskalationsStufe(id, stufe) {
+  const now = new Date().toISOString();
+  await run(
+    `UPDATE stoerungen SET eskalation_stufe = ?, eskaliert_at = ? WHERE id = ?`,
+    [stufe, now, id]
+  );
 }
 
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext) {
@@ -276,6 +354,8 @@ module.exports = {
   createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
   addHistoryNote,
   setReminder, getDueReminders, clearReminder,
+  setAdminUrlaub, getAbwesendeAdmins, getAdminUrlaub, cleanupAbgelaufeneUrlaube,
+  getEskalationsFaellige, setEskalationsStufe,
   searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
   getOldestAttachments, getOldestAttachmentsForPurge, deleteAttachment,

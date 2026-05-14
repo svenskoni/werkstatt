@@ -10,9 +10,9 @@ const STATUS_LABEL = {
   zurueckgewiesen: 'Zurückgewiesen',
 };
 const SCHWERE = {
-  klein:        { label: 'Klein',        icon: '🟢' },
-  normal:       { label: 'Normal',       icon: '🟡' },
-  totalausfall: { label: 'Totalausfall', icon: '🔴' },
+  klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
+  normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
+  totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
 const isAdmin      = user && user.role === 'admin';
 const hasReminder  = !!storung.reminderAt;
@@ -35,7 +35,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>
         <tr><th>Klasse</th><td>
           <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:var(--text-xs);font-weight:700;background:var(--color-primary-highlight);color:var(--color-primary)">
-            <%= storung.klasse === 'geraet' ? '🔧 Gerät' : '🚒 KFZ' %>
+            <%= storung.klasse === 'geraet' ? '\uD83D\uDD27 Gerät' : '\uD83D\uDE92 KFZ' %>
           </span>
         </td></tr>
         <tr><th>Schweregrad</th><td>
@@ -111,12 +111,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       <h3 style="margin-bottom:var(--space-3)">Statusverlauf</h3>
       <ol class="history-list" style="list-style:none">
         <% storung.history.forEach(function(h) { %>
-          <li class="history-item<%= h.status === 'notiz' ? ' history-item-notiz' : '' %>">
-            <% if (h.status === 'notiz') { %>
-              <span class="history-status" style="color:var(--color-text-muted)">&#128172; Info</span>
-            <% } else { %>
-              <span class="history-status"><%= STATUS_LABEL[h.status] || h.status %></span>
-            <% } %>
+          <li class="history-item">
+            <span class="history-status">
+              <% if (h.status === 'notiz') { %>&#128172; Info<% } else { %><%= STATUS_LABEL[h.status] || h.status %><% } %>
+            </span>
             <span class="history-by">von <%= h.changedBy %></span>
             <span class="history-date"><%= formatDate(h.changedAt) %></span>
             <% if (h.note) { %><span class="history-note">&bdquo;<%= h.note %>&ldquo;</span><% } %>
@@ -225,7 +223,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>
         <tr><th>Klasse</th><td>
           <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:var(--text-xs);font-weight:700;background:var(--color-primary-highlight);color:var(--color-primary)">
-            <%= storung.klasse === 'geraet' ? '🔧 Gerät' : '🚒 KFZ' %>
+            <%= storung.klasse === 'geraet' ? '\uD83D\uDD27 Gerät' : '\uD83D\uDE92 KFZ' %>
           </span>
         </td></tr>
         <tr><th>Schweregrad</th><td>
@@ -256,7 +254,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">&#9888;&#65039; Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Diese Aktion ist <strong>nicht rückgängig</strong>. Bitte gib eine Begründung an.
+      Diese Aktion ist <strong>nicht rükgängig</strong>. Bitte gib eine Begründung an.
     </p>
     <div class="form-group">
       <label class="form-label required" for="deleteGrund">Begründung</label>
@@ -294,7 +292,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   </div>
 </div>
 
-<!-- Info-Notiz-Modal (Issue #21) -->
+<!-- Info-Notiz-Modal -->
 <div class="modal-backdrop" id="infoModal" hidden role="dialog" aria-modal="true" aria-labelledby="infoModalTitle" tabindex="-1">
   <div class="modal" style="max-width:480px">
     <h3 id="infoModalTitle" style="margin-bottom:var(--space-2)">&#128172; Info hinzufügen</h3>
@@ -326,7 +324,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
   if (!IS_ADMIN) return;
 
-  // ── LÖSCHEN ─────────────────────────────────────────────────────
+  // ── LÖSCHEN ───────────────────────────────────────────────────────────────────
   var deleteBtn   = document.getElementById('deleteBtn');
   var deleteModal = document.getElementById('deleteModal');
   var cancelBtn   = document.getElementById('deleteCancelBtn');
@@ -376,7 +374,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
-  // ── ERINNERUNG ───────────────────────────────────────────────────
+  // ── ERINNERUNG ───────────────────────────────────────────────────────────────────
   var setReminderBtn    = document.getElementById('setReminderBtn');
   var reminderModal     = document.getElementById('reminderModal');
   var reminderAtInput   = document.getElementById('reminderAtInput');
@@ -450,7 +448,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
-  // ── INFO-NOTIZ (Issue #21) ────────────────────────────────────────
+  // ── INFO-NOTIZ ──────────────────────────────────────────────────────────────────────
   var addInfoBtn    = document.getElementById('addInfoBtn');
   var infoModal     = document.getElementById('infoModal');
   var infoText      = document.getElementById('infoText');
@@ -481,7 +479,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       infoFeedback.textContent = '';
       infoText.style.borderColor = '';
       infoSaveBtn.disabled = true;
-      infoSaveBtn.textContent = 'Speichere\u2026';
+      infoSaveBtn.textContent = 'Speichere…';
       fetch('/stoerung/' + STOERUNG_ID + '/notiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

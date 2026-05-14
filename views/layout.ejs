@@ -41,7 +41,17 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <span class="user-label"><%= user.username %></span>
+          <!-- Urlaubs-Button -->
+          <button class="btn btn-ghost btn-sm" id="urlaubBtn"
+            aria-label="Abwesenheit verwalten" title="Abwesenheit / Urlaub">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </button>
+          <span class="user-label" id="userLabel"><%= user.username %></span>
           <form action="/logout" method="POST" style="margin:0">
             <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden" aria-label="Abmelden">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -70,7 +80,6 @@
       <h3 id="modalTitle" style="margin-bottom:var(--space-2)">Status &auml;ndern</h3>
       <p id="modalDesc" style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)"></p>
 
-      <!-- Klasse -->
       <div id="klasseWrap" style="display:none;margin-bottom:var(--space-4)">
         <label class="form-label" style="display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)">
           Klasse
@@ -88,7 +97,6 @@
         </div>
       </div>
 
-      <!-- Schweregrad -->
       <div id="schwereWrap" style="display:none;margin-bottom:var(--space-4)">
         <label class="form-label" for="schwereSelect" style="display:flex;align-items:center;gap:var(--space-2)">
           Schweregrad
@@ -128,6 +136,34 @@
       </div>
     </div>
   </div>
+
+  <!-- Urlaubs-Modal -->
+  <% if (user) { %>
+  <div class="modal-backdrop" id="urlaubModal" hidden role="dialog" aria-modal="true" aria-labelledby="urlaubModalTitle" tabindex="-1">
+    <div class="modal" style="max-width:420px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
+        <h3 id="urlaubModalTitle" style="margin:0">&#x1F4C5; Abwesenheit verwalten</h3>
+        <button class="btn btn-ghost btn-sm" id="urlaubModalClose" aria-label="Schlie&szlig;en">&times;</button>
+      </div>
+
+      <div id="urlaubStatus" style="margin-bottom:var(--space-4);padding:var(--space-3) var(--space-4);border-radius:var(--radius-md);font-size:var(--text-sm);display:none">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="urlaubBisDatum">Abwesend bis</label>
+        <input type="datetime-local" class="form-control" id="urlaubBisDatum">
+        <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">
+          W&auml;hrend deiner Abwesenheit wirst du bei der Eskalation &uuml;bersprungen &ndash; der n&auml;chste Admin in der Kette erh&auml;lt die Benachrichtigung.
+        </p>
+      </div>
+
+      <div style="display:flex;gap:var(--space-2);margin-top:var(--space-4)">
+        <button class="btn btn-ghost" id="urlaubAufheben" style="display:none">Abwesenheit beenden</button>
+        <button class="btn btn-primary" id="urlaubSpeichern" style="margin-left:auto">Speichern</button>
+      </div>
+    </div>
+  </div>
+  <% } %>
 
   <!-- Such-Modal -->
   <% if (user) { %>
@@ -232,66 +268,196 @@
     const r = document.documentElement;
     let d = r.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
     r.setAttribute('data-theme', d);
-    if (t) t.addEventListener('click', () => {
+    if (t) t.addEventListener('click', function() {
       d = d === 'dark' ? 'light' : 'dark';
       r.setAttribute('data-theme', d);
     });
   })();
   <% if (user) { %>
+  // ── Urlaubs-Modal ────────────────────────────────────────────────────────────
   (function () {
-    const btn        = document.getElementById('searchBtn');
-    const modal      = document.getElementById('searchModal');
-    const closeBtn   = document.getElementById('searchModalClose');
-    const submit     = document.getElementById('searchSubmit');
-    const results    = document.getElementById('searchResults');
-    const ticketEl   = document.getElementById('searchTicketId');
-    const fahrzeugEl = document.getElementById('searchFahrzeug');
-    const ticketHint = document.getElementById('searchTicketIdHint');
-    const klasseEl   = document.getElementById('searchKlasse');
+    var btn        = document.getElementById('urlaubBtn');
+    var modal      = document.getElementById('urlaubModal');
+    var closeBtn   = document.getElementById('urlaubModalClose');
+    var statusBox  = document.getElementById('urlaubStatus');
+    var datumInput = document.getElementById('urlaubBisDatum');
+    var aufhebenBtn= document.getElementById('urlaubAufheben');
+    var speichernBtn=document.getElementById('urlaubSpeichern');
+    var userLabel  = document.getElementById('userLabel');
 
-    const VEHICLES = Array.from(fahrzeugEl.options)
-      .map(o => o.value).filter(v => v !== '');
+    var istAbwesend = false;
+
+    function formatDE(iso) {
+      if (!iso) return '';
+      var d = new Date(iso);
+      return d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' }) + ' Uhr';
+    }
+
+    function setUrlaubBadge(abwesend) {
+      if (abwesend) {
+        btn.style.color = 'var(--color-warning)';
+        btn.title = 'Abwesenheit aktiv \u2013 klicken zum \u00c4ndern';
+        userLabel.innerHTML = '<%= user.username %> <span style="font-size:var(--text-xs);color:var(--color-warning);font-weight:600">(abwesend)</span>';
+      } else {
+        btn.style.color = '';
+        btn.title = 'Abwesenheit / Urlaub';
+        userLabel.textContent = '<%= user.username %>';
+      }
+    }
+
+    async function ladeStatus() {
+      try {
+        var r = await fetch('/api/urlaub/status');
+        var data = await r.json();
+        istAbwesend = data.abwesend;
+        setUrlaubBadge(istAbwesend);
+        if (data.abwesend && data.abwesend_bis) {
+          statusBox.innerHTML = '&#x1F334; Du bist aktuell als abwesend markiert bis: <strong>' + formatDE(data.abwesend_bis) + '</strong>';
+          statusBox.style.background = 'var(--color-warning-highlight)';
+          statusBox.style.color = 'var(--color-warning)';
+          statusBox.style.display = 'block';
+          aufhebenBtn.style.display = '';
+          // Datum vorausfüllen
+          var dt = new Date(data.abwesend_bis);
+          var local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+          datumInput.value = local;
+        } else {
+          statusBox.style.display = 'none';
+          aufhebenBtn.style.display = 'none';
+          datumInput.value = '';
+        }
+      } catch (e) {
+        statusBox.innerHTML = 'Fehler beim Laden.';
+        statusBox.style.display = 'block';
+      }
+    }
+
+    function openModal() {
+      modal.hidden = false;
+      ladeStatus();
+    }
+    function closeModal() { modal.hidden = true; }
+
+    btn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+    speichernBtn.addEventListener('click', async function() {
+      var val = datumInput.value;
+      if (!val) {
+        datumInput.style.borderColor = 'var(--color-error)';
+        return;
+      }
+      datumInput.style.borderColor = '';
+      speichernBtn.disabled = true;
+      speichernBtn.textContent = 'Wird gespeichert\u2026';
+      try {
+        var r = await fetch('/api/urlaub/setzen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ abwesend_bis: new Date(val).toISOString() })
+        });
+        var data = await r.json();
+        if (data.ok) {
+          await ladeStatus();
+          statusBox.innerHTML = '&#x2705; Abwesenheit gespeichert bis: <strong>' + formatDE(data.abwesend_bis) + '</strong>';
+          statusBox.style.background = 'var(--color-success-highlight)';
+          statusBox.style.color = 'var(--color-success)';
+          statusBox.style.display = 'block';
+          setTimeout(closeModal, 1400);
+        } else {
+          statusBox.innerHTML = '&#x26A0;&#xFE0F; ' + (data.error || 'Fehler');
+          statusBox.style.background = 'var(--color-error-highlight)';
+          statusBox.style.color = 'var(--color-error)';
+          statusBox.style.display = 'block';
+        }
+      } catch(e) {
+        statusBox.innerHTML = 'Netzwerkfehler.';
+        statusBox.style.display = 'block';
+      } finally {
+        speichernBtn.disabled = false;
+        speichernBtn.textContent = 'Speichern';
+      }
+    });
+
+    aufhebenBtn.addEventListener('click', async function() {
+      aufhebenBtn.disabled = true;
+      try {
+        await fetch('/api/urlaub/setzen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ abwesend_bis: null })
+        });
+        await ladeStatus();
+        statusBox.innerHTML = '&#x2705; Abwesenheit aufgehoben &ndash; du bist wieder aktiv.';
+        statusBox.style.background = 'var(--color-success-highlight)';
+        statusBox.style.color = 'var(--color-success)';
+        statusBox.style.display = 'block';
+        setTimeout(closeModal, 1200);
+      } catch(e) {
+        statusBox.innerHTML = 'Fehler.';
+        statusBox.style.display = 'block';
+      } finally {
+        aufhebenBtn.disabled = false;
+      }
+    });
+
+    // Badge beim Laden der Seite sofort setzen
+    ladeStatus();
+  })();
+
+  // ── Such-Modal ───────────────────────────────────────────────────────────────
+  (function () {
+    var btn        = document.getElementById('searchBtn');
+    var modal      = document.getElementById('searchModal');
+    var closeBtn   = document.getElementById('searchModalClose');
+    var submit     = document.getElementById('searchSubmit');
+    var results    = document.getElementById('searchResults');
+    var ticketEl   = document.getElementById('searchTicketId');
+    var fahrzeugEl = document.getElementById('searchFahrzeug');
+    var ticketHint = document.getElementById('searchTicketIdHint');
+    var klasseEl   = document.getElementById('searchKlasse');
+
+    var VEHICLES = Array.from(fahrzeugEl.options).map(function(o) { return o.value; }).filter(function(v) { return v !== ''; });
 
     function openModal()  { modal.hidden = false; ticketEl.focus(); }
     function closeModal() { modal.hidden = true; results.innerHTML = ''; }
 
     btn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
 
-    ticketEl.addEventListener('input', () => {
-      const val = ticketEl.value.trim();
+    ticketEl.addEventListener('input', function() {
+      var val = ticketEl.value.trim();
       ticketHint.style.display = 'none';
       fahrzeugEl.style.borderColor = '';
       if (!val) return;
-      const matched = VEHICLES
-        .filter(v => val.toLowerCase().startsWith(v.toLowerCase()))
-        .sort((a, b) => b.length - a.length)[0];
+      var matched = VEHICLES.filter(function(v) { return val.toLowerCase().startsWith(v.toLowerCase()); })
+        .sort(function(a, b) { return b.length - a.length; })[0];
       if (matched) {
         fahrzeugEl.value = matched;
         ticketHint.style.display = 'block';
       }
     });
 
-    const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', totalausfall:'\uD83D\uDD34' };
-    const KLASSE_LABEL = { kfz:'KFZ', geraet:'Ger\u00E4t' };
-    const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt', zurueckgewiesen:'Zur\u00FCckgewiesen' };
-    const STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)', zurueckgewiesen:'var(--color-primary)' };
+    var SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', totalausfall:'\uD83D\uDD34' };
+    var KLASSE_LABEL = { kfz:'KFZ', geraet:'Ger\u00E4t' };
+    var STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt', zurueckgewiesen:'Zur\u00FCckgewiesen' };
+    var STATUS_COLOR = { gesendet:'var(--color-new)', bestaetigt:'var(--color-active)', erledigt:'var(--color-done)', zurueckgewiesen:'var(--color-primary)' };
 
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    submit.addEventListener('click', async () => {
-      const fahrzeug = fahrzeugEl.value.trim();
-      const ticketId = ticketEl.value.trim();
-      const freitext = document.getElementById('searchFreitext').value.trim();
-      const monat    = document.getElementById('searchMonat').value.trim();
-      const klasse   = klasseEl.value.trim();
-
-      const checkedStatuses = Array.from(document.querySelectorAll('.search-status-cb:checked'))
-        .map(cb => cb.value);
+    submit.addEventListener('click', async function() {
+      var fahrzeug = fahrzeugEl.value.trim();
+      var ticketId = ticketEl.value.trim();
+      var freitext = document.getElementById('searchFreitext').value.trim();
+      var monat    = document.getElementById('searchMonat').value.trim();
+      var klasse   = klasseEl.value.trim();
+      var checkedStatuses = Array.from(document.querySelectorAll('.search-status-cb:checked')).map(function(cb) { return cb.value; });
 
       fahrzeugEl.style.borderColor = '';
       if (!fahrzeug) {
@@ -310,30 +476,26 @@
       results.innerHTML = '';
 
       try {
-        const params = new URLSearchParams({ fahrzeug, status: checkedStatuses.join(',') });
+        var params = new URLSearchParams({ fahrzeug: fahrzeug, status: checkedStatuses.join(',') });
         if (monat)    params.set('monat',    monat);
         if (ticketId) params.set('ticketId', ticketId);
         if (freitext) params.set('q',        freitext);
         if (klasse)   params.set('klasse',   klasse);
 
-        const res  = await fetch('/api/suche?' + params);
-        const data = await res.json();
+        var res  = await fetch('/api/suche?' + params);
+        var data = await res.json();
 
         if (!Array.isArray(data) || data.length === 0) {
           results.innerHTML = '<p style="color:var(--color-text-muted);text-align:center;padding:var(--space-4) 0">Keine Meldungen f\u00fcr diese Kombination gefunden.</p>';
         } else {
-          const header = `<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-2)">${data.length} Ergebnis${data.length !== 1 ? 'se' : ''}</p>`;
-          const rows = data.map(s => {
-            const schweIcon = SCHWERE_ICON[s.schwere] || '';
-            const klLabel   = KLASSE_LABEL[s.klasse]  || s.klasse || '';
-            const status    = STATUS_LABEL[s.status]  || s.status;
-            const color     = STATUS_COLOR[s.status]  || 'var(--color-text-muted)';
-            const datum     = new Date(s.createdAt).toLocaleDateString('de-DE');
-            return `<a href="/stoerung/${encodeURIComponent(s.id)}" class="search-result-item">
-              <span class="search-result-id">${escHtml(s.id)}</span>
-              <span class="search-result-fehler">${escHtml(s.fehlerBeschreibung)}</span>
-              <span class="search-result-meta">${schweIcon}&nbsp;${klLabel}&nbsp;&middot;&nbsp;${datum}&nbsp;&middot;&nbsp;<span style="color:${color};font-weight:600">${status}</span></span>
-            </a>`;
+          var header = '<p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-2)">' + data.length + ' Ergebnis' + (data.length !== 1 ? 'se' : '') + '</p>';
+          var rows = data.map(function(s) {
+            var schweIcon = SCHWERE_ICON[s.schwere] || '';
+            var klLabel   = KLASSE_LABEL[s.klasse]  || s.klasse || '';
+            var status    = STATUS_LABEL[s.status]  || s.status;
+            var color     = STATUS_COLOR[s.status]  || 'var(--color-text-muted)';
+            var datum     = new Date(s.createdAt).toLocaleDateString('de-DE');
+            return '<a href="/stoerung/' + encodeURIComponent(s.id) + '" class="search-result-item"><span class="search-result-id">' + escHtml(s.id) + '</span><span class="search-result-fehler">' + escHtml(s.fehlerBeschreibung) + '</span><span class="search-result-meta">' + schweIcon + '&nbsp;' + klLabel + '&nbsp;&middot;&nbsp;' + datum + '&nbsp;&middot;&nbsp;<span style="color:' + color + ';font-weight:600">' + status + '</span></span></a>';
           });
           results.innerHTML = header + '<div class="search-result-list">' + rows.join('') + '</div>';
         }
@@ -345,9 +507,9 @@
       }
     });
 
-    ['searchTicketId','searchFahrzeug','searchKlasse','searchFreitext','searchMonat'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
+    ['searchTicketId','searchFahrzeug','searchKlasse','searchFreitext','searchMonat'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('keydown', function(e) { if (e.key === 'Enter') submit.click(); });
     });
   })();
   <% } %>

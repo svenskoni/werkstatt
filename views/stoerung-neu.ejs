@@ -128,10 +128,18 @@
     </div>
 
     <div class="form-actions">
-      <a href="/" class="btn btn-ghost">Abbrechen</a>
+      <a href="/" class="btn btn-ghost" id="cancelBtn">Abbrechen</a>
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Störung melden
+        <!-- Normaler Zustand -->
+        <span id="submitIdle" style="display:flex;align-items:center;gap:var(--space-2)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Störung melden
+        </span>
+        <!-- Loading-Zustand -->
+        <span id="submitLoading" style="display:none;align-items:center;gap:var(--space-2)">
+          <span style="display:inline-block;width:15px;height:15px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0" aria-hidden="true"></span>
+          Wird gesendet…
+        </span>
       </button>
     </div>
   </form>
@@ -197,6 +205,13 @@
   margin-top: var(--space-1);
   display: block;
 }
+
+/* Submit-Button im Lade-Zustand */
+#submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 </style>
 
 <script>
@@ -207,29 +222,14 @@ const MAX_FILE_BYTES = <%= parseInt(process.env.MAX_UPLOAD_MB || '8') %> * 1024 
 const MAX_FILES      = 6;
 const MAX_NAME_LEN   = 200;
 
-// Erlaubte MIME-Typen (Whitelist)
 const ALLOWED_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'video/mp4', 'video/quicktime',
 ]);
-
-// Erlaubte Dateiendungen (Whitelist, lowercase)
 const ALLOWED_EXTS = new Set(['.jpg','.jpeg','.png','.gif','.webp','.mp4','.mov']);
-
-// Magic-Bytes Signaturen (Hex-Präfixe)
-const MAGIC = [
-  { mime: 'image/jpeg',     bytes: [0xFF,0xD8,0xFF] },
-  { mime: 'image/png',      bytes: [0x89,0x50,0x4E,0x47] },
-  { mime: 'image/gif',      bytes: [0x47,0x49,0x46,0x38] },
-  { mime: 'image/webp',     bytes: null, webp: true },   // RIFF....WEBP
-  { mime: 'video/mp4',      bytes: null, mp4: true },    // ftyp box offset 4
-  { mime: 'video/quicktime',bytes: null, mov: true },    // ftyp/wide/moov
-];
 
 // ═══════════════════════════════════════════════════════════════
 // MAGIC-BYTES PRÜFUNG
-// Liest die ersten 12 Bytes einer Datei und vergleicht mit
-// bekannten Signaturen. Gibt Promise<boolean> zurück.
 // ═══════════════════════════════════════════════════════════════
 function checkMagicBytes(file) {
   return new Promise(resolve => {
@@ -237,35 +237,19 @@ function checkMagicBytes(file) {
     reader.onload = e => {
       const buf  = new Uint8Array(e.target.result);
       const mime = file.type;
-
-      // JPEG: FF D8 FF
-      if (mime === 'image/jpeg') {
-        resolve(buf[0]===0xFF && buf[1]===0xD8 && buf[2]===0xFF);
-        return;
-      }
-      // PNG: 89 50 4E 47
-      if (mime === 'image/png') {
-        resolve(buf[0]===0x89 && buf[1]===0x50 && buf[2]===0x4E && buf[3]===0x47);
-        return;
-      }
-      // GIF: 47 49 46 38 (GIF8)
-      if (mime === 'image/gif') {
-        resolve(buf[0]===0x47 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x38);
-        return;
-      }
-      // WebP: RIFF????WEBP
+      if (mime === 'image/jpeg')
+        return resolve(buf[0]===0xFF && buf[1]===0xD8 && buf[2]===0xFF);
+      if (mime === 'image/png')
+        return resolve(buf[0]===0x89 && buf[1]===0x50 && buf[2]===0x4E && buf[3]===0x47);
+      if (mime === 'image/gif')
+        return resolve(buf[0]===0x47 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x38);
       if (mime === 'image/webp') {
         const riff = buf[0]===0x52 && buf[1]===0x49 && buf[2]===0x46 && buf[3]===0x46;
         const webp = buf[8]===0x57 && buf[9]===0x45 && buf[10]===0x42 && buf[11]===0x50;
-        resolve(riff && webp);
-        return;
+        return resolve(riff && webp);
       }
-      // MP4 / MOV: ftyp-Box an Byte 4 (4 Bytes: 66 74 79 70)
-      if (mime === 'video/mp4' || mime === 'video/quicktime') {
-        const ftyp = buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70;
-        resolve(ftyp);
-        return;
-      }
+      if (mime === 'video/mp4' || mime === 'video/quicktime')
+        return resolve(buf[4]===0x66 && buf[5]===0x74 && buf[6]===0x79 && buf[7]===0x70);
       resolve(false);
     };
     reader.onerror = () => resolve(false);
@@ -274,81 +258,54 @@ function checkMagicBytes(file) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// EINZELNE DATEI VALIDIEREN
-// Gibt Array mit Fehlermeldungen zurück (leer = OK)
+// DATEI-VALIDIERUNG
 // ═══════════════════════════════════════════════════════════════
 async function validateFile(file) {
   const errors = [];
   const name   = file.name || '';
   const ext    = name.includes('.') ? ('.' + name.split('.').pop()).toLowerCase() : '';
 
-  // 1. Dateiname-Länge
-  if (name.length > MAX_NAME_LEN) {
+  if (name.length > MAX_NAME_LEN)
     errors.push(`"${name.slice(0,40)}…": Dateiname zu lang (max. ${MAX_NAME_LEN} Zeichen).`);
-  }
-
-  // 2. Unerlaubte Zeichen im Dateinamen (Schutz vor Path-Traversal)
-  if (/[\/\\<>:"\|\?\*\x00-\x1f]/.test(name)) {
+  if (/[\/\\<>:"\|\?\*\x00-\x1f]/.test(name))
     errors.push(`"${name.slice(0,40)}": Dateiname enthält ungültige Zeichen.`);
-  }
-
-  // 3. MIME-Typ Whitelist
   if (!ALLOWED_MIMES.has(file.type)) {
     errors.push(`"${name.slice(0,40)}": Dateityp "${file.type}" ist nicht erlaubt.`);
-    return errors; // Weitere Prüfungen sinnlos
+    return errors;
   }
-
-  // 4. Dateiendung Whitelist + Übereinstimmung mit MIME
   if (!ALLOWED_EXTS.has(ext)) {
     errors.push(`"${name.slice(0,40)}": Dateiendung "${ext}" ist nicht erlaubt.`);
     return errors;
   }
-
-  // 5. Dateigröße
   if (file.size > MAX_FILE_BYTES) {
-    const mb = (file.size / 1024 / 1024).toFixed(1);
+    const mb  = (file.size / 1024 / 1024).toFixed(1);
     const max = (MAX_FILE_BYTES / 1024 / 1024).toFixed(0);
     errors.push(`"${name.slice(0,40)}": Datei ist ${mb} MB groß (max. ${max} MB).`);
   }
-
-  // 6. Magic-Bytes prüfen (nur wenn MIME + Ext OK und Datei nicht leer)
   if (errors.length === 0 && file.size > 0) {
     const magicOk = await checkMagicBytes(file);
-    if (!magicOk) {
+    if (!magicOk)
       errors.push(`"${name.slice(0,40)}": Dateiinhalt stimmt nicht mit dem Dateityp überein (mögliche Manipulation).`);
-    }
   }
-
   return errors;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// DATEIEN VALIDIEREN & FILTERN
-// Gibt { valid: File[], errors: string[] } zurück
-// ═══════════════════════════════════════════════════════════════
 async function validateFiles(fileList) {
-  const allErrors = [];
-  const validFiles = [];
-
+  const allErrors = [], validFiles = [];
   for (const file of fileList) {
     const errs = await validateFile(file);
-    if (errs.length === 0) {
-      validFiles.push(file);
-    } else {
-      allErrors.push(...errs);
-    }
+    if (errs.length === 0) validFiles.push(file);
+    else allErrors.push(...errs);
   }
-
   if (validFiles.length > MAX_FILES) {
-    allErrors.push(`Maximal ${MAX_FILES} Dateien erlaubt. Die letzten ${validFiles.length - MAX_FILES} wurden entfernt.`);
+    allErrors.push(`Maximal ${MAX_FILES} Dateien erlaubt.`);
     validFiles.splice(MAX_FILES);
   }
-
   return { valid: validFiles, errors: allErrors };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// GESPEICHERTE DATEIEN (bleiben bei Validierungsfehlern erhalten)
+// GESPEICHERTE DATEIEN
 // ═══════════════════════════════════════════════════════════════
 let storedFiles = new DataTransfer();
 
@@ -371,28 +328,20 @@ area.addEventListener('drop', async e => {
   area.classList.remove('drag-over');
   await processNewFiles([...e.dataTransfer.files]);
 });
-
-input.addEventListener('change', async () => {
-  await processNewFiles([...input.files]);
-});
+input.addEventListener('change', async () => { await processNewFiles([...input.files]); });
 
 async function processNewFiles(newFiles) {
   const combined = [...storedFiles.files, ...newFiles];
   const { valid, errors } = await validateFiles(combined);
-
-  // Gespeicherte Dateien aktualisieren
   storedFiles = new DataTransfer();
   valid.forEach(f => storedFiles.items.add(f));
   input.files = storedFiles.files;
-
-  // Upload-Fehler anzeigen
   if (errors.length) {
     uploadErrors.innerHTML = errors.map(e => `⚠️ ${e}`).join('<br>');
     uploadErrors.style.display = 'block';
   } else {
     uploadErrors.style.display = 'none';
   }
-
   showPreview(storedFiles.files);
 }
 
@@ -411,11 +360,7 @@ function showPreview(files) {
     }
     const name = document.createElement('span'); name.className = 'file-name'; name.textContent = f.name; item.appendChild(name);
     const size = document.createElement('span'); size.className = 'file-size';
-    const mb = (f.size / 1024 / 1024).toFixed(1);
-    size.textContent = `${(f.size/1024).toFixed(0)} KB`;
-    item.appendChild(size);
-
-    // Entfernen-Button
+    size.textContent = `${(f.size/1024).toFixed(0)} KB`; item.appendChild(size);
     const rm = document.createElement('button');
     rm.type = 'button'; rm.className = 'btn btn-sm btn-ghost';
     rm.setAttribute('aria-label', `${f.name} entfernen`);
@@ -423,7 +368,6 @@ function showPreview(files) {
     rm.style.cssText = 'padding:2px 6px;font-size:11px;margin-left:auto;flex-shrink:0';
     rm.addEventListener('click', () => removeFile(idx));
     item.appendChild(rm);
-
     preview.appendChild(item);
   });
 }
@@ -437,11 +381,34 @@ function removeFile(idx) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FORMULAR-VALIDIERUNG (clientseitig, verhindert Seitenneulade)
+// SUBMIT-BUTTON LOADING STATE (Issue #6)
 // ═══════════════════════════════════════════════════════════════
-const form        = document.getElementById('stoerungForm');
-const errBox      = document.getElementById('clientErrors');
-const errList     = document.getElementById('clientErrorList');
+const submitBtn     = document.getElementById('submitBtn');
+const submitIdle    = document.getElementById('submitIdle');
+const submitLoading = document.getElementById('submitLoading');
+const cancelBtn     = document.getElementById('cancelBtn');
+
+function setSubmitLoading(active) {
+  submitBtn.disabled = active;
+  submitIdle.style.display    = active ? 'none'  : 'flex';
+  submitLoading.style.display = active ? 'flex'  : 'none';
+  // Abbrechen-Link im Lade-Zustand auch deaktivieren (verhindert Doppelklick-Chaos)
+  if (cancelBtn) {
+    cancelBtn.style.pointerEvents = active ? 'none' : '';
+    cancelBtn.style.opacity       = active ? '0.4' : '';
+  }
+}
+
+// Sicherheitsnetz: falls Server-Redirect ausbleibt (z.B. langsame Verbindung
+// → Seite lädt sehr lange), Button nach 60 s wieder freischalten
+let loadingTimeout = null;
+
+// ═══════════════════════════════════════════════════════════════
+// FORMULAR-VALIDIERUNG
+// ═══════════════════════════════════════════════════════════════
+const form    = document.getElementById('stoerungForm');
+const errBox  = document.getElementById('clientErrors');
+const errList = document.getElementById('clientErrorList');
 
 function showFieldError(inputEl, msg) {
   inputEl.classList.add('field-error');
@@ -462,14 +429,12 @@ form.addEventListener('submit', async e => {
 
   const errors = [];
 
-  // Name
   const nameVal = document.getElementById('melderName').value.trim();
   if (!nameVal || nameVal.length < 3) {
     errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
     showFieldError(document.getElementById('melderName'), 'Bitte Namen eingeben (mind. 3 Zeichen).');
   }
 
-  // Handy oder Mail
   const handyVal = document.getElementById('melderHandy').value.trim();
   const mailVal  = document.getElementById('melderMail').value.trim();
   if (!handyVal && !mailVal) {
@@ -481,14 +446,12 @@ form.addEventListener('submit', async e => {
     showFieldError(document.getElementById('melderMail'), 'Ungültige E‑Mail-Adresse.');
   }
 
-  // Fahrzeug
   const fahrzeugVal = document.getElementById('fahrzeug').value;
   if (!fahrzeugVal) {
     errors.push('Bitte ein Fahrzeug auswählen.');
     showFieldError(document.getElementById('fahrzeug'), 'Fahrzeug auswählen.');
   }
 
-  // Schweregrad
   const schwereVal = document.querySelector('input[name="schwere"]:checked');
   if (!schwereVal) {
     errors.push('Bitte einen Schweregrad auswählen.');
@@ -500,14 +463,12 @@ form.addEventListener('submit', async e => {
     }
   }
 
-  // Fehlerbeschreibung
   const fehlerVal = document.getElementById('fehlerBeschreibung').value.trim();
   if (!fehlerVal || fehlerVal.length < 6) {
     errors.push('Fehlerbeschreibung ist erforderlich (mind. 6 Zeichen).');
     showFieldError(document.getElementById('fehlerBeschreibung'), 'Bitte Fehlerbeschreibung eingeben (mind. 6 Zeichen).');
   }
 
-  // Upload-Dateien erneut prüfen (falls jemand JS-Tricks versucht)
   if (storedFiles.files.length > 0) {
     const { errors: fileErrs } = await validateFiles([...storedFiles.files]);
     fileErrs.forEach(fe => errors.push(fe));
@@ -520,7 +481,9 @@ form.addEventListener('submit', async e => {
     return;
   }
 
-  // Alles OK → absenden
+  // ── Alles OK: Loading-State aktivieren, dann absenden ──
+  setSubmitLoading(true);
+  loadingTimeout = setTimeout(() => setSubmitLoading(false), 60_000);
   form.submit();
 });
 

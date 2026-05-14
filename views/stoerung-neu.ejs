@@ -42,20 +42,6 @@
         maxlength="120" autocomplete="email">
     </div>
 
-    <!-- Benachrichtigung opt-in -->
-    <div class="form-group" id="benachrichtigungGroup" style="display:none">
-      <div class="toggle-card" id="benachrichtigungToggle" role="checkbox" aria-checked="false" tabindex="0"
-        style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4);border-radius:var(--radius-md);border:2px solid var(--color-border);cursor:pointer;background:var(--color-surface);transition:border-color var(--transition-interactive),background var(--transition-interactive)">
-        <div style="font-size:22px;line-height:1">🔔</div>
-        <div style="flex:1">
-          <div style="font-weight:600;font-size:var(--text-sm)">Ich möchte bei Statusänderungen informiert werden</div>
-          <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px">Sie erhalten eine E-Mail wenn sich der Status ändert</div>
-        </div>
-        <div class="toggle-check" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--color-border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0"></div>
-      </div>
-      <input type="hidden" name="melderBenachrichtigung" id="melderBenachrichtigungInput" value="0">
-    </div>
-
     <!-- Fahrzeug -->
     <div class="form-group">
       <label class="form-label required" for="fahrzeug">Fahrzeug</label>
@@ -130,12 +116,10 @@
     <div class="form-actions">
       <a href="/" class="btn btn-ghost" id="cancelBtn">Abbrechen</a>
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
-        <!-- Normaler Zustand -->
         <span id="submitIdle" style="display:flex;align-items:center;gap:var(--space-2)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           Störung melden
         </span>
-        <!-- Loading-Zustand -->
         <span id="submitLoading" style="display:none;align-items:center;gap:var(--space-2)">
           <span style="display:inline-block;width:15px;height:15px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0" aria-hidden="true"></span>
           Wird gesendet…
@@ -205,8 +189,6 @@
   margin-top: var(--space-1);
   display: block;
 }
-
-/* Submit-Button im Lade-Zustand */
 #submitBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -267,7 +249,7 @@ async function validateFile(file) {
 
   if (name.length > MAX_NAME_LEN)
     errors.push(`"${name.slice(0,40)}…": Dateiname zu lang (max. ${MAX_NAME_LEN} Zeichen).`);
-  if (/[\/\\<>:"\|\?\*\x00-\x1f]/.test(name))
+  if (/[\/\\<>:"|\?\*\x00-\x1f]/.test(name))
     errors.push(`"${name.slice(0,40)}": Dateiname enthält ungültige Zeichen.`);
   if (!ALLOWED_MIMES.has(file.type)) {
     errors.push(`"${name.slice(0,40)}": Dateityp "${file.type}" ist nicht erlaubt.`);
@@ -381,7 +363,7 @@ function removeFile(idx) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// SUBMIT-BUTTON LOADING STATE (Issue #6)
+// SUBMIT-BUTTON LOADING STATE
 // ═══════════════════════════════════════════════════════════════
 const submitBtn     = document.getElementById('submitBtn');
 const submitIdle    = document.getElementById('submitIdle');
@@ -392,15 +374,12 @@ function setSubmitLoading(active) {
   submitBtn.disabled = active;
   submitIdle.style.display    = active ? 'none'  : 'flex';
   submitLoading.style.display = active ? 'flex'  : 'none';
-  // Abbrechen-Link im Lade-Zustand auch deaktivieren (verhindert Doppelklick-Chaos)
   if (cancelBtn) {
     cancelBtn.style.pointerEvents = active ? 'none' : '';
     cancelBtn.style.opacity       = active ? '0.4' : '';
   }
 }
 
-// Sicherheitsnetz: falls Server-Redirect ausbleibt (z.B. langsame Verbindung
-// → Seite lädt sehr lange), Button nach 60 s wieder freischalten
 let loadingTimeout = null;
 
 // ═══════════════════════════════════════════════════════════════
@@ -481,7 +460,6 @@ form.addEventListener('submit', async e => {
     return;
   }
 
-  // ── Alles OK: Loading-State aktivieren, dann absenden ──
   setSubmitLoading(true);
   loadingTimeout = setTimeout(() => setSubmitLoading(false), 60_000);
   form.submit();
@@ -558,38 +536,4 @@ function renderItem(d) {
 
 fehlerInput.addEventListener('input', checkSimilar);
 fahrzeugSelect.addEventListener('change', checkSimilar);
-
-// ═══════════════════════════════════════════════════════════════
-// BENACHRICHTIGUNGS-TOGGLE
-// ═══════════════════════════════════════════════════════════════
-const mailInput  = document.getElementById('melderMail');
-const benGrp     = document.getElementById('benachrichtigungGroup');
-const benToggle  = document.getElementById('benachrichtigungToggle');
-const benInput   = document.getElementById('melderBenachrichtigungInput');
-const benCheck   = benToggle.querySelector('.toggle-check');
-let benActive    = false;
-
-function updateBenVisible() {
-  const hasMail = mailInput.value.trim().includes('@');
-  benGrp.style.display = hasMail ? 'block' : 'none';
-  if (!hasMail) { benActive = false; benInput.value = '0'; applyBenState(); }
-}
-function applyBenState() {
-  if (benActive) {
-    benToggle.style.borderColor = 'var(--color-primary)';
-    benToggle.style.background  = 'oklch(from var(--color-primary) l c h / 0.07)';
-    benCheck.textContent = '✓'; benCheck.style.borderColor = 'var(--color-primary)';
-    benCheck.style.color = 'var(--color-primary)'; benCheck.style.fontWeight = 'bold';
-    benToggle.setAttribute('aria-checked', 'true');
-  } else {
-    benToggle.style.borderColor = 'var(--color-border)';
-    benToggle.style.background  = 'var(--color-surface)';
-    benCheck.textContent = ''; benCheck.style.borderColor = 'var(--color-border)';
-    benToggle.setAttribute('aria-checked', 'false');
-  }
-}
-benToggle.addEventListener('click', () => { benActive = !benActive; benInput.value = benActive ? '1' : '0'; applyBenState(); });
-benToggle.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); benToggle.click(); } });
-mailInput.addEventListener('input', updateBenVisible);
-updateBenVisible();
 </script>

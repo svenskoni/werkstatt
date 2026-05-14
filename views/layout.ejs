@@ -120,7 +120,27 @@
         <button class="btn btn-ghost btn-sm" id="searchModalClose" aria-label="Schlie&szlig;en">&times;</button>
       </div>
 
-      <!-- 1. Fahrzeug (Pflicht) -->
+      <!-- 1. Ticket-ID (optional, ganz oben) -->
+      <div class="form-group">
+        <label class="form-label" for="searchTicketId">
+          Ticket-ID
+          <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional &ndash; Teilsuche m&ouml;glich)</span>
+        </label>
+        <input
+          type="text"
+          class="form-control"
+          id="searchTicketId"
+          placeholder="z.&thinsp;B.&nbsp;LKW1-2026-05 oder LKW1-2026-05-003"
+          maxlength="60"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <p id="searchTicketIdHint" style="font-size:var(--text-xs);color:var(--color-primary);margin-top:var(--space-1);display:none">
+          &#10003; Fahrzeug automatisch erkannt
+        </p>
+      </div>
+
+      <!-- 2. Fahrzeug (Pflicht) -->
       <div class="form-group">
         <label class="form-label" for="searchFahrzeug">
           Fahrzeug <span style="color:var(--color-error);font-size:var(--text-xs)">Pflicht</span>
@@ -131,23 +151,6 @@
             <option value="<%= v %>"><%= v %></option>
           <% }); %>
         </select>
-      </div>
-
-      <!-- 2. Ticket-ID (optional) -->
-      <div class="form-group">
-        <label class="form-label" for="searchTicketId">
-          Ticket-ID
-          <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional, Teilsuche m&ouml;glich)</span>
-        </label>
-        <input
-          type="text"
-          class="form-control"
-          id="searchTicketId"
-          placeholder="z.&thinsp;B.&nbsp;LKW1-2026-05"
-          maxlength="60"
-          autocomplete="off"
-          spellcheck="false"
-        >
       </div>
 
       <!-- 3. Freisuche in Fehlerbeschreibung (optional) -->
@@ -217,22 +220,46 @@
   })();
   <% if (user) { %>
   (function () {
-    const btn     = document.getElementById('searchBtn');
-    const modal   = document.getElementById('searchModal');
-    const close   = document.getElementById('searchModalClose');
-    const submit  = document.getElementById('searchSubmit');
-    const results = document.getElementById('searchResults');
+    const btn        = document.getElementById('searchBtn');
+    const modal      = document.getElementById('searchModal');
+    const closeBtn   = document.getElementById('searchModalClose');
+    const submit     = document.getElementById('searchSubmit');
+    const results    = document.getElementById('searchResults');
+    const ticketEl   = document.getElementById('searchTicketId');
+    const fahrzeugEl = document.getElementById('searchFahrzeug');
+    const ticketHint = document.getElementById('searchTicketIdHint');
 
-    function openModal()  { modal.hidden = false; modal.focus(); }
-    function closeModal() {
-      modal.hidden = true;
-      results.innerHTML = '';
-    }
+    // Fahrzeugliste aus Dropdown auslesen
+    const VEHICLES = Array.from(fahrzeugEl.options)
+      .map(o => o.value)
+      .filter(v => v !== '');
+
+    function openModal()  { modal.hidden = false; ticketEl.focus(); }
+    function closeModal() { modal.hidden = true; results.innerHTML = ''; }
 
     btn.addEventListener('click', openModal);
-    close.addEventListener('click', closeModal);
+    closeBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+    // Fahrzeug automatisch aus Ticket-ID erkennen
+    // Ticket-Format: <FAHRZEUG>-<JAHR>-<MONAT>[-<NR>]
+    ticketEl.addEventListener('input', () => {
+      const val = ticketEl.value.trim();
+      ticketHint.style.display = 'none';
+      fahrzeugEl.style.borderColor = '';
+      if (!val) return;
+
+      // Längstes passendes Fahrzeug am Anfang der Eingabe gewinnt
+      const matched = VEHICLES
+        .filter(v => val.toLowerCase().startsWith(v.toLowerCase()))
+        .sort((a, b) => b.length - a.length)[0];
+
+      if (matched) {
+        fahrzeugEl.value = matched;
+        ticketHint.style.display = 'block';
+      }
+    });
 
     const SCHWERE_ICON = { klein:'\uD83D\uDFE2', normal:'\uD83D\uDFE1', schwer:'\uD83D\uDFE0', totalausfall:'\uD83D\uDD34' };
     const STATUS_LABEL = { gesendet:'Eingegangen', bestaetigt:'In Bearbeitung', erledigt:'Erledigt', zurueckgewiesen:'Zur\u00FCckgewiesen' };
@@ -243,16 +270,14 @@
     }
 
     submit.addEventListener('click', async () => {
-      const fahrzeug  = document.getElementById('searchFahrzeug').value.trim();
-      const ticketId  = document.getElementById('searchTicketId').value.trim();
-      const freitext  = document.getElementById('searchFreitext').value.trim();
-      const monat     = document.getElementById('searchMonat').value.trim();
+      const fahrzeug = fahrzeugEl.value.trim();
+      const ticketId = ticketEl.value.trim();
+      const freitext = document.getElementById('searchFreitext').value.trim();
+      const monat    = document.getElementById('searchMonat').value.trim();
       const checkedStatuses = ['statusGesendet','statusBestaetigt','statusErledigt']
         .filter(id => document.getElementById(id).checked)
         .map(id => document.getElementById(id).value);
 
-      // Validierung
-      const fahrzeugEl = document.getElementById('searchFahrzeug');
       fahrzeugEl.style.borderColor = '';
       if (!fahrzeug) {
         fahrzeugEl.style.borderColor = 'var(--color-error)';
@@ -266,7 +291,7 @@
       }
 
       submit.disabled = true;
-      submit.textContent = 'Suche…';
+      submit.textContent = 'Suche\u2026';
       results.innerHTML = '';
 
       try {
@@ -303,8 +328,8 @@
       }
     });
 
-    // Enter in Feldern löst Suche aus
-    ['searchFahrzeug','searchTicketId','searchFreitext','searchMonat'].forEach(id => {
+    // Enter in jedem Feld löst Suche aus
+    ['searchTicketId','searchFahrzeug','searchFreitext','searchMonat'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit.click(); });
     });

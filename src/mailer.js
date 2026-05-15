@@ -46,7 +46,8 @@ th{background:#f7f7f7;width:38%}
 .schwere-change{background:#fff8e1;border-left:3px solid #e67e22;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
 .changed-by{background:#eaf4fb;border-left:3px solid #2980b9;padding:8px 12px;border-radius:4px;font-size:13px;margin:8px 0}
 .klasse-badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:bold;background:#e8f4f8;color:#1a6080}
-.eskalation-banner{background:#fdecea;border-left:4px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;font-weight:bold}`;
+.eskalation-banner{background:#fdecea;border-left:4px solid #c0392b;padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;font-weight:bold}
+.reminder-banner{background:#fff8e1;border-left:4px solid #e67e22;padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;font-weight:bold}`;
 
 function extractMelderMail(kontakt) {
   const match = String(kontakt || '').match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
@@ -84,11 +85,11 @@ function getWerkstattRecipients(klasse) {
 
 // ── HTML-Builder ──────────────────────────────────────────────────────────────────────────────
 
-/** Admin-Mail: Neue Meldung oder Eskalation.
- *  - kein 'Erfasst von' (ist nur intern relevant)
- *  - kein 'Status geändert von' (entfernt per Issue #25)
+/**
+ * Admin-Mail: Neue Meldung, Eskalation oder Erinnerung.
+ * banner: optional – 'eskalation' | 'reminder' | null
  */
-function buildAdminHtml(storung, alterSchwere, eskalationsStufe) {
+function buildAdminHtml(storung, alterSchwere, eskalationsStufe, banner) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
@@ -98,13 +99,16 @@ function buildAdminHtml(storung, alterSchwere, eskalationsStufe) {
   const schwereChangeHtml = alterSchwere
     ? `<tr><th>Schweregrad ge\u00e4ndert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${schwere}</strong></td></tr>`
     : '';
-  const eskalationsBanner = eskalationsStufe && eskalationsStufe > 0
-    ? `<div class="eskalation-banner">\u26A0\uFE0F Eskalationsstufe ${eskalationsStufe}: Bisher keine Reaktion auf diese Meldung.</div>`
-    : '';
+  let bannerHtml = '';
+  if (banner === 'eskalation' && eskalationsStufe > 0) {
+    bannerHtml = `<div class="eskalation-banner">\u26A0\uFE0F Eskalationsstufe ${eskalationsStufe}: Bisher keine Reaktion auf diese Meldung.</div>`;
+  } else if (banner === 'reminder') {
+    bannerHtml = `<div class="reminder-banner">\u23F0 Erinnerung: Dieses Ticket wartet noch auf Bearbeitung.</div>`;
+  }
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>\uD83D\uDEA8 St\u00f6rungsmeldung \u2013 ${escHtml(storung.fahrzeug)}</h1><p>Eingegangen: ${datum}</p></div>
   <div class="body">
-    ${eskalationsBanner}
+    ${bannerHtml}
     <table>
       <tr><th>Fahrzeug</th><td><strong>${escHtml(storung.fahrzeug)}</strong></td></tr>
       <tr><th>Klasse</th><td><span class="klasse-badge">${escHtml(klasse)}</span></td></tr>
@@ -253,7 +257,7 @@ async function sendStorungMail(storung, abwesendeUsernames) {
       from: process.env.MAIL_FROM,
       to:   empfaenger.email,
       subject: `[St\u00f6rung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 50)}`,
-      html: buildAdminHtml(storung, null, 0),
+      html: buildAdminHtml(storung, null, 0, null),
       text: `St\u00f6rung: ${storung.fahrzeug} (${klasse})\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
     });
     console.log(`[Mailer] Neue St\u00f6rung an: ${empfaenger.username} <${empfaenger.email}>`);
@@ -292,7 +296,7 @@ async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
       from: process.env.MAIL_FROM,
       to:   empfaenger.email,
       subject: `[\u26A0\uFE0F Eskalation ${stufe}] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 45)}`,
-      html: buildAdminHtml(storung, null, stufe),
+      html: buildAdminHtml(storung, null, stufe, 'eskalation'),
       text: `Eskalation Stufe ${stufe}:\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}\nBisher keine Reaktion.`,
     });
     console.log(`[Mailer] Eskalation Stufe ${stufe} an: ${empfaenger.username} <${empfaenger.email}>`);
@@ -300,6 +304,39 @@ async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
   } catch (err) {
     console.error(`[Mailer] sendEskalationsMail Stufe ${stufe} FEHLER:`, err.message);
     return false;
+  }
+}
+
+/**
+ * Erinnerungs-Mail an einen Admin.
+ * Gleiche Darstellung wie normale Admin-Mail, aber mit [Erinnerung]-Betreff
+ * und gelbem Reminder-Banner.
+ * reminderTo: Admin-Username (aus ADMIN_ESCALATION) oder direkt eine E-Mail-Adresse.
+ */
+async function sendReminderMail(storung, reminderTo) {
+  if (!reminderTo) {
+    console.warn(`[Mailer] sendReminderMail: kein Empf\u00e4nger f\u00fcr Ticket ${storung.id}`);
+    return;
+  }
+  // reminderTo kann Username oder direkte Mail sein
+  const adminMail = resolveAdminMail(reminderTo) || (reminderTo.includes('@') ? reminderTo : null);
+  if (!adminMail) {
+    console.warn(`[Mailer] sendReminderMail: Kein Mail f\u00fcr '${reminderTo}' gefunden.`);
+    return;
+  }
+  const klasse  = KLASSE_LABEL[storung.klasse]  || storung.klasse || 'KFZ';
+  const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
+  try {
+    await getTransport().sendMail({
+      from: process.env.MAIL_FROM,
+      to:   adminMail,
+      subject: `[\u23F0 Erinnerung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 45)}`,
+      html: buildAdminHtml(storung, null, 0, 'reminder'),
+      text: `Erinnerung:\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}`,
+    });
+    console.log(`[Mailer] Erinnerung an: ${reminderTo} <${adminMail}>`);
+  } catch (err) {
+    console.error('[Mailer] sendReminderMail FEHLER:', err.message);
   }
 }
 
@@ -319,7 +356,7 @@ async function sendStatusMail(storung, changedBy, note) {
         from: process.env.MAIL_FROM,
         to:   changedByMail,
         subject: `[Status] ${storung.fahrzeug} | ${klasse} \u2192 ${status}${schwereHinweis} | ${storung.id}`,
-        html: buildAdminHtml(storung, alterSchwere, 0),
+        html: buildAdminHtml(storung, alterSchwere, 0, null),
         text: `Statuswechsel: ${storung.fahrzeug} (${klasse}) \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}`,
       });
       console.log(`[Mailer] Status-Mail an: ${changedBy} <${changedByMail}>`);
@@ -388,6 +425,7 @@ module.exports = {
   sendStorungMail,
   sendMelderBestaetigung,
   sendEskalationsMail,
+  sendReminderMail,
   sendStatusMail,
   sendDeleteMail,
   resolveAdminMail,

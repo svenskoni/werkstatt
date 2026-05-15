@@ -2,7 +2,6 @@
 function formatDate(iso) {
   return new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'});
 }
-const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
 const STATUS_LABEL = {
   gesendet:        'Eingegangen',
   bestaetigt:      'In Bearbeitung',
@@ -52,13 +51,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         <tr><th>Erfasst von</th><td><%= storung.createdBy %></td></tr>
         <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
-        <tr><th>Statusupdates</th><td>
-          <% if (benachrichtigt) { %>
-            <span style="color:var(--color-success);font-size:var(--text-sm)">&#10003; Melder wird benachrichtigt</span>
-          <% } else { %>
-            <span style="color:var(--color-text-muted);font-size:var(--text-sm)">&mdash; keine Benachrichtigung</span>
-          <% } %>
-        </td></tr>
         <% if (hasReminder) { %>
         <tr><th>&#9201; Erinnerung</th><td>
           <span style="font-size:var(--text-sm);color:var(--color-warning)">

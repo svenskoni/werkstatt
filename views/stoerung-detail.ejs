@@ -374,6 +374,16 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   var reminderCancelBtn = document.getElementById('reminderCancelBtn');
   var reminderSaveBtn   = document.getElementById('reminderSaveBtn');
 
+  // Setzt das Minimum des datetime-local Feldes auf jetzt+1min (verhindert Vergangenheit)
+  function setReminderMin() {
+    var now = new Date(Date.now() + 60 * 1000);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    // datetime-local braucht lokale Zeit im Format YYYY-MM-DDTHH:MM
+    var local = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
+      + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    reminderAtInput.min = local;
+  }
+
   function defaultReminderTime() {
     var d = new Date(); d.setDate(d.getDate() + 1);
     var pad = function (n) { return String(n).padStart(2, '0'); };
@@ -382,6 +392,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
   if (setReminderBtn) {
     setReminderBtn.addEventListener('click', function () {
+      setReminderMin();
       reminderAtInput.value = defaultReminderTime();
       reminderFeedback.textContent = '';
       reminderAtInput.style.borderColor = '';
@@ -398,12 +409,23 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     reminderSaveBtn.addEventListener('click', function () {
       var at = reminderAtInput.value;
       if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
+
+      // Client-seitiger Vergangenheits-Schutz
+      var parsed = new Date(at); // datetime-local → lokale Zeit korrekt interpretiert
+      if (parsed.getTime() <= Date.now()) {
+        reminderFeedback.textContent = 'Der Zeitpunkt muss in der Zukunft liegen.';
+        reminderAtInput.style.borderColor = 'var(--color-error)';
+        return;
+      }
+
       reminderFeedback.textContent = '';
       reminderAtInput.style.borderColor = '';
       reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere…';
+
+      // toISOString() konvertiert korrekt von lokaler Zeit zu UTC
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reminderAt: at, reminderTo: '' }),
+        body: JSON.stringify({ reminderAt: parsed.toISOString(), reminderTo: '' }),
       })
       .then(function (r) { return r.json(); })
       .then(function (data) {

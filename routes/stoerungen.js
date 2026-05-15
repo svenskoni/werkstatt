@@ -231,9 +231,26 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
     const { reminderAt, reminderTo } = req.body;
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Störung nicht gefunden.' });
-    // Leerer reminderAt löscht die Erinnerung
-    const safeAt  = reminderAt  && reminderAt.trim()  ? new Date(reminderAt).toISOString()  : null;
-    const safeTo  = reminderTo  && reminderTo.trim()  ? reminderTo.trim()                   : null;
+
+    // Leerer reminderAt → Erinnerung löschen
+    if (!reminderAt || !reminderAt.trim()) {
+      await db.setReminder(storung.id, null, null);
+      return res.json({ ok: true });
+    }
+
+    // reminderAt muss ein gültiges ISO-Datum sein (Client schickt bereits UTC via toISOString())
+    const parsed = new Date(reminderAt);
+    if (isNaN(parsed.getTime())) {
+      return res.status(400).json({ error: 'Ungültiges Datum.' });
+    }
+
+    // Server-seitiger Vergangenheits-Schutz: mind. 1 Minute in der Zukunft
+    if (parsed.getTime() < Date.now() - 60 * 1000) {
+      return res.status(400).json({ error: 'Erinnerungszeitpunkt liegt in der Vergangenheit.' });
+    }
+
+    const safeAt = parsed.toISOString();
+    const safeTo = reminderTo && reminderTo.trim() ? reminderTo.trim() : null;
     await db.setReminder(storung.id, safeAt, safeTo);
     res.json({ ok: true });
   } catch (err) {

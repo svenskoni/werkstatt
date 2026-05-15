@@ -53,11 +53,6 @@ function extractMelderMail(kontakt) {
   return match ? match[0].trim() : null;
 }
 
-/**
- * Liefert die geordnete Eskalationsliste aus ADMIN_ESCALATION.
- * Format: username1:mail1,username2:mail2,...
- * Gibt [{username, email}, ...] zurück.
- */
 function getEskalationsListe() {
   const raw = process.env.ADMIN_ESCALATION || '';
   return raw.split(',').reduce((acc, entry) => {
@@ -67,10 +62,6 @@ function getEskalationsListe() {
   }, []);
 }
 
-/**
- * Gibt die E-Mail eines Admins anhand seines Usernames zurück.
- * Basis: ADMIN_ESCALATION.
- */
 function resolveAdminMail(username) {
   if (!username) return null;
   const liste = getEskalationsListe();
@@ -78,11 +69,6 @@ function resolveAdminMail(username) {
   return entry ? entry.email : null;
 }
 
-/**
- * Ermittelt den nächsten verfügbaren Admin für Eskalationsstufe `stufe`.
- * Abwesende Admins (aus der DB) werden übersprungen.
- * Gibt { username, email } oder null zurück.
- */
 async function resolveEskalationsEmpfaenger(stufe, abwesendeUsernames) {
   const liste = getEskalationsListe();
   const abwesendSet = new Set(abwesendeUsernames || []);
@@ -90,19 +76,19 @@ async function resolveEskalationsEmpfaenger(stufe, abwesendeUsernames) {
   return verfuegbare[stufe] || null;
 }
 
-/**
- * Gibt die Werkstatt-Empfänger je nach Klasse zurück.
- * MAIL_KFZ   → für Klasse 'kfz'
- * MAIL_GERAET → für Klasse 'geraet'
- */
 function getWerkstattRecipients(klasse) {
   const envKey = klasse === 'geraet' ? 'MAIL_GERAET' : 'MAIL_KFZ';
   const raw = process.env[envKey] || '';
   return raw.split(',').map(e => e.trim()).filter(Boolean);
 }
 
-// ── HTML-Builder ───────────────────────────────────────────────────────────────
-function buildAdminHtml(storung, alterSchwere, changedBy, eskalationsStufe) {
+// ── HTML-Builder ──────────────────────────────────────────────────────────────────────────────
+
+/** Admin-Mail: Neue Meldung oder Eskalation.
+ *  - kein 'Erfasst von' (ist nur intern relevant)
+ *  - kein 'Status geändert von' (entfernt per Issue #25)
+ */
+function buildAdminHtml(storung, alterSchwere, eskalationsStufe) {
   const baseUrl   = process.env.APP_BASE_URL;
   const schwere   = SCHWERE_LABEL[storung.schwere]  || storung.schwere;
   const status    = STATUS_LABEL[storung.status]    || storung.status;
@@ -111,9 +97,6 @@ function buildAdminHtml(storung, alterSchwere, changedBy, eskalationsStufe) {
   const detailUrl = `${baseUrl}/stoerung/${storung.id}`;
   const schwereChangeHtml = alterSchwere
     ? `<tr><th>Schweregrad ge\u00e4ndert</th><td class="schwere-change"><strong>${SCHWERE_LABEL[alterSchwere] || alterSchwere} \u2192 ${schwere}</strong></td></tr>`
-    : '';
-  const changedByHtml = changedBy
-    ? `<tr><th>Status ge\u00e4ndert von</th><td><strong>${escHtml(changedBy)}</strong></td></tr>`
     : '';
   const eskalationsBanner = eskalationsStufe && eskalationsStufe > 0
     ? `<div class="eskalation-banner">\u26A0\uFE0F Eskalationsstufe ${eskalationsStufe}: Bisher keine Reaktion auf diese Meldung.</div>`
@@ -129,9 +112,7 @@ function buildAdminHtml(storung, alterSchwere, changedBy, eskalationsStufe) {
       ${schwereChangeHtml}
       <tr><th>Fehler</th><td>${escHtml(storung.fehlerBeschreibung)}</td></tr>
       <tr><th>Status</th><td><strong>${status}</strong></td></tr>
-      ${changedByHtml}
       <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} \u2013 ${escHtml(storung.melderKontakt)}</td></tr>
-      <tr><th>Erfasst von</th><td>${escHtml(storung.createdBy)}</td></tr>
       <tr><th>Meldungs-ID</th><td><code>${storung.id}</code></td></tr>
       <tr><th>Statusupdates</th><td>${Number(storung.melderBenachrichtigung) === 1 ? '\u2705 Melder m\u00f6chte informiert werden' : '\u274C Keine Melder-Benachrichtigung'}</td></tr>
     </table>
@@ -257,16 +238,12 @@ function buildDeleteHtml(storung, deletedBy, grund) {
 </div></body></html>`;
 }
 
-// ── Öffentliche Funktionen ─────────────────────────────────────────────────────
+// ── Öffentliche Funktionen ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Neue Störung → geht an den ersten verfügbaren Admin der Eskalationsliste.
- * Abwesende Admins werden übersprungen.
- */
 async function sendStorungMail(storung, abwesendeUsernames) {
   const empfaenger = await resolveEskalationsEmpfaenger(0, abwesendeUsernames || []);
   if (!empfaenger) {
-    console.warn('[Mailer] Keine verfügbaren Admins in ADMIN_ESCALATION für neue Störung.');
+    console.warn('[Mailer] Keine verf\u00fcgbaren Admins in ADMIN_ESCALATION f\u00fcr neue St\u00f6rung.');
     return;
   }
   const schwere = SCHWERE_LABEL[storung.schwere] || storung.schwere;
@@ -276,10 +253,10 @@ async function sendStorungMail(storung, abwesendeUsernames) {
       from: process.env.MAIL_FROM,
       to:   empfaenger.email,
       subject: `[St\u00f6rung] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 50)}`,
-      html: buildAdminHtml(storung, null, null, 0),
+      html: buildAdminHtml(storung, null, 0),
       text: `St\u00f6rung: ${storung.fahrzeug} (${klasse})\nMelder: ${storung.melderName}\nFehler: ${storung.fehlerBeschreibung}\nMeldungs-ID: ${storung.id}`,
     });
-    console.log(`[Mailer] Neue Störung an: ${empfaenger.username} <${empfaenger.email}>`);
+    console.log(`[Mailer] Neue St\u00f6rung an: ${empfaenger.username} <${empfaenger.email}>`);
   } catch (err) {
     console.error('[Mailer] sendStorungMail FEHLER:', err.message);
   }
@@ -287,7 +264,7 @@ async function sendStorungMail(storung, abwesendeUsernames) {
 
 async function sendMelderBestaetigung(storung) {
   const melderMail = extractMelderMail(storung.melderKontakt);
-  if (!melderMail) { console.log('[Mailer] Keine Melder-Mail, Best\u00e4tigung übersprungen'); return; }
+  if (!melderMail) { console.log('[Mailer] Keine Melder-Mail, Best\u00e4tigung \u00fcbersprungen'); return; }
   try {
     await getTransport().sendMail({
       from: process.env.MAIL_FROM,
@@ -296,21 +273,16 @@ async function sendMelderBestaetigung(storung) {
       html: buildMelderBestaetigung(storung),
       text: `Hallo ${storung.melderName},\nIhre Meldung wurde erfasst. Ticket-Nr.: ${storung.id}`,
     });
-    console.log(`[Mailer] Bestätigung an Melder: ${melderMail}`);
+    console.log(`[Mailer] Best\u00e4tigung an Melder: ${melderMail}`);
   } catch (err) {
     console.error('[Mailer] sendMelderBestaetigung FEHLER:', err.message);
   }
 }
 
-/**
- * Eskalations-Mail → geht an den Admin der entsprechenden Stufe.
- * Abwesende Admins werden übersprungen.
- * Wird vom Eskalations-Cron in reminder.js aufgerufen.
- */
 async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
   const empfaenger = await resolveEskalationsEmpfaenger(stufe, abwesendeUsernames || []);
   if (!empfaenger) {
-    console.warn(`[Mailer] Eskalation Stufe ${stufe}: Keine weiteren verfügbaren Admins.`);
+    console.warn(`[Mailer] Eskalation Stufe ${stufe}: Keine weiteren verf\u00fcgbaren Admins.`);
     return false;
   }
   const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
@@ -320,7 +292,7 @@ async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
       from: process.env.MAIL_FROM,
       to:   empfaenger.email,
       subject: `[\u26A0\uFE0F Eskalation ${stufe}] ${storung.fahrzeug} | ${klasse} | ${schwere} \u2013 ${storung.fehlerBeschreibung.slice(0, 45)}`,
-      html: buildAdminHtml(storung, null, null, stufe),
+      html: buildAdminHtml(storung, null, stufe),
       text: `Eskalation Stufe ${stufe}:\nFahrzeug: ${storung.fahrzeug}\nFehler: ${storung.fehlerBeschreibung}\nTicket: ${storung.id}\nBisher keine Reaktion.`,
     });
     console.log(`[Mailer] Eskalation Stufe ${stufe} an: ${empfaenger.username} <${empfaenger.email}>`);
@@ -331,18 +303,12 @@ async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
   }
 }
 
-/**
- * Statuswechsel-Mail:
- * - Bestätigung an den Admin der die Aktion ausgeführt hat
- * - bei 'bestaetigt': zusätzlich an Werkstatt (MAIL_KFZ / MAIL_GERAET)
- * - bei Opt-in oder Zurückweisung: an Melder
- */
 async function sendStatusMail(storung, changedBy, note) {
   const alterSchwere = storung._schwereGeaendert ? storung._alterSchwere : null;
   const status = STATUS_LABEL[storung.status] || storung.status;
   const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
 
-  // 1. Bestätigung an den Admin der die Änderung vorgenommen hat
+  // 1. Best\u00e4tigung an den Admin der die \u00c4nderung vorgenommen hat
   const changedByMail = resolveAdminMail(changedBy);
   if (changedByMail) {
     const schwereHinweis = alterSchwere
@@ -353,13 +319,13 @@ async function sendStatusMail(storung, changedBy, note) {
         from: process.env.MAIL_FROM,
         to:   changedByMail,
         subject: `[Status] ${storung.fahrzeug} | ${klasse} \u2192 ${status}${schwereHinweis} | ${storung.id}`,
-        html: buildAdminHtml(storung, alterSchwere, changedBy, 0),
+        html: buildAdminHtml(storung, alterSchwere, 0),
         text: `Statuswechsel: ${storung.fahrzeug} (${klasse}) \u2192 ${status}\nGe\u00e4ndert von: ${changedBy}`,
       });
       console.log(`[Mailer] Status-Mail an: ${changedBy} <${changedByMail}>`);
     } catch (err) { console.error('[Mailer] sendStatusMail Admin FEHLER:', err.message); }
   } else {
-    console.warn(`[Mailer] sendStatusMail: Keine Mail für Admin '${changedBy}' in ADMIN_ESCALATION.`);
+    console.warn(`[Mailer] sendStatusMail: Keine Mail f\u00fcr Admin '${changedBy}' in ADMIN_ESCALATION.`);
   }
 
   // 2. Werkstatt-Mail bei 'bestaetigt'
@@ -377,11 +343,11 @@ async function sendStatusMail(storung, changedBy, note) {
         console.log(`[Mailer] Werkstatt-Mail (${klasse}) an: ${werkstattRecipients.join(', ')}`);
       } catch (err) { console.error('[Mailer] sendStatusMail Werkstatt FEHLER:', err.message); }
     } else {
-      console.warn(`[Mailer] Keine Werkstatt-Empfänger für Klasse '${storung.klasse}' (${klasse === 'KFZ' ? 'MAIL_KFZ' : 'MAIL_GERAET'} nicht gesetzt).`);
+      console.warn(`[Mailer] Keine Werkstatt-Empf\u00e4nger f\u00fcr Klasse '${storung.klasse}' (${klasse === 'KFZ' ? 'MAIL_KFZ' : 'MAIL_GERAET'} nicht gesetzt).`);
     }
   }
 
-  // 3. Melder (Opt-in oder Zurückweisung)
+  // 3. Melder (Opt-in oder Zur\u00fcckweisung)
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) return;
   const isZurueck = storung.status === 'zurueckgewiesen';

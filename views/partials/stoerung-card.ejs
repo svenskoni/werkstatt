@@ -32,7 +32,7 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
     <span class="card-meta"><%= s.melderName %></span>
     <span class="card-meta">&middot;</span>
     <span class="card-meta"><%= formatCardDate(s.createdAt) %></span>
-    <% if (s.attachments.length > 0) { %>
+    <% if (s.attachments?.length > 0) { %>
       <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anh&auml;nge">&#128204; <%= s.attachments.length %></span>
     <% } %>
   </div>

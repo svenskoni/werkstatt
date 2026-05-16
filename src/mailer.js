@@ -118,7 +118,6 @@ function buildAdminHtml(storung, alterSchwere, eskalationsStufe, banner) {
       <tr><th>Status</th><td><strong>${status}</strong></td></tr>
       <tr><th>Gemeldet von</th><td>${escHtml(storung.melderName)} \u2013 ${escHtml(storung.melderKontakt)}</td></tr>
       <tr><th>Meldungs-ID</th><td><code>${storung.id}</code></td></tr>
-      <tr><th>Statusupdates</th><td>${Number(storung.melderBenachrichtigung) === 1 ? '\u2705 Melder m\u00f6chte informiert werden' : '\u274C Keine Melder-Benachrichtigung'}</td></tr>
     </table>
     ${storung.beschreibung ? `<div class="desc">${escHtml(storung.beschreibung)}</div>` : ''}
     ${storung.attachments && storung.attachments.length > 0 ? `<p style="font-size:13px;color:#666">\uD83D\uDCCE ${storung.attachments.length} Anhang/Anh\u00e4nge</p>` : ''}
@@ -156,7 +155,6 @@ function buildWerkstattHtml(storung, changedBy) {
 }
 
 function buildMelderBestaetigung(storung) {
-  const benachrichtigt = Number(storung.melderBenachrichtigung) === 1;
   return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><style>${CSS}</style></head><body><div class="wrap">
   <div class="header"><h1>\u2705 Ihre St\u00f6rungsmeldung ist eingegangen</h1><p>Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</p></div>
   <div class="body">
@@ -169,9 +167,7 @@ function buildMelderBestaetigung(storung) {
       <tr><th>Eingegangen</th><td>${new Date(storung.createdAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin' })}</td></tr>
     </table>
     <p style="font-size:13px;color:#666;margin-top:16px">
-      ${benachrichtigt
-        ? 'Sie erhalten automatisch eine E-Mail, sobald sich der Status Ihrer Meldung \u00e4ndert.'
-        : 'Sie erhalten keine weiteren automatischen Benachrichtigungen.<br>Bei R\u00fcckfragen verwenden Sie bitte Ihre Ticket-Nummer.'}
+      Bei R\u00fcckfragen verwenden Sie bitte Ihre Ticket-Nummer.
     </p>
   </div>
   <div class="footer">Feuerwehr LZ Frechen \u2013 St\u00f6rungsmelder</div>
@@ -309,8 +305,6 @@ async function sendEskalationsMail(storung, stufe, abwesendeUsernames) {
 
 /**
  * Erinnerungs-Mail an einen Admin.
- * Gleiche Darstellung wie normale Admin-Mail, aber mit [Erinnerung]-Betreff
- * und gelbem Reminder-Banner.
  * reminderTo: Admin-Username (aus ADMIN_ESCALATION) oder direkt eine E-Mail-Adresse.
  */
 async function sendReminderMail(storung, reminderTo) {
@@ -318,7 +312,6 @@ async function sendReminderMail(storung, reminderTo) {
     console.warn(`[Mailer] sendReminderMail: kein Empf\u00e4nger f\u00fcr Ticket ${storung.id}`);
     return;
   }
-  // reminderTo kann Username oder direkte Mail sein
   const adminMail = resolveAdminMail(reminderTo) || (reminderTo.includes('@') ? reminderTo : null);
   if (!adminMail) {
     console.warn(`[Mailer] sendReminderMail: Kein Mail f\u00fcr '${reminderTo}' gefunden.`);
@@ -345,7 +338,7 @@ async function sendStatusMail(storung, changedBy, note) {
   const status = STATUS_LABEL[storung.status] || storung.status;
   const klasse = KLASSE_LABEL[storung.klasse] || storung.klasse || 'KFZ';
 
-  // 1. Best\u00e4tigung an den Admin der die \u00c4nderung vorgenommen hat
+  // 1. Bestätigung an den Admin der die Änderung vorgenommen hat
   const changedByMail = resolveAdminMail(changedBy);
   if (changedByMail) {
     const schwereHinweis = alterSchwere
@@ -384,20 +377,18 @@ async function sendStatusMail(storung, changedBy, note) {
     }
   }
 
-  // 3. Melder (Opt-in oder Zur\u00fcckweisung)
+  // 3. Melder nur bei Zurückweisung
   const melderMail = extractMelderMail(storung.melderKontakt);
   if (!melderMail) return;
   const isZurueck = storung.status === 'zurueckgewiesen';
-  if (!isZurueck && Number(storung.melderBenachrichtigung) !== 1) return;
+  if (!isZurueck) return;
   try {
     await getTransport().sendMail({
       from: process.env.MAIL_FROM,
       to:   melderMail,
-      subject: isZurueck
-        ? `\u274C Ihre St\u00f6rungsmeldung wurde zur\u00fcckgewiesen \u2013 Ticket ${storung.id}`
-        : `\uD83D\uDD14 Status\u00e4nderung Ihrer St\u00f6rungsmeldung \u2013 ${status}`,
+      subject: `\u274C Ihre St\u00f6rungsmeldung wurde zur\u00fcckgewiesen \u2013 Ticket ${storung.id}`,
       html: buildMelderStatusHtml(storung, note, changedBy, alterSchwere),
-      text: `Hallo ${storung.melderName},\nStatus Ihrer Meldung ${storung.id}: ${status}\nGe\u00e4ndert von: ${changedBy}`,
+      text: `Hallo ${storung.melderName},\nIhr Ticket ${storung.id} wurde zur\u00fcckgewiesen.\nGe\u00e4ndert von: ${changedBy}`,
     });
   } catch (err) { console.error('[Mailer] sendStatusMail Melder FEHLER:', err.message); }
 }

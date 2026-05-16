@@ -35,22 +35,18 @@
   <div class="filter-bar" role="group" aria-label="Filter" style="
     display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);
     background:var(--color-surface);border-bottom:1px solid var(--color-divider);">
-
     <div class="filter-group" role="group" aria-label="Nach Fahrzeug filtern" style="display:flex;flex-wrap:wrap;gap:var(--space-2);">
       <button class="vf-btn" data-vf="" aria-pressed="false">Alle Fahrzeuge</button>
       <% VEHICLES.forEach(v => { %>
         <button class="vf-btn" data-vf="<%= v %>" aria-pressed="false"><%= v %></button>
       <% }); %>
     </div>
-
     <span style="width:1px;height:20px;background:var(--color-divider);flex-shrink:0;margin:0 var(--space-1)" aria-hidden="true"></span>
-
     <div class="filter-group" role="group" aria-label="Nach Klasse filtern" style="display:flex;gap:var(--space-2);">
       <button class="kf-btn kf-active" data-kf="" aria-pressed="true">Alle</button>
       <button class="kf-btn" data-kf="kfz" aria-pressed="false">KFZ</button>
       <button class="kf-btn" data-kf="geraet" aria-pressed="false">Gerät</button>
     </div>
-
     <span class="vf-count" style="margin-left:auto;font-size:var(--text-xs);color:var(--color-text-muted);align-self:center"></span>
   </div>
 
@@ -71,16 +67,18 @@
         <% if (gesendet.length === 0) { %>
           <div class="empty-state-card">&#x2714; Keine offenen Meldungen</div>
         <% } %>
-        <% gesendet.slice(0, DASH_LIMIT).forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
+        <% gesendet.forEach((s, i) => { %>
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>"<%= i >= DASH_LIMIT ? ' data-hidden-more style="display:none"' : '' %>>
             <%- include('partials/stoerung-card', { s, user }) %>
           </div>
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
       <% if (gesendet.length > DASH_LIMIT) { %>
-        <div style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
-          Zeige letzte <%= DASH_LIMIT %> von <%= gesendet.length %> &middot; <a href="/suche" style="color:var(--color-primary)">Alle in der Suche</a>
+        <div id="mehr-gesendet" style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center">
+          <button class="btn btn-ghost btn-sm mehr-btn" data-col="col-gesendet" data-mehr="mehr-gesendet">
+            &#9660; <%= gesendet.length - DASH_LIMIT %> weitere anzeigen
+          </button>
         </div>
       <% } %>
     </section>
@@ -99,21 +97,23 @@
         <% if (bestaetigt.length === 0) { %>
           <div class="empty-state-card">&mdash; Nichts in Bearbeitung</div>
         <% } %>
-        <% bestaetigt.slice(0, DASH_LIMIT).forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
+        <% bestaetigt.forEach((s, i) => { %>
+          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>"<%= i >= DASH_LIMIT ? ' data-hidden-more style="display:none"' : '' %>>
             <%- include('partials/stoerung-card', { s, user }) %>
           </div>
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
       <% if (bestaetigt.length > DASH_LIMIT) { %>
-        <div style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
-          Zeige letzte <%= DASH_LIMIT %> von <%= bestaetigt.length %> &middot; <a href="/suche" style="color:var(--color-primary)">Alle in der Suche</a>
+        <div id="mehr-bestaetigt" style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center">
+          <button class="btn btn-ghost btn-sm mehr-btn" data-col="col-bestaetigt" data-mehr="mehr-bestaetigt">
+            &#9660; <%= bestaetigt.length - DASH_LIMIT %> weitere anzeigen
+          </button>
         </div>
       <% } %>
     </section>
 
-    <!-- Erledigt (lazy per API) -->
+    <!-- Erledigt (lazy per API, nur 10 aus DB) -->
     <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
       <div class="kanban-header kanban-header-done">
         <div class="kanban-title-wrap">
@@ -128,7 +128,7 @@
       </div>
       <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
       <div id="erledigt-suche-hint" hidden style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
-        Weitere Einträge → Hauptsuche nutzen
+        Zeige letzte 10 von <%= stats.erledigt %> &middot; <a href="/suche" style="color:var(--color-primary)">Alle in der Suche</a>
       </div>
     </section>
 
@@ -164,18 +164,29 @@
 
   const vfBtns = document.querySelectorAll('.vf-btn');
   const kfBtns = document.querySelectorAll('.kf-btn');
-
   const localCols = [
     { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
     { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt' },
   ];
   const countEl = document.querySelector('.vf-count');
-
   let activeVf = '';
   let activeKf = '';
 
+  // ── Mehr-anzeigen-Buttons ────────────────────────────────────────────────────
+  document.querySelectorAll('.mehr-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const colEl  = document.getElementById(btn.dataset.col);
+      const mehrEl = document.getElementById(btn.dataset.mehr);
+      colEl.querySelectorAll('[data-hidden-more]').forEach(function (w) {
+        w.removeAttribute('data-hidden-more');
+        w.style.display = '';
+      });
+      mehrEl.style.display = 'none';
+    });
+  });
+
   // ── Erledigt: API-Aufruf ─────────────────────────────────────────────────
-const erledigtCol   = document.getElementById('col-erledigt');
+  const erledigtCol   = document.getElementById('col-erledigt');
   const erledigtEmpty = document.getElementById('empty-erledigt');
   const erledigtHint  = document.getElementById('erledigt-suche-hint');
   let erledigtTimer   = null;
@@ -184,11 +195,9 @@ const erledigtCol   = document.getElementById('col-erledigt');
     const params = new URLSearchParams();
     if (activeVf) params.set('fahrzeug', activeVf);
     if (activeKf) params.set('klasse',   activeKf);
-
     erledigtCol.innerHTML = '<div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen…</div>';
     erledigtEmpty.hidden = true;
     erledigtHint.hidden  = true;
-
     fetch('/api/dashboard/erledigt?' + params.toString())
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -206,33 +215,34 @@ const erledigtCol   = document.getElementById('col-erledigt');
       });
   }
 
-  // ── Lokaler Filter (Offen + Bearbeitung) ──────────────────────────────────────────
+  // ── Lokaler Filter ──────────────────────────────────────────────────────────────────
   function applyLocalFilter() {
     let totalVisible = 0;
-
     localCols.forEach(function (col) {
       const colEl   = document.getElementById(col.cards);
       const cntEl   = document.getElementById(col.cnt);
       const emptyEl = document.getElementById(col.empty);
-      const wraps   = Array.from(colEl.querySelectorAll('.kanban-card-wrap'));
-
+      // alle wraps (auch versteckte Mehr-Karten)
+      const wraps = Array.from(colEl.querySelectorAll('.kanban-card-wrap'));
       const matching = wraps.filter(function (w) {
         const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         const matchKf = !activeKf || w.dataset.klasse   === activeKf;
         return matchVf && matchKf;
       });
-
       wraps.forEach(function (w) {
         const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         const matchKf = !activeKf || w.dataset.klasse   === activeKf;
-        w.style.display = (matchVf && matchKf) ? '' : 'none';
+        // Nur anzeigen wenn Filter passt UND nicht per Mehr-Button versteckt
+        if (matchVf && matchKf && !w.hasAttribute('data-hidden-more')) {
+          w.style.display = '';
+        } else if (!matchVf || !matchKf) {
+          w.style.display = 'none';
+        }
       });
-
       cntEl.textContent = matching.length;
       totalVisible += matching.length;
       emptyEl.hidden = !(wraps.length > 0 && matching.length === 0);
     });
-
     var parts = [];
     if (activeVf) parts.push('\u00bb' + activeVf + '\u00ab');
     if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Gerät');
@@ -274,15 +284,12 @@ const erledigtCol   = document.getElementById('col-erledigt');
   var validKf = Array.from(kfBtns).map(function (b) { return b.dataset.kf; });
   if (!validVf.includes(savedVf)) savedVf = '';
   if (!validKf.includes(savedKf)) savedKf = '';
-
   activeVf = savedVf;
   activeKf = savedKf;
   vfBtns.forEach(function (b) { var m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
   kfBtns.forEach(function (b) { var m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
-
   vfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setVf(btn.dataset.vf); }); });
   kfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setKf(btn.dataset.kf); }); });
-
   applyLocalFilter();
   loadErledigt();
 })();

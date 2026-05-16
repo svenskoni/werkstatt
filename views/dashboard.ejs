@@ -1,6 +1,6 @@
 <div class="dashboard-container">
   <!-- Stats -->
-  <div class="stats-bar" role="region" aria-label="\u00dcbersicht">
+  <div class="stats-bar" role="region" aria-label="Übersicht">
     <div class="stat-item">
       <span class="stat-num" style="color:var(--color-text)"><%= stats.total %></span>
       <span class="stat-label">Gesamt</span>
@@ -24,7 +24,7 @@
       <div class="stats-action">
         <a href="/stoerung/neu" class="btn btn-primary btn-sm">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Neue St\u00f6rung
+          Neue Störung
         </a>
       </div>
     <% } %>
@@ -47,7 +47,7 @@
     <div class="filter-group" role="group" aria-label="Nach Klasse filtern" style="display:flex;gap:var(--space-2);">
       <button class="kf-btn kf-active" data-kf="" aria-pressed="true">Alle</button>
       <button class="kf-btn" data-kf="kfz" aria-pressed="false">KFZ</button>
-      <button class="kf-btn" data-kf="geraet" aria-pressed="false">Ger&auml;t</button>
+      <button class="kf-btn" data-kf="geraet" aria-pressed="false">Gerät</button>
     </div>
 
     <span class="vf-count" style="margin-left:auto;font-size:var(--text-xs);color:var(--color-text-muted);align-self:center"></span>
@@ -57,14 +57,14 @@
   <div class="kanban-board" role="main">
 
     <!-- Eingegangen -->
-    <section class="kanban-col" aria-label="Eingegangene St\u00f6rungen">
+    <section class="kanban-col" aria-label="Eingegangene Störungen">
       <div class="kanban-header kanban-header-new">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-new" aria-hidden="true"></span>
           <h2 class="kanban-title">Eingegangen</h2>
           <span class="kanban-count" id="cnt-gesendet"><%= gesendet.length %></span>
         </div>
-        <p class="kanban-subtitle">Neu gemeldet, noch nicht best\u00e4tigt</p>
+        <p class="kanban-subtitle">Neu gemeldet, noch nicht bestätigt</p>
       </div>
       <div class="kanban-cards" id="col-gesendet">
         <% if (gesendet.length === 0) { %>
@@ -76,18 +76,18 @@
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Eintr\u00e4ge f\u00fcr diesen Filter</div>
+      <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
     <!-- In Bearbeitung -->
-    <section class="kanban-col" aria-label="St\u00f6rungen in Bearbeitung">
+    <section class="kanban-col" aria-label="Störungen in Bearbeitung">
       <div class="kanban-header kanban-header-active">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-active" aria-hidden="true"></span>
           <h2 class="kanban-title">In Bearbeitung</h2>
           <span class="kanban-count" id="cnt-bestaetigt"><%= bestaetigt.length %></span>
         </div>
-        <p class="kanban-subtitle">Best\u00e4tigt, wird bearbeitet</p>
+        <p class="kanban-subtitle">Bestätigt, wird bearbeitet</p>
       </div>
       <div class="kanban-cards" id="col-bestaetigt">
         <% if (bestaetigt.length === 0) { %>
@@ -99,25 +99,25 @@
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Eintr\u00e4ge f\u00fcr diesen Filter</div>
+      <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
     </section>
 
     <!-- Erledigt (lazy per API) -->
-    <section class="kanban-col" aria-label="Erledigte und zur\u00fcckgewiesene St\u00f6rungen">
+    <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
       <div class="kanban-header kanban-header-done">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-done" aria-hidden="true"></span>
           <h2 class="kanban-title">Erledigt</h2>
           <span class="kanban-count" id="cnt-erledigt"><%= stats.erledigt %></span>
         </div>
-        <p class="kanban-subtitle">Abgeschlossen &amp; Zur\u00fcckgewiesen &middot; letzte 10</p>
+        <p class="kanban-subtitle">Abgeschlossen &amp; Zurückgewiesen &middot; letzte 10</p>
       </div>
       <div class="kanban-cards" id="col-erledigt">
-        <div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen\u2026</div>
+        <div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen…</div>
       </div>
-      <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Eintr\u00e4ge f\u00fcr diesen Filter</div>
+      <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
       <div id="erledigt-suche-hint" hidden style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
-        Weitere Eintr\u00e4ge \u2192 Hauptsuche nutzen
+        Weitere Einträge → Hauptsuche nutzen
       </div>
     </section>
 
@@ -154,7 +154,6 @@
   const vfBtns = document.querySelectorAll('.vf-btn');
   const kfBtns = document.querySelectorAll('.kf-btn');
 
-  // Offen + Bearbeitung: clientseitiger Filter
   const localCols = [
     { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
     { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt' },
@@ -175,7 +174,7 @@
     if (activeVf) params.set('fahrzeug', activeVf);
     if (activeKf) params.set('klasse',   activeKf);
 
-    erledigtCol.innerHTML = '<div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen\u2026</div>';
+    erledigtCol.innerHTML = '<div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen…</div>';
     erledigtEmpty.hidden = true;
     erledigtHint.hidden  = true;
 
@@ -189,7 +188,6 @@
         } else {
           erledigtCol.innerHTML = data.html;
           erledigtHint.hidden   = data.total < PAGE_SIZE;
-          // Status-Change-Buttons neu binden
           erledigtCol.querySelectorAll('.status-change-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
               if (typeof window.openStatusModal === 'function') window.openStatusModal(btn);
@@ -231,13 +229,12 @@
 
     var parts = [];
     if (activeVf) parts.push('\u00bb' + activeVf + '\u00ab');
-    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Ger\u00e4t');
-    countEl.textContent = parts.length ? totalVisible + ' sichtbar \u00b7 ' + parts.join(' + ') : '';
+    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Gerät');
+    countEl.textContent = parts.length ? totalVisible + ' sichtbar · ' + parts.join(' + ') : '';
   }
 
   function applyFilter() {
     applyLocalFilter();
-    // Erledigt leicht verz\u00f6gert laden damit Filter-Klicks nicht zu viele Requests ausl\u00f6sen
     clearTimeout(erledigtTimer);
     erledigtTimer = setTimeout(loadErledigt, 120);
   }
@@ -264,7 +261,6 @@
     applyFilter();
   }
 
-  // Gespeicherten Filter wiederherstellen
   var savedVf = '', savedKf = '';
   try { savedVf = sessionStorage.getItem('vf_active') || ''; } catch {}
   try { savedKf = sessionStorage.getItem('kf_active') || ''; } catch {}
@@ -281,7 +277,6 @@
   vfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setVf(btn.dataset.vf); }); });
   kfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setKf(btn.dataset.kf); }); });
 
-  // Initial laden
   applyLocalFilter();
   loadErledigt();
 })();

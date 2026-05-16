@@ -9,14 +9,11 @@ const router = express.Router();
  * Zeigt das Fernseher-Dashboard – kein Login erforderlich.
  * Nur aktiv wenn FERNSEHER_TOKEN gesetzt ist und mit dem URL-Segment übereinstimmt.
  * Auto-Refresh alle 60 Sekunden.
- *
- * Prefix /view/ stellt sicher, dass diese Route niemals mit
- * Störungs-IDs, Login, API- oder Upload-Pfaden kollidiert.
+ * Nutzt getByStatusSlim – kein Laden von history/attachments nötig.
  */
 router.get('/:token', async (req, res, next) => {
   const token = process.env.FERNSEHER_TOKEN;
 
-  // Deaktiviert oder falsches Token → 404 (kein Hinweis dass diese Route existiert)
   if (!token || !token.trim() || req.params.token !== token.trim()) {
     return next();
   }
@@ -30,28 +27,23 @@ router.get('/:token', async (req, res, next) => {
     };
 
     const [gesendet, bestaetigt] = await Promise.all([
-      db.getByStatus('gesendet'),
-      db.getByStatus('bestaetigt'),
+      db.getByStatusSlim('gesendet'),
+      db.getByStatusSlim('bestaetigt'),
     ]);
 
-    // Pro Fahrzeug: offene + aktive Tickets zusammenstellen
     const fahrzeugDaten = VEHICLES.map(fz => ({
       name: fz,
-      offen:   gesendet.filter(t => t.fahrzeug === fz),
-      aktiv:   bestaetigt.filter(t => t.fahrzeug === fz),
+      offen: gesendet.filter(t => t.fahrzeug === fz),
+      aktiv:  bestaetigt.filter(t => t.fahrzeug === fz),
     }));
 
-    // Gesamt-Zähler für Header
-    const anzahlOffen = gesendet.length;
-    const anzahlAktiv = bestaetigt.length;
-
     res.render('fernseher', {
-      layout:        false,   // eigenes Vollbild-Layout, kein normaler Header
+      layout:        false,
       fahrzeugDaten,
       VEHICLES,
       SCHWERE,
-      anzahlOffen,
-      anzahlAktiv,
+      anzahlOffen:   gesendet.length,
+      anzahlAktiv:   bestaetigt.length,
     });
   } catch (err) {
     console.error('[Fernseher]', err);

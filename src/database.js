@@ -86,14 +86,14 @@ function normalizeRow(row) {
  */
 function sanitizeFahrzeugForId(fahrzeug) {
   return fahrzeug
-    .normalize('NFD')                    // Umlaute in Basiszeichen + Combining-Marks zerlegen
+    .normalize('NFD')
     .replace(/\u00e4/g, 'ae').replace(/\u00f6/g, 'oe').replace(/\u00fc/g, 'ue')
     .replace(/\u00c4/g, 'Ae').replace(/\u00d6/g, 'Oe').replace(/\u00dc/g, 'Ue')
     .replace(/\u00df/g, 'ss')
-    .replace(/[\u0300-\u036f]/g, '')     // Rest-Combining-Marks entfernen
-    .replace(/[^A-Za-z0-9]/g, '-')      // Alles außer Alphanumerisch → Bindestrich
-    .replace(/-+/g, '-')                 // Mehrfache Bindestriche zusammenführen
-    .replace(/^-+|-+$/g, '');           // Führende/abschließende Bindestriche entfernen
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 async function generateTicketId(fahrzeug, isoDate) {
@@ -154,6 +154,10 @@ async function getAllStorungen() {
   }));
 }
 
+/**
+ * Vollständige Störungen nach Status laden (inkl. history + attachments).
+ * Für Dashboard-Spalten Offen + Bearbeitung.
+ */
 async function getByStatus(status) {
   const rows = await all(
     `SELECT * FROM stoerungen WHERE status = ? ORDER BY COALESCE(updatedAt, createdAt) DESC`,
@@ -165,6 +169,23 @@ async function getByStatus(status) {
     row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
     return row;
   }));
+}
+
+/**
+ * Schlanke Abfrage ohne history/attachments.
+ * Für Fernseher-Dashboard und Erledigt-API (nur Kartenanzeige nötig).
+ * Optional: fahrzeug und klasse als Filter, limit für Paginierung.
+ */
+async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit = null } = {}) {
+  let sql  = `SELECT id, fahrzeug, klasse, schwere, fehlerBeschreibung, status, createdAt, updatedAt, melderName, eskalation_stufe
+              FROM stoerungen WHERE status = ?`;
+  const args = [status];
+  if (fahrzeug) { sql += ` AND fahrzeug = ?`;              args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND klasse = ?`;                args.push(klasse); }
+  sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
+  if (limit)    { sql += ` LIMIT ?`;                       args.push(limit); }
+  const rows = await all(sql, args);
+  return rows.map(normalizeRow);
 }
 
 async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlasse) {
@@ -244,7 +265,6 @@ async function clearReminder(id) {
 
 // ── Urlaub / Abwesenheit ────────────────────────────────────────────
 
-/** Setzt oder entfernt den Abwesenheitszeitraum eines Admins. */
 async function setAdminUrlaub(username, abwesendBis) {
   if (!abwesendBis) {
     await run(`DELETE FROM admin_urlaub WHERE username = ?`, [username]);
@@ -257,7 +277,6 @@ async function setAdminUrlaub(username, abwesendBis) {
   }
 }
 
-/** Gibt alle aktuell abwesenden Admins zurück (abwesend_bis in der Zukunft). */
 async function getAbwesendeAdmins() {
   const now = new Date().toISOString();
   return all(
@@ -266,7 +285,6 @@ async function getAbwesendeAdmins() {
   );
 }
 
-/** Gibt den Abwesenheitseintrag eines einzelnen Admins zurück (oder null). */
 async function getAdminUrlaub(username) {
   const now = new Date().toISOString();
   return get(
@@ -275,7 +293,6 @@ async function getAdminUrlaub(username) {
   );
 }
 
-/** Bereinigt abgelaufene Einträge (läuft täglich im cleanup). */
 async function cleanupAbgelaufeneUrlaube() {
   const now = new Date().toISOString();
   await run(`DELETE FROM admin_urlaub WHERE abwesend_bis <= ?`, [now]);
@@ -283,7 +300,6 @@ async function cleanupAbgelaufeneUrlaube() {
 
 // ── Eskalation ───────────────────────────────────────────────────────
 
-/** Liefert alle gesendet-Tickets deren Eskalationsstufe erhöht werden soll. */
 async function getEskalationsFaellige(stunden) {
   const cutoff = new Date(Date.now() - stunden * 60 * 60 * 1000).toISOString();
   return all(
@@ -298,7 +314,6 @@ async function getEskalationsFaellige(stunden) {
   );
 }
 
-/** Setzt die Eskalationsstufe und Zeitstempel. */
 async function setEskalationsStufe(id, stufe) {
   const now = new Date().toISOString();
   await run(
@@ -355,7 +370,6 @@ async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attach
 async function getOldestAttachmentsForPurge() {
   return all(`SELECT a.*, s.status AS storungStatus FROM stoerung_attachments a JOIN stoerungen s ON s.id = a.stoerungId ORDER BY CASE s.status WHEN 'erledigt' THEN 0 WHEN 'zurueckgewiesen' THEN 0 ELSE 1 END ASC, a.createdAt ASC`);
 }
-async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
 async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
 async function deleteStorung(id) {
   const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
@@ -369,13 +383,13 @@ async function deleteStorung(id) {
 
 module.exports = {
   initDb,
-  createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
+  createStorung, getStorungById, getAllStorungen, getByStatus, getByStatusSlim, updateStatus,
   addHistoryNote,
   setReminder, getDueReminders, clearReminder,
   setAdminUrlaub, getAbwesendeAdmins, getAdminUrlaub, cleanupAbgelaufeneUrlaube,
   getEskalationsFaellige, setEskalationsStufe,
   searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
-  getOldestAttachments, getOldestAttachmentsForPurge, deleteAttachment,
+  getOldestAttachmentsForPurge, deleteAttachment,
   deleteStorung,
 };

@@ -272,11 +272,21 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   <div class="modal" style="max-width:420px">
     <h3 id="reminderModalTitle" style="margin-bottom:var(--space-2)">&#9201; Erinnerung setzen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Du erhältst eine E-Mail-Erinnerung zum gewählten Zeitpunkt mit dem aktuellen Ticket-Status.
+      Erinnerungen werden immer zur vollen Stunde zugestellt.
     </p>
-    <div class="form-group">
-      <label class="form-label" for="reminderAtInput">Datum &amp; Uhrzeit</label>
-      <input type="datetime-local" class="form-control" id="reminderAtInput" style="max-width:260px">
+    <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="reminderDateInput">Datum</label>
+        <input type="date" class="form-control" id="reminderDateInput" style="max-width:180px">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="reminderHourInput">Stunde</label>
+        <select class="form-control" id="reminderHourInput" style="max-width:110px">
+          <% for (var h = 0; h < 24; h++) { %>
+            <option value="<%= h %>"><%= String(h).padStart(2,'0') %>:00 Uhr</option>
+          <% } %>
+        </select>
+      </div>
     </div>
     <div id="reminderFeedback" style="font-size:var(--text-xs);color:var(--color-error);margin-top:var(--space-2);min-height:1.2em"></div>
     <div class="modal-actions" style="margin-top:var(--space-4)">
@@ -318,7 +328,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 (function () {
   var IS_ADMIN = <%= isAdmin ? 'true' : 'false' %>;
   var STOERUNG_ID = '<%= storung.id %>';
-  // Username des eingeloggten Admins – wird als reminderTo gespeichert
   var CURRENT_USER = '<%= user && user.username ? user.username.replace(/'/g, "\\'") : '' %>';
 
   if (!IS_ADMIN) return;
@@ -373,37 +382,45 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
-  // ── ERINNERUNG ───────────────────────────────────────────────────────────────────
+  // ── ERINNERUNG ────────────────────────────────────────────────────────────────
   var setReminderBtn    = document.getElementById('setReminderBtn');
   var reminderModal     = document.getElementById('reminderModal');
-  var reminderAtInput   = document.getElementById('reminderAtInput');
+  var reminderDateInput = document.getElementById('reminderDateInput');
+  var reminderHourInput = document.getElementById('reminderHourInput');
   var reminderFeedback  = document.getElementById('reminderFeedback');
   var reminderCancelBtn = document.getElementById('reminderCancelBtn');
   var reminderSaveBtn   = document.getElementById('reminderSaveBtn');
 
-  // Setzt das Minimum des datetime-local Feldes auf jetzt+1min (verhindert Vergangenheit)
-  function setReminderMin() {
-    var now = new Date(Date.now() + 60 * 1000);
-    var pad = function (n) { return String(n).padStart(2, '0'); };
-    var local = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
-      + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-    reminderAtInput.min = local;
-  }
+  function pad(n) { return String(n).padStart(2, '0'); }
 
-  function defaultReminderTime() {
-    var d = new Date(); d.setDate(d.getDate() + 1);
-    var pad = function (n) { return String(n).padStart(2, '0'); };
-    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + 'T08:00';
+  // Setzt Datum und Stunde auf morgigen Tag 08:00 als sinnvollen Default
+  function initReminderDefaults() {
+    var now = new Date();
+    // Default: nächster Tag, 08:00 – oder falls es heute noch eine zukünftige volle Stunde gibt, die nächste
+    var defaultDate = new Date(now);
+    var defaultHour = now.getHours() + 1; // nächste volle Stunde heute
+    if (defaultHour >= 24) {
+      // Auf morgen verschieben
+      defaultDate.setDate(defaultDate.getDate() + 1);
+      defaultHour = 8;
+    } else if (defaultHour < 8) {
+      defaultHour = 8;
+    }
+    reminderDateInput.value = defaultDate.getFullYear() + '-' + pad(defaultDate.getMonth() + 1) + '-' + pad(defaultDate.getDate());
+    reminderHourInput.value = String(defaultHour);
+
+    // Minimum-Datum = heute
+    var today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    reminderDateInput.min = today;
   }
 
   if (setReminderBtn) {
     setReminderBtn.addEventListener('click', function () {
-      setReminderMin();
-      reminderAtInput.value = defaultReminderTime();
+      initReminderDefaults();
       reminderFeedback.textContent = '';
-      reminderAtInput.style.borderColor = '';
+      reminderDateInput.style.borderColor = '';
       reminderModal.hidden = false;
-      setTimeout(function () { reminderAtInput.focus(); }, 50);
+      setTimeout(function () { reminderDateInput.focus(); }, 50);
     });
   }
   if (reminderCancelBtn) reminderCancelBtn.addEventListener('click', function () { reminderModal.hidden = true; });
@@ -411,24 +428,34 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     reminderModal.addEventListener('click', function (e) { if (e.target === reminderModal) reminderModal.hidden = true; });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && reminderModal && !reminderModal.hidden) reminderModal.hidden = true; });
   }
+
   if (reminderSaveBtn) {
     reminderSaveBtn.addEventListener('click', function () {
-      var at = reminderAtInput.value;
-      if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
+      var dateVal = reminderDateInput.value;   // "YYYY-MM-DD"
+      var hourVal = parseInt(reminderHourInput.value, 10);
 
-      // Client-seitiger Vergangenheits-Schutz
-      var parsed = new Date(at);
-      if (parsed.getTime() <= Date.now()) {
-        reminderFeedback.textContent = 'Der Zeitpunkt muss in der Zukunft liegen.';
-        reminderAtInput.style.borderColor = 'var(--color-error)';
+      if (!dateVal) {
+        reminderFeedback.textContent = 'Bitte ein Datum auswählen.';
+        reminderDateInput.style.borderColor = 'var(--color-error)';
+        return;
+      }
+
+      // Vollständigen ISO-Timestamp bauen: Datum + gewählte Stunde, Minuten/Sekunden = 00
+      var parts = dateVal.split('-');
+      var parsed = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10), hourVal, 0, 0, 0);
+
+      // Muss mindestens 1 Stunde in der Zukunft liegen
+      if (parsed.getTime() <= Date.now() + 59 * 60 * 1000) {
+        reminderFeedback.textContent = 'Der Zeitpunkt muss mindestens 1 Stunde in der Zukunft liegen.';
+        reminderDateInput.style.borderColor = 'var(--color-error)';
         return;
       }
 
       reminderFeedback.textContent = '';
-      reminderAtInput.style.borderColor = '';
-      reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere…';
+      reminderDateInput.style.borderColor = '';
+      reminderSaveBtn.disabled = true;
+      reminderSaveBtn.textContent = 'Speichere\u2026';
 
-      // reminderTo = Username des eingeloggten Admins (wird in ADMIN_ESCALATION aufgelöst)
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reminderAt: parsed.toISOString(), reminderTo: CURRENT_USER }),
@@ -438,7 +465,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         if (data.ok) { reminderModal.hidden = true; window.location.reload(); }
         else {
           reminderFeedback.textContent = data.error || 'Fehler beim Speichern.';
-          reminderAtInput.style.borderColor = 'var(--color-error)';
+          reminderDateInput.style.borderColor = 'var(--color-error)';
           reminderSaveBtn.disabled = false;
           reminderSaveBtn.innerHTML = '&#9201; Erinnerung speichern';
         }
@@ -468,7 +495,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
-  // ── INFO-NOTIZ ──────────────────────────────────────────────────────────────────────
+  // ── INFO-NOTIZ ─────────────────────────────────────────────────────────────────
   var addInfoBtn    = document.getElementById('addInfoBtn');
   var infoModal     = document.getElementById('infoModal');
   var infoText      = document.getElementById('infoText');
@@ -499,7 +526,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       infoFeedback.textContent = '';
       infoText.style.borderColor = '';
       infoSaveBtn.disabled = true;
-      infoSaveBtn.textContent = 'Speichere…';
+      infoSaveBtn.textContent = 'Speichere\u2026';
       fetch('/stoerung/' + STOERUNG_ID + '/notiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

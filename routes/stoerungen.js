@@ -72,29 +72,38 @@ function renderNeu(res, errors, old, user) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
+const DASHBOARD_LIMIT = 10;
+
 router.get('/', requireLogin, async (req, res) => {
   try {
-    const [gesendet, bestaetigt, totalErl, totalZur] = await Promise.all([
-      db.getByStatus('gesendet'),
-      db.getByStatus('bestaetigt'),
+    const [gesendet, bestaetigt, totalGesendet, totalBestaetigt, totalErl, totalZur] = await Promise.all([
+      db.getByStatusSlim('gesendet',   { limit: DASHBOARD_LIMIT }),
+      db.getByStatusSlim('bestaetigt', { limit: DASHBOARD_LIMIT }),
+      db.countByStatus('gesendet'),
+      db.countByStatus('bestaetigt'),
       db.countByStatus('erledigt'),
       db.countByStatus('zurueckgewiesen'),
     ]);
 
+    // getByStatusSlim liefert keine attachments — leeres Array einfügen damit das Partial nicht crasht
+    const addAttachments = rows => rows.map(s => Object.assign({ attachments: [], beschreibung: s.beschreibung || '' }, s));
+
     const stats = {
-      total:    gesendet.length + bestaetigt.length + totalErl + totalZur,
-      offen:    gesendet.length,
-      aktiv:    bestaetigt.length,
-      erledigt: totalErl + totalZur,
+      total:           totalGesendet + totalBestaetigt + totalErl + totalZur,
+      offen:           totalGesendet,
+      aktiv:           totalBestaetigt,
+      erledigt:        totalErl + totalZur,
+      gesendetTotal:   totalGesendet,
+      bestaetigtTotal: totalBestaetigt,
     };
 
     res.render('dashboard', {
-      gesendet,
-      bestaetigt,
-      // Erledigt-Spalte wird client-seitig per API befüllt
-      erledigt: [],
+      gesendet:    addAttachments(gesendet),
+      bestaetigt:  addAttachments(bestaetigt),
+      erledigt:    [],
       zurueckgewiesen: [],
       stats,
+      dashboardLimit: DASHBOARD_LIMIT,
       user: req.session.user,
     });
   } catch (err) {

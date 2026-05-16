@@ -77,11 +77,6 @@
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
-      <% if (stats.gesendetTotal > dashboardLimit) { %>
-        <div id="gesendet-suche-hint" style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
-          Zeige letzte <%= dashboardLimit %> von <%= stats.gesendetTotal %> &middot; <a href="/suche" style="color:var(--color-primary)">Alle in der Suche</a>
-        </div>
-      <% } %>
     </section>
 
     <!-- In Bearbeitung -->
@@ -105,11 +100,6 @@
         <% }); %>
       </div>
       <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
-      <% if (stats.bestaetigtTotal > dashboardLimit) { %>
-        <div id="bestaetigt-suche-hint" style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
-          Zeige letzte <%= dashboardLimit %> von <%= stats.bestaetigtTotal %> &middot; <a href="/suche" style="color:var(--color-primary)">Alle in der Suche</a>
-        </div>
-      <% } %>
     </section>
 
     <!-- Erledigt (lazy per API) -->

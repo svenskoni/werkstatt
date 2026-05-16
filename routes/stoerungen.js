@@ -74,17 +74,9 @@ function renderNeu(res, errors, old, user) {
 // ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
-    // Erledigt + zurückgewiesen: nur Zähler für Stats, keine vollen Objekte
-    const [gesendet, bestaetigt, cntErledigt, cntZurueck] = await Promise.all([
+    const [gesendet, bestaetigt, totalErl, totalZur] = await Promise.all([
       db.getByStatus('gesendet'),
       db.getByStatus('bestaetigt'),
-      db.getByStatusSlim('erledigt',        { limit: 1 }),
-      db.getByStatusSlim('zurueckgewiesen', { limit: 1 }),
-    ]);
-
-    // Echte Zähler per COUNT-Query (getByStatusSlim mit limit:1 liefert maximal 1 Row,
-    // daher holen wir den Total-Count separat über eine schlanke Abfrage).
-    const [totalErl, totalZur] = await Promise.all([
       db.countByStatus('erledigt'),
       db.countByStatus('zurueckgewiesen'),
     ]);
@@ -99,7 +91,7 @@ router.get('/', requireLogin, async (req, res) => {
     res.render('dashboard', {
       gesendet,
       bestaetigt,
-      // Erledigt-Spalte wird client-seitig per API befüllt – kein initialer Datensatz nötig
+      // Erledigt-Spalte wird client-seitig per API befüllt
       erledigt: [],
       zurueckgewiesen: [],
       stats,
@@ -113,7 +105,6 @@ router.get('/', requireLogin, async (req, res) => {
 
 // ── API: Erledigt-Spalte (lazy, max 10, mit Schnellfilter) ────────────────────────────────
 // GET /api/dashboard/erledigt?fahrzeug=FRE1&klasse=kfz
-// Gibt maximal 10 Einträge (erledigt + zurückgewiesen) als HTML-Fragment zurück.
 router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
   try {
     const LIMIT = 10;
@@ -127,7 +118,7 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
       db.getByStatusSlim('zurueckgewiesen', opts),
     ]);
 
-    // Zusammenführen, nach Datum sortieren, auf 10 begrenzen
+    // Zusammenführen, nach Datum sortieren, auf LIMIT begrenzen
     const combined = [...erledigt, ...zurueck]
       .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
       .slice(0, LIMIT);
@@ -137,7 +128,6 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
       const wrap = s.status === 'zurueckgewiesen'
         ? `<div style="margin-bottom:var(--space-1)"><span style="display:inline-block;font-size:var(--text-xs);font-weight:600;padding:2px 8px;border-radius:var(--radius-full);background:var(--color-primary-highlight);color:var(--color-primary);letter-spacing:0.02em">\u2715 Ticket zur\u00fcckgewiesen</span></div>`
         : '';
-      // Inline-Render des Slim-Partials via Template-String
       const isAdmin  = user && user.role === 'admin';
       const schwereMap = { klein: '\uD83D\uDFE2 Klein', normal: '\uD83D\uDFE1 Normal', totalausfall: '\uD83D\uDD34 Totalausfall' };
       const klasseMap  = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
@@ -286,7 +276,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status \u00e4ndern (nur Admin) ────────────────────────────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ────────────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere, neuKlasse } = req.body;
@@ -295,10 +285,10 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
     const validSchwere = ['klein', 'normal', 'totalausfall'];
-    const gepr\u00fcfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
     const validKlasse = ['kfz', 'geraet'];
-    const gepr\u00fcfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, gepr\u00fcfteSchwere, gepr\u00fcfteKlasse);
+    const geprüfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere, geprüfteKlasse);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
@@ -308,7 +298,7 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Info-Notiz hinzuf\u00fcgen (nur Admin) ─────────────────────────────────────────────────────────────────────────
+// ── Info-Notiz hinzufügen (nur Admin) ─────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   try {
     const { notiz } = req.body;
@@ -323,7 +313,7 @@ router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Erinnerung setzen/l\u00f6schen (nur Admin) ────────────────────────────────────────────────────────────────────────
+// ── Erinnerung setzen/löschen (nur Admin) ────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
   try {
     const { reminderAt, reminderTo } = req.body;
@@ -354,7 +344,7 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── St\u00f6rung l\u00f6schen (nur Admin) ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -365,8 +355,8 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
     await db.deleteStorung(storung.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[L\u00f6schen]', err);
-    res.status(500).json({ error: 'L\u00f6schen fehlgeschlagen.' });
+    console.error('[Löschen]', err);
+    res.status(500).json({ error: 'Löschen fehlgeschlagen.' });
   }
 });
 
@@ -397,7 +387,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── \u00c4hnliche Fehler API ─────────────────────────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ─────────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

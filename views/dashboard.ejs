@@ -134,9 +134,7 @@
 </div>
 
 <style>
-/* Karten die per Mehr-Button versteckt sind */
 .card-mehr-hidden { display: none !important; }
-
 .vf-btn, .kf-btn {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-full);
@@ -149,11 +147,7 @@
   transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
 }
 .vf-btn:hover, .kf-btn:hover { background: var(--color-surface-offset); color: var(--color-text); }
-.vf-btn.vf-active {
-  background: var(--color-primary); border-color: var(--color-primary);
-  color: #fff; font-weight: 600;
-}
-.kf-btn.kf-active {
+.vf-btn.vf-active, .kf-btn.kf-active {
   background: var(--color-primary); border-color: var(--color-primary);
   color: #fff; font-weight: 600;
 }
@@ -177,8 +171,10 @@
     btn.addEventListener('click', function () {
       var colEl  = document.getElementById(btn.dataset.col);
       var mehrEl = document.getElementById(btn.dataset.mehr);
+      // Klasse entfernen UND inline-style zuruecksetzen
       colEl.querySelectorAll('.card-mehr-hidden').forEach(function (w) {
         w.classList.remove('card-mehr-hidden');
+        w.style.display = '';
       });
       mehrEl.style.display = 'none';
     });
@@ -214,7 +210,7 @@
       });
   }
 
-  // ── Lokaler Filter ──────────────────────────────────────────────────────────────────
+  // ── Lokaler Filter ─────────────────────────────────────────────────────────────────
   function applyLocalFilter() {
     var totalVisible = 0;
     localCols.forEach(function (col) {
@@ -230,9 +226,10 @@
       wraps.forEach(function (w) {
         var matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         var matchKf = !activeKf || w.dataset.klasse   === activeKf;
-        var filterMatch = matchVf && matchKf;
-        var hidden = w.classList.contains('card-mehr-hidden');
-        w.style.display = (filterMatch && !hidden) ? '' : 'none';
+        var filterOk = matchVf && matchKf;
+        var isMehrHidden = w.classList.contains('card-mehr-hidden');
+        // Nur sichtbar wenn Filter passt UND nicht per Mehr-Button versteckt
+        w.style.display = (filterOk && !isMehrHidden) ? '' : 'none';
       });
       cntEl.textContent = matching.length;
       totalVisible += matching.length;

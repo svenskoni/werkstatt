@@ -74,11 +74,11 @@ function renderNeu(res, errors, old, user) {
 // ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
-    // Offen + Bearbeitung: alles aus der DB (kein Limit)
-    // Erledigt: wird client-seitig per API geladen (max 10)
+    // Slim: nur die für die Karte benötigten Spalten, kein history/attachments
+    // Offen + Bearbeitung: alles (kein Limit), Erledigt: per API lazy geladen
     const [gesendet, bestaetigt, totalErl, totalZur] = await Promise.all([
-      db.getByStatus('gesendet'),
-      db.getByStatus('bestaetigt'),
+      db.getByStatusSlim('gesendet'),
+      db.getByStatusSlim('bestaetigt'),
       db.countByStatus('erledigt'),
       db.countByStatus('zurueckgewiesen'),
     ]);

@@ -1,13 +1,14 @@
 'use strict';
 /**
  * reminder.js
- * Zwei Crons:
+ * Zwei Crons – beide laufen zur vollen Stunde:
  *
- * 1) Reminder-Cron (alle 5 Min)
+ * 1) Reminder-Cron (stündlich, zur vollen Stunde)
  *    Prüft fällige Erinnerungen (reminderAt <= jetzt) und schickt dem
  *    gespeicherten Admin die gleiche Admin-Mail nochmal – Betreff: [Erinnerung]
+ *    Erinnerungen werden also immer zur nächsten vollen Stunde zugestellt.
  *
- * 2) Eskalations-Cron (stündlich)
+ * 2) Eskalations-Cron (stündlich, zur vollen Stunde)
  *    Prüft ob Tickets ohne Reaktion eskaliert werden müssen.
  *    - Stufe 0 → nach ESKALATION_STUNDEN → Mail an Eskalation[0] (nächster nach Erstempfänger)
  *    - Stufe N → nach ESKALATION_STUNDEN → Mail an Eskalation[N]
@@ -17,6 +18,15 @@ const db     = require('./database');
 const mailer = require('./mailer');
 
 const ESKALATION_STUNDEN = parseInt(process.env.ESKALATION_STUNDEN || '24', 10);
+
+// ── Hilfsfunktion: Wartezeit bis zur nächsten vollen Stunde ──────────────────
+
+function msUntilNextFullHour() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(now.getHours() + 1, 0, 0, 0);
+  return next.getTime() - now.getTime();
+}
 
 // ── 1) Reminder ────────────────────────────────────────────────────────────────
 
@@ -55,7 +65,6 @@ async function checkEskalationen() {
       const full = await db.getStorungById(row.id);
       if (!full || full.status !== 'gesendet') continue;
 
-      // naechsteStufe direkt als Index übergeben (kein -1 mehr)
       const naechsteStufe = (full.eskalation_stufe || 0) + 1;
 
       const sent = await mailer.sendEskalationsMail(full, naechsteStufe, abwesendeUsernames);
@@ -71,19 +80,32 @@ async function checkEskalationen() {
   }
 }
 
+// ── Gemeinsamer stündlicher Job ────────────────────────────────────────────────
+
+async function runHourlyJobs() {
+  await checkReminder();
+  await checkEskalationen();
+}
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 
 function start() {
-  // Reminder: sofort + alle 5 Minuten
-  checkReminder();
-  setInterval(checkReminder, 5 * 60 * 1000);
+  const wartezeit = msUntilNextFullHour();
+  const minuten   = Math.round(wartezeit / 60000);
 
-  // Eskalation: sofort + jede Stunde
+  console.log(`[Reminder] Nächster Lauf in ${minuten} Min (zur vollen Stunde).`);
+
+  // Beim ersten Start: sofort Eskalationen prüfen (laufende Tickets nicht verzögern)
+  // Reminder werden NICHT sofort geprüft – Erinnerungen gelten erst ab nächster voller Stunde
   checkEskalationen();
-  setInterval(checkEskalationen, 60 * 60 * 1000);
 
-  console.log(`[Reminder] Reminder-Cron gestartet (Intervall: 5min)`);
-  console.log(`[Reminder] Eskalations-Cron gestartet (Intervall: 1h | Schwelle: ${ESKALATION_STUNDEN}h)`);
+  setTimeout(() => {
+    runHourlyJobs();
+    setInterval(runHourlyJobs, 60 * 60 * 1000);
+    console.log(`[Reminder] Stündlicher Cron aktiv (Reminder + Eskalation zur vollen Stunde).`);
+  }, wartezeit);
+
+  console.log(`[Reminder] Eskalations-Schwelle: ${ESKALATION_STUNDEN}h`);
 }
 
 module.exports = { start };

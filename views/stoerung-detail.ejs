@@ -157,16 +157,13 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
       <% if (storung.status === 'bestaetigt') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+        <!-- Erledigt: kein Klasse/Schwere-Picker – Werte wurden beim Bestätigen bereits geprüft -->
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-done);color:#fff;border:none"
           data-id="<%= storung.id %>"
           data-target="erledigt"
-          data-schwere="<%= storung.schwere %>"
-          data-klasse="<%= storung.klasse || 'kfz' %>"
-          data-mit-schwere="1"
-          data-mit-klasse="1"
           data-title="Störung erledigen"
-          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert. Klasse und Schweregrad optional korrigieren."
+          data-desc="Störung wird als &raquo;Erledigt&laquo; markiert."
           data-label="Erledigt setzen">
           &#10003; Erledigt
         </button>
@@ -393,14 +390,11 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
-  // Setzt Datum und Stunde auf morgigen Tag 08:00 als sinnvollen Default
   function initReminderDefaults() {
     var now = new Date();
-    // Default: nächster Tag, 08:00 – oder falls es heute noch eine zukünftige volle Stunde gibt, die nächste
     var defaultDate = new Date(now);
-    var defaultHour = now.getHours() + 1; // nächste volle Stunde heute
+    var defaultHour = now.getHours() + 1;
     if (defaultHour >= 24) {
-      // Auf morgen verschieben
       defaultDate.setDate(defaultDate.getDate() + 1);
       defaultHour = 8;
     } else if (defaultHour < 8) {
@@ -408,8 +402,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     }
     reminderDateInput.value = defaultDate.getFullYear() + '-' + pad(defaultDate.getMonth() + 1) + '-' + pad(defaultDate.getDate());
     reminderHourInput.value = String(defaultHour);
-
-    // Minimum-Datum = heute
     var today = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
     reminderDateInput.min = today;
   }
@@ -431,7 +423,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
   if (reminderSaveBtn) {
     reminderSaveBtn.addEventListener('click', function () {
-      var dateVal = reminderDateInput.value;   // "YYYY-MM-DD"
+      var dateVal = reminderDateInput.value;
       var hourVal = parseInt(reminderHourInput.value, 10);
 
       if (!dateVal) {
@@ -440,11 +432,9 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         return;
       }
 
-      // Vollständigen ISO-Timestamp bauen: Datum + gewählte Stunde, Minuten/Sekunden = 00
       var parts = dateVal.split('-');
       var parsed = new Date(parseInt(parts[0],10), parseInt(parts[1],10)-1, parseInt(parts[2],10), hourVal, 0, 0, 0);
 
-      // Muss mindestens 1 Stunde in der Zukunft liegen
       if (parsed.getTime() <= Date.now() + 59 * 60 * 1000) {
         reminderFeedback.textContent = 'Der Zeitpunkt muss mindestens 1 Stunde in der Zukunft liegen.';
         reminderDateInput.style.borderColor = 'var(--color-error)';

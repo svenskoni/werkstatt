@@ -41,14 +41,25 @@ async function verifyCrewPassword(password) {
   return { username: 'Melder', role: 'crew' };
 }
 
+/**
+ * Baut die Login-Redirect-URL.
+ * Wenn die Ziel-URL ein Störungs-Detail ist (/stoerung/…), wird ?tab=admin
+ * angehängt, damit der Admin direkt auf dem richtigen Tab landet.
+ */
+function buildLoginRedirect(returnTo) {
+  if (returnTo && /^\/stoerung\//.test(returnTo)) {
+    return '/login?tab=admin';
+  }
+  return '/login';
+}
+
 function requireLogin(req, res, next) {
   if (!req.session.user) {
-    // S3: returnTo nur setzen wenn sichere URL
     const url = req.originalUrl;
     if (url && url.startsWith('/') && !url.startsWith('//')) {
       req.session.returnTo = url;
     }
-    return res.redirect('/login');
+    return res.redirect(buildLoginRedirect(url));
   }
   next();
 }
@@ -60,7 +71,7 @@ function requireRole(...roles) {
       if (url && url.startsWith('/') && !url.startsWith('//')) {
         req.session.returnTo = url;
       }
-      return res.redirect('/login');
+      return res.redirect(buildLoginRedirect(url));
     }
     if (!roles.includes(req.session.user.role)) {
       return res.status(403).render('error', {

@@ -125,6 +125,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
       <% if (storung.status === 'gesendet') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+        <!-- Bestätigen: Klasse + Schwere korrigierbar (einzige Stelle) -->
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-active);color:#fff;border:none"
           data-id="<%= storung.id %>"
@@ -135,7 +136,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           data-mit-klasse="1"
           data-with-reminder="1"
           data-title="Störung bestätigen"
-          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad und Klasse optional korrigieren."
+          data-desc="Störung wird als &raquo;In Bearbeitung&laquo; markiert. Schweregrad und Klasse hier optional korrigieren."
           data-label="Bestätigen">
           &#10003; Bestätigen
         </button>
@@ -143,12 +144,8 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           style="background:var(--color-primary);color:#fff;border:none"
           data-id="<%= storung.id %>"
           data-target="zurueckgewiesen"
-          data-schwere="<%= storung.schwere %>"
-          data-klasse="<%= storung.klasse || 'kfz' %>"
-          data-mit-schwere="1"
-          data-mit-klasse="1"
           data-title="Ticket zurückweisen"
-          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen. Klasse und Schweregrad optional korrigieren."
+          data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
           data-label="Zurückweisen">
           &#10007; Zurückweisen
         </button>
@@ -157,7 +154,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
       <% if (storung.status === 'bestaetigt') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
-        <!-- Erledigt: kein Klasse/Schwere-Picker – Werte wurden beim Bestätigen bereits geprüft -->
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-done);color:#fff;border:none"
           data-id="<%= storung.id %>"
@@ -183,12 +179,8 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         <button class="btn btn-xs btn-ghost status-change-btn"
           data-id="<%= storung.id %>"
           data-target="gesendet"
-          data-schwere="<%= storung.schwere %>"
-          data-klasse="<%= storung.klasse || 'kfz' %>"
-          data-mit-schwere="1"
-          data-mit-klasse="1"
           data-title="Wiederöffnen"
-          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt. Klasse und Schweregrad optional korrigieren."
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zurückgesetzt."
           data-label="Wiederöffnen">
           &larrhk; Wiederöffnen
         </button>
@@ -248,7 +240,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   <div class="modal" style="max-width:500px">
     <h3 id="deleteModalTitle" style="color:var(--color-primary);margin-bottom:var(--space-2)">&#9888;&#65039; Störung löschen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Diese Aktion ist <strong>nicht rükgängig</strong>. Bitte gib eine Begründung an.
+      Diese Aktion ist <strong>nicht rückgängig</strong>. Bitte gib eine Begründung an.
     </p>
     <div class="form-group">
       <label class="form-label required" for="deleteGrund">Begründung</label>

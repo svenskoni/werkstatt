@@ -162,6 +162,11 @@
       opacity: 0.7;
       white-space: nowrap;
     }
+    .ticket-klasse {
+      font-size: 10px;
+      opacity: 0.75;
+      white-space: nowrap;
+    }
     .ticket-zeit {
       font-size: 9px;
       color: #666;
@@ -214,6 +219,7 @@
                 <div class="ticket-meta">
                   <% var sw = SCHWERE[t.schwere]; %>
                   <% if (sw) { %><span class="ticket-schwere"><%= sw.icon %> <%= sw.label %></span><% } %>
+                  <span class="ticket-klasse"><%= t.klasse === 'geraet' ? '🔧' : '🚒' %></span>
                   <span class="ticket-zeit"><%= new Date(t.createdAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}) %></span>
                 </div>
               </div>
@@ -228,6 +234,7 @@
                 <div class="ticket-meta">
                   <% var sw2 = SCHWERE[t.schwere]; %>
                   <% if (sw2) { %><span class="ticket-schwere"><%= sw2.icon %> <%= sw2.label %></span><% } %>
+                  <span class="ticket-klasse"><%= t.klasse === 'geraet' ? '🔧' : '🚒' %></span>
                   <span class="ticket-zeit"><%= new Date(t.createdAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}) %></span>
                 </div>
               </div>

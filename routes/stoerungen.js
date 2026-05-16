@@ -72,38 +72,30 @@ function renderNeu(res, errors, old, user) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
-const DASHBOARD_LIMIT = 10;
-
 router.get('/', requireLogin, async (req, res) => {
   try {
-    const [gesendet, bestaetigt, totalGesendet, totalBestaetigt, totalErl, totalZur] = await Promise.all([
-      db.getByStatusSlim('gesendet',   { limit: DASHBOARD_LIMIT }),
-      db.getByStatusSlim('bestaetigt', { limit: DASHBOARD_LIMIT }),
-      db.countByStatus('gesendet'),
-      db.countByStatus('bestaetigt'),
+    // Offen + Bearbeitung: alles aus der DB (kein Limit)
+    // Erledigt: wird client-seitig per API geladen (max 10)
+    const [gesendet, bestaetigt, totalErl, totalZur] = await Promise.all([
+      db.getByStatus('gesendet'),
+      db.getByStatus('bestaetigt'),
       db.countByStatus('erledigt'),
       db.countByStatus('zurueckgewiesen'),
     ]);
 
-    // getByStatusSlim liefert keine attachments — leeres Array einfügen damit das Partial nicht crasht
-    const addAttachments = rows => rows.map(s => Object.assign({ attachments: [], beschreibung: s.beschreibung || '' }, s));
-
     const stats = {
-      total:           totalGesendet + totalBestaetigt + totalErl + totalZur,
-      offen:           totalGesendet,
-      aktiv:           totalBestaetigt,
-      erledigt:        totalErl + totalZur,
-      gesendetTotal:   totalGesendet,
-      bestaetigtTotal: totalBestaetigt,
+      total:    gesendet.length + bestaetigt.length + totalErl + totalZur,
+      offen:    gesendet.length,
+      aktiv:    bestaetigt.length,
+      erledigt: totalErl + totalZur,
     };
 
     res.render('dashboard', {
-      gesendet:    addAttachments(gesendet),
-      bestaetigt:  addAttachments(bestaetigt),
-      erledigt:    [],
+      gesendet,
+      bestaetigt,
+      erledigt: [],
       zurueckgewiesen: [],
       stats,
-      dashboardLimit: DASHBOARD_LIMIT,
       user: req.session.user,
     });
   } catch (err) {
@@ -112,7 +104,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── API: Erledigt-Spalte — eine einzige SQL-Abfrage, exakt 10 Zeilen ──────────────────────
+// ── API: Erledigt-Spalte — eine einzige SQL-Abfrage, exakt 10 Zeilen aus der DB ────────────
 router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
   try {
     const LIMIT = 10;
@@ -120,7 +112,6 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
     const fahrzeug = req.query.fahrzeug && req.query.fahrzeug.trim() ? req.query.fahrzeug.trim() : null;
     const klasse   = req.query.klasse   && validKlasse.includes(req.query.klasse) ? req.query.klasse : null;
 
-    // Eine einzige DB-Abfrage: erledigt + zurueckgewiesen, sortiert, LIMIT 10
     const combined = await db.getErledigtSlim({ fahrzeug, klasse, limit: LIMIT });
 
     const user = req.session.user;

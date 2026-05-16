@@ -56,6 +56,11 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           <span style="font-size:var(--text-sm);color:var(--color-warning)">
             <strong><%= reminderDate %></strong>
           </span>
+          <% if (storung.reminderTo) { %>
+            <span style="font-size:var(--text-xs);color:var(--color-text-muted);margin-left:var(--space-2)">
+              &rarr; <%= storung.reminderTo %>
+            </span>
+          <% } %>
           <button class="btn btn-xs btn-ghost" id="clearReminderBtn"
             style="margin-left:var(--space-2);color:var(--color-text-muted)"
             title="Erinnerung löschen">&#10005;</button>
@@ -313,6 +318,8 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 (function () {
   var IS_ADMIN = <%= isAdmin ? 'true' : 'false' %>;
   var STOERUNG_ID = '<%= storung.id %>';
+  // Username des eingeloggten Admins – wird als reminderTo gespeichert
+  var CURRENT_USER = '<%= user && user.username ? user.username.replace(/'/g, "\\'") : '' %>';
 
   if (!IS_ADMIN) return;
 
@@ -378,7 +385,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   function setReminderMin() {
     var now = new Date(Date.now() + 60 * 1000);
     var pad = function (n) { return String(n).padStart(2, '0'); };
-    // datetime-local braucht lokale Zeit im Format YYYY-MM-DDTHH:MM
     var local = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
       + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
     reminderAtInput.min = local;
@@ -411,7 +417,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       if (!at) { reminderFeedback.textContent = 'Bitte ein Datum auswählen.'; reminderAtInput.style.borderColor = 'var(--color-error)'; return; }
 
       // Client-seitiger Vergangenheits-Schutz
-      var parsed = new Date(at); // datetime-local → lokale Zeit korrekt interpretiert
+      var parsed = new Date(at);
       if (parsed.getTime() <= Date.now()) {
         reminderFeedback.textContent = 'Der Zeitpunkt muss in der Zukunft liegen.';
         reminderAtInput.style.borderColor = 'var(--color-error)';
@@ -422,10 +428,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       reminderAtInput.style.borderColor = '';
       reminderSaveBtn.disabled = true; reminderSaveBtn.textContent = 'Speichere…';
 
-      // toISOString() konvertiert korrekt von lokaler Zeit zu UTC
+      // reminderTo = Username des eingeloggten Admins (wird in ADMIN_ESCALATION aufgelöst)
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reminderAt: parsed.toISOString(), reminderTo: '' }),
+        body: JSON.stringify({ reminderAt: parsed.toISOString(), reminderTo: CURRENT_USER }),
       })
       .then(function (r) { return r.json(); })
       .then(function (data) {

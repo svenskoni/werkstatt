@@ -9,7 +9,7 @@ const { requireLogin, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── Multer ────────────────────────────────────────────────────────────────────────────
+// ── Multer ────────────────────────────────────────────────────────────────────────────────────
 const MAX_MB  = parseInt(process.env.MAX_UPLOAD_MB || '8', 10);
 const ALLOWED_MIMES = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
@@ -71,29 +71,127 @@ function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────────────────
+// ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
-    const [gesendet, bestaetigt, erledigt, zurueckgewiesen] = await Promise.all([
+    // Erledigt + zurückgewiesen: nur Zähler für Stats, keine vollen Objekte
+    const [gesendet, bestaetigt, cntErledigt, cntZurueck] = await Promise.all([
       db.getByStatus('gesendet'),
       db.getByStatus('bestaetigt'),
-      db.getByStatus('erledigt'),
-      db.getByStatus('zurueckgewiesen'),
+      db.getByStatusSlim('erledigt',        { limit: 1 }),
+      db.getByStatusSlim('zurueckgewiesen', { limit: 1 }),
     ]);
+
+    // Echte Zähler per COUNT-Query (getByStatusSlim mit limit:1 liefert maximal 1 Row,
+    // daher holen wir den Total-Count separat über eine schlanke Abfrage).
+    const [totalErl, totalZur] = await Promise.all([
+      db.countByStatus('erledigt'),
+      db.countByStatus('zurueckgewiesen'),
+    ]);
+
     const stats = {
-      total:    gesendet.length + bestaetigt.length + erledigt.length + zurueckgewiesen.length,
+      total:    gesendet.length + bestaetigt.length + totalErl + totalZur,
       offen:    gesendet.length,
       aktiv:    bestaetigt.length,
-      erledigt: erledigt.length + zurueckgewiesen.length,
+      erledigt: totalErl + totalZur,
     };
-    res.render('dashboard', { gesendet, bestaetigt, erledigt, zurueckgewiesen, stats, user: req.session.user });
+
+    res.render('dashboard', {
+      gesendet,
+      bestaetigt,
+      // Erledigt-Spalte wird client-seitig per API befüllt – kein initialer Datensatz nötig
+      erledigt: [],
+      zurueckgewiesen: [],
+      stats,
+      user: req.session.user,
+    });
   } catch (err) {
     console.error('[Dashboard]', err);
     res.status(500).render('error', { title: 'Fehler', message: 'Dashboard konnte nicht geladen werden.' });
   }
 });
 
-// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────────
+// ── API: Erledigt-Spalte (lazy, max 10, mit Schnellfilter) ────────────────────────────────
+// GET /api/dashboard/erledigt?fahrzeug=FRE1&klasse=kfz
+// Gibt maximal 10 Einträge (erledigt + zurückgewiesen) als HTML-Fragment zurück.
+router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
+  try {
+    const LIMIT = 10;
+    const validKlasse = ['kfz', 'geraet'];
+    const fahrzeug = req.query.fahrzeug && req.query.fahrzeug.trim() ? req.query.fahrzeug.trim() : null;
+    const klasse   = req.query.klasse   && validKlasse.includes(req.query.klasse) ? req.query.klasse : null;
+
+    const opts = { limit: LIMIT, fahrzeug, klasse };
+    const [erledigt, zurueck] = await Promise.all([
+      db.getByStatusSlim('erledigt',        opts),
+      db.getByStatusSlim('zurueckgewiesen', opts),
+    ]);
+
+    // Zusammenführen, nach Datum sortieren, auf 10 begrenzen
+    const combined = [...erledigt, ...zurueck]
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+      .slice(0, LIMIT);
+
+    const user = req.session.user;
+    const html = combined.map(s => {
+      const wrap = s.status === 'zurueckgewiesen'
+        ? `<div style="margin-bottom:var(--space-1)"><span style="display:inline-block;font-size:var(--text-xs);font-weight:600;padding:2px 8px;border-radius:var(--radius-full);background:var(--color-primary-highlight);color:var(--color-primary);letter-spacing:0.02em">\u2715 Ticket zur\u00fcckgewiesen</span></div>`
+        : '';
+      // Inline-Render des Slim-Partials via Template-String
+      const isAdmin  = user && user.role === 'admin';
+      const schwereMap = { klein: '\uD83D\uDFE2 Klein', normal: '\uD83D\uDFE1 Normal', totalausfall: '\uD83D\uDD34 Totalausfall' };
+      const klasseMap  = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
+      const dateStr = (iso) => {
+        const d = new Date(iso);
+        return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
+          + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
+      };
+      const reopenBtn = isAdmin ? `
+        <button class="btn btn-xs btn-ghost status-change-btn"
+          data-id="${s.id}"
+          data-target="gesendet"
+          data-schwere="${s.schwere}"
+          data-klasse="${s.klasse || 'kfz'}"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
+          data-title="Wieder\u00f6ffnen"
+          data-desc="Status wird auf \u00bbEingegangen\u00ab zur\u00fcckgesetzt."
+          data-label="Wieder\u00f6ffnen">
+          \u21b5 Wieder\u00f6ffnen
+        </button>` : '';
+      return `
+        <div class="kanban-card-wrap" data-fahrzeug="${s.fahrzeug}" data-klasse="${s.klasse || 'kfz'}">
+          ${wrap}
+          <article class="stoerung-card card-${s.status}" role="article">
+            <div class="card-top">
+              <span class="card-fahrzeug">${s.fahrzeug}</span>
+              <div style="display:flex;gap:var(--space-1);align-items:center">
+                <span class="klasse-chip">${klasseMap[s.klasse] || s.klasse || 'KFZ'}</span>
+                <span class="schwere-badge schwere-${s.schwere}">${schwereMap[s.schwere] || s.schwere}</span>
+              </div>
+            </div>
+            <p class="card-fehler">${s.fehlerBeschreibung}</p>
+            <div class="card-bottom">
+              <span class="card-meta">${s.melderName}</span>
+              <span class="card-meta">&middot;</span>
+              <span class="card-meta">${dateStr(s.createdAt)}</span>
+            </div>
+            <div class="card-actions">
+              <a href="/stoerung/${s.id}" class="btn btn-ghost btn-xs">Details</a>
+              ${reopenBtn}
+            </div>
+          </article>
+        </div>`;
+    }).join('');
+
+    res.json({ html, total: combined.length });
+  } catch (err) {
+    console.error('[API Erledigt]', err);
+    res.status(500).json({ error: 'Fehler beim Laden.' });
+  }
+});
+
+// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -103,11 +201,11 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
     if (err) {
       deleteUploadedFiles(req.files);
       if (err.code === 'LIMIT_FILE_SIZE')
-        return renderNeu(res, [`Eine oder mehrere Dateien überschreiten das Limit von ${MAX_MB} MB.`], req.body || {}, req.session.user);
+        return renderNeu(res, [`Eine oder mehrere Dateien \u00fcberschreiten das Limit von ${MAX_MB} MB.`], req.body || {}, req.session.user);
       if (err.code === 'LIMIT_FILE_COUNT')
         return renderNeu(res, ['Maximal 6 Dateien erlaubt.'], req.body || {}, req.session.user);
       if (err.code === 'LIMIT_UNEXPECTED_FILE')
-        return renderNeu(res, ['Ungültiger Dateityp. Nur JPG, PNG, GIF, WebP, MP4 und MOV erlaubt.'], req.body || {}, req.session.user);
+        return renderNeu(res, ['Ung\u00fcltiger Dateityp. Nur JPG, PNG, GIF, WebP, MP4 und MOV erlaubt.'], req.body || {}, req.session.user);
       console.error('[Upload] Multer-Fehler:', err.message);
       return renderNeu(res, ['Fehler beim Hochladen. Bitte erneut versuchen.'], req.body || {}, req.session.user);
     }
@@ -128,9 +226,9 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
 
     const errors = [];
     if (!melderName || melderName.trim().length < 3) errors.push('Name des Melders ist erforderlich (mind. 3 Zeichen).');
-    if (!fahrzeug)          errors.push('Bitte ein Fahrzeug auswählen.');
-    if (!safeKlasse)        errors.push('Bitte eine Klasse wählen: KFZ oder Gerät.');
-    if (!schwere)           errors.push('Bitte einen Schweregrad auswählen.');
+    if (!fahrzeug)          errors.push('Bitte ein Fahrzeug ausw\u00e4hlen.');
+    if (!safeKlasse)        errors.push('Bitte eine Klasse w\u00e4hlen: KFZ oder Ger\u00e4t.');
+    if (!schwere)           errors.push('Bitte einen Schweregrad ausw\u00e4hlen.');
     if (!fehlerBeschreibung || fehlerBeschreibung.trim().length < 6) errors.push('Fehlerbeschreibung ist erforderlich (mind. 6 Zeichen).');
     if (!melderHandy && !melderMail) errors.push('Bitte Handy oder E-Mail angeben.');
 
@@ -143,7 +241,7 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
       }
     }
     if (invalidFiles.length)
-      errors.push(`Folgende Dateien wurden abgelehnt (Inhalt stimmt nicht mit Dateityp überein): ${invalidFiles.join(', ')}`);
+      errors.push(`Folgende Dateien wurden abgelehnt (Inhalt stimmt nicht mit Dateityp \u00fcberein): ${invalidFiles.join(', ')}`);
 
     if (errors.length) {
       deleteUploadedFiles(uploadedFiles.filter(f => !invalidFiles.includes(f.originalname)));
@@ -176,31 +274,31 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
   }
 });
 
-// ── Störung-Detail ─────────────────────────────────────────────────────────────────────────────────────
+// ── Störung-Detail ────────────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).render('error', { title: '404', message: 'Störung nicht gefunden.' });
+    if (!storung) return res.status(404).render('error', { title: '404', message: 'St\u00f6rung nicht gefunden.' });
     res.render('stoerung-detail', { storung, user: req.session.user });
   } catch (err) {
     console.error('[Detail]', err);
-    res.status(500).render('error', { title: 'Fehler', message: 'Störung konnte nicht geladen werden.' });
+    res.status(500).render('error', { title: 'Fehler', message: 'St\u00f6rung konnte nicht geladen werden.' });
   }
 });
 
-// ── Status ändern (nur Admin) ────────────────────────────────────────────────────────────────────────────────
+// ── Status \u00e4ndern (nur Admin) ────────────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere, neuKlasse } = req.body;
     const allowed = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
-    if (!allowed.includes(status)) return res.status(400).json({ error: 'Ungültiger Status.' });
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Ung\u00fcltiger Status.' });
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
     const validSchwere = ['klein', 'normal', 'totalausfall'];
-    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+    const gepr\u00fcfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
     const validKlasse = ['kfz', 'geraet'];
-    const geprüfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere, geprüfteKlasse);
+    const gepr\u00fcfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, gepr\u00fcfteSchwere, gepr\u00fcfteKlasse);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
@@ -210,13 +308,13 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Info-Notiz hinzufügen (nur Admin) ─────────────────────────────────────────────────────────────────────────
+// ── Info-Notiz hinzuf\u00fcgen (nur Admin) ─────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   try {
     const { notiz } = req.body;
     if (!notiz || !notiz.trim()) return res.status(400).json({ error: 'Notiz darf nicht leer sein.' });
     const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).json({ error: 'Störung nicht gefunden.' });
+    if (!storung) return res.status(404).json({ error: 'St\u00f6rung nicht gefunden.' });
     await db.addHistoryNote(storung.id, req.session.user.username, notiz.trim());
     res.json({ ok: true });
   } catch (err) {
@@ -225,26 +323,23 @@ router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Erinnerung setzen/löschen (nur Admin) ──────────────────────────────────────────────────────────────────────
+// ── Erinnerung setzen/l\u00f6schen (nur Admin) ────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
   try {
     const { reminderAt, reminderTo } = req.body;
     const storung = await db.getStorungById(req.params.id);
-    if (!storung) return res.status(404).json({ error: 'Störung nicht gefunden.' });
+    if (!storung) return res.status(404).json({ error: 'St\u00f6rung nicht gefunden.' });
 
-    // Leerer reminderAt → Erinnerung löschen
     if (!reminderAt || !reminderAt.trim()) {
       await db.setReminder(storung.id, null, null);
       return res.json({ ok: true });
     }
 
-    // reminderAt muss ein gültiges ISO-Datum sein (Client schickt bereits UTC via toISOString())
     const parsed = new Date(reminderAt);
     if (isNaN(parsed.getTime())) {
-      return res.status(400).json({ error: 'Ungültiges Datum.' });
+      return res.status(400).json({ error: 'Ung\u00fcltiges Datum.' });
     }
 
-    // Server-seitiger Vergangenheits-Schutz: mind. 1 Minute in der Zukunft
     if (parsed.getTime() < Date.now() - 60 * 1000) {
       return res.status(400).json({ error: 'Erinnerungszeitpunkt liegt in der Vergangenheit.' });
     }
@@ -259,7 +354,7 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Störung löschen (nur Admin) ─────────────────────────────────────────────────────────────────────────────────────────
+// ── St\u00f6rung l\u00f6schen (nur Admin) ──────────────────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -270,8 +365,8 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
     await db.deleteStorung(storung.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[Löschen]', err);
-    res.status(500).json({ error: 'Löschen fehlgeschlagen.' });
+    console.error('[L\u00f6schen]', err);
+    res.status(500).json({ error: 'L\u00f6schen fehlgeschlagen.' });
   }
 });
 
@@ -302,7 +397,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ─────────────────────────────────────────────────────────────────────────────────────
+// ── \u00c4hnliche Fehler API ─────────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

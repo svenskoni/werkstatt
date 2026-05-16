@@ -1,0 +1,66 @@
+<%
+function formatCardDateSlim(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
+    + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
+}
+const SCHWERE_SLIM = {
+  klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
+  normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
+  totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
+};
+const KLASSE_LABEL_SLIM = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
+%>
+<article class="stoerung-card card-<%= s.status %>" role="article">
+  <div class="card-top">
+    <span class="card-fahrzeug"><%= s.fahrzeug %></span>
+    <div style="display:flex;gap:var(--space-1);align-items:center">
+      <span class="klasse-chip"><%= KLASSE_LABEL_SLIM[s.klasse] || s.klasse || 'KFZ' %></span>
+      <span class="schwere-badge schwere-<%= s.schwere.toLowerCase() %>">
+        <%= SCHWERE_SLIM[s.schwere]?.icon %> <%= SCHWERE_SLIM[s.schwere]?.label %>
+      </span>
+    </div>
+  </div>
+
+  <p class="card-fehler"><%= s.fehlerBeschreibung %></p>
+
+  <div class="card-bottom">
+    <span class="card-meta"><%= s.melderName %></span>
+    <span class="card-meta">&middot;</span>
+    <span class="card-meta"><%= formatCardDateSlim(s.createdAt) %></span>
+  </div>
+
+  <div class="card-actions">
+    <a href="/stoerung/<%= s.id %>" class="btn btn-ghost btn-xs">Details</a>
+    <% if (user && user.role === 'admin') { %>
+      <% if (s.status === 'erledigt' || s.status === 'zurueckgewiesen') { %>
+        <button class="btn btn-xs btn-ghost status-change-btn"
+          data-id="<%= s.id %>"
+          data-target="gesendet"
+          data-schwere="<%= s.schwere %>"
+          data-klasse="<%= s.klasse || 'kfz' %>"
+          data-mit-schwere="1"
+          data-mit-klasse="1"
+          data-title="Wieder&ouml;ffnen"
+          data-desc="Status wird auf &raquo;Eingegangen&laquo; zur&uuml;ckgesetzt."
+          data-label="Wieder&ouml;ffnen">
+          &larrhk; Wieder&ouml;ffnen
+        </button>
+      <% } %>
+    <% } %>
+  </div>
+</article>
+
+<style>
+.klasse-chip {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-offset);
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+  border: 1px solid var(--color-border);
+}
+</style>

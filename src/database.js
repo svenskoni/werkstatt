@@ -56,7 +56,6 @@ async function initDb() {
     );
   `);
 
-  // Migration: Spalten nachrüsten falls DB schon existiert
   const cols = await all(`PRAGMA table_info(stoerungen)`);
   const colNames = cols.map(c => c.name);
   if (!colNames.includes('eskalation_stufe')) {
@@ -79,11 +78,6 @@ function normalizeRow(row) {
   return out;
 }
 
-/**
- * Macht einen Fahrzeugnamen URL- und Dateinamen-sicher für die Ticket-ID.
- * Umlaute werden transliteriert, Leerzeichen und Sonderzeichen durch Bindestrich ersetzt.
- * Mehrfache Bindestriche werden zu einem zusammengeführt, führender/abschließender Bindestrich entfernt.
- */
 function sanitizeFahrzeugForId(fahrzeug) {
   return fahrzeug
     .normalize('NFD')
@@ -155,8 +149,8 @@ async function getAllStorungen() {
 }
 
 /**
- * Vollständige Störungen nach Status laden (inkl. history + attachments).
- * Für Dashboard-Spalten Offen + Bearbeitung.
+ * Vollst\u00e4ndige St\u00f6rungen nach Status (inkl. history + attachments).
+ * F\u00fcr Dashboard-Spalten Offen + Bearbeitung.
  */
 async function getByStatus(status) {
   const rows = await all(
@@ -173,19 +167,28 @@ async function getByStatus(status) {
 
 /**
  * Schlanke Abfrage ohne history/attachments.
- * Für Fernseher-Dashboard und Erledigt-API (nur Kartenanzeige nötig).
- * Optional: fahrzeug und klasse als Filter, limit für Paginierung.
+ * F\u00fcr Fernseher-Dashboard und Erledigt-API.
+ * Optional: fahrzeug, klasse als Filter; limit f\u00fcr Paginierung.
  */
 async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit = null } = {}) {
   let sql  = `SELECT id, fahrzeug, klasse, schwere, fehlerBeschreibung, status, createdAt, updatedAt, melderName, eskalation_stufe
               FROM stoerungen WHERE status = ?`;
   const args = [status];
-  if (fahrzeug) { sql += ` AND fahrzeug = ?`;              args.push(fahrzeug); }
-  if (klasse)   { sql += ` AND klasse = ?`;                args.push(klasse); }
+  if (fahrzeug) { sql += ` AND fahrzeug = ?`; args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND klasse = ?`;   args.push(klasse); }
   sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
-  if (limit)    { sql += ` LIMIT ?`;                       args.push(limit); }
+  if (limit)    { sql += ` LIMIT ?`;           args.push(limit); }
   const rows = await all(sql, args);
   return rows.map(normalizeRow);
+}
+
+/**
+ * Z\u00e4hlt Eintr\u00e4ge eines Status ohne Daten zu laden.
+ * F\u00fcr Stats im Dashboard.
+ */
+async function countByStatus(status) {
+  const row = await get(`SELECT COUNT(*) AS cnt FROM stoerungen WHERE status = ?`, [status]);
+  return row ? Number(row.cnt) : 0;
 }
 
 async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlasse) {
@@ -263,8 +266,6 @@ async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
-// ── Urlaub / Abwesenheit ────────────────────────────────────────────
-
 async function setAdminUrlaub(username, abwesendBis) {
   if (!abwesendBis) {
     await run(`DELETE FROM admin_urlaub WHERE username = ?`, [username]);
@@ -297,8 +298,6 @@ async function cleanupAbgelaufeneUrlaube() {
   const now = new Date().toISOString();
   await run(`DELETE FROM admin_urlaub WHERE abwesend_bis <= ?`, [now]);
 }
-
-// ── Eskalation ───────────────────────────────────────────────────────
 
 async function getEskalationsFaellige(stunden) {
   const cutoff = new Date(Date.now() - stunden * 60 * 60 * 1000).toISOString();
@@ -383,8 +382,9 @@ async function deleteStorung(id) {
 
 module.exports = {
   initDb,
-  createStorung, getStorungById, getAllStorungen, getByStatus, getByStatusSlim, updateStatus,
-  addHistoryNote,
+  createStorung, getStorungById, getAllStorungen,
+  getByStatus, getByStatusSlim, countByStatus,
+  updateStatus, addHistoryNote,
   setReminder, getDueReminders, clearReminder,
   setAdminUrlaub, getAbwesendeAdmins, getAdminUrlaub, cleanupAbgelaufeneUrlaube,
   getEskalationsFaellige, setEskalationsStufe,

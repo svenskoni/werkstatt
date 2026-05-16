@@ -1,6 +1,6 @@
 <div class="dashboard-container">
   <!-- Stats -->
-  <div class="stats-bar" role="region" aria-label="Übersicht">
+  <div class="stats-bar" role="region" aria-label="\u00dcbersicht">
     <div class="stat-item">
       <span class="stat-num" style="color:var(--color-text)"><%= stats.total %></span>
       <span class="stat-label">Gesamt</span>
@@ -24,7 +24,7 @@
       <div class="stats-action">
         <a href="/stoerung/neu" class="btn btn-primary btn-sm">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Neue Störung
+          Neue St\u00f6rung
         </a>
       </div>
     <% } %>
@@ -56,14 +56,15 @@
   <!-- Kanban -->
   <div class="kanban-board" role="main">
 
-    <section class="kanban-col" aria-label="Eingegangene Störungen">
+    <!-- Eingegangen -->
+    <section class="kanban-col" aria-label="Eingegangene St\u00f6rungen">
       <div class="kanban-header kanban-header-new">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-new" aria-hidden="true"></span>
           <h2 class="kanban-title">Eingegangen</h2>
           <span class="kanban-count" id="cnt-gesendet"><%= gesendet.length %></span>
         </div>
-        <p class="kanban-subtitle">Neu gemeldet, noch nicht bestätigt</p>
+        <p class="kanban-subtitle">Neu gemeldet, noch nicht best\u00e4tigt</p>
       </div>
       <div class="kanban-cards" id="col-gesendet">
         <% if (gesendet.length === 0) { %>
@@ -75,23 +76,18 @@
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
-      <div class="col-load-more" id="more-gesendet" hidden>
-        <button class="load-more-btn" data-col="gesendet">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-          <span class="load-more-label"></span>
-        </button>
-      </div>
+      <div class="kanban-empty-filter" id="empty-gesendet" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Eintr\u00e4ge f\u00fcr diesen Filter</div>
     </section>
 
-    <section class="kanban-col" aria-label="Störungen in Bearbeitung">
+    <!-- In Bearbeitung -->
+    <section class="kanban-col" aria-label="St\u00f6rungen in Bearbeitung">
       <div class="kanban-header kanban-header-active">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-active" aria-hidden="true"></span>
           <h2 class="kanban-title">In Bearbeitung</h2>
           <span class="kanban-count" id="cnt-bestaetigt"><%= bestaetigt.length %></span>
         </div>
-        <p class="kanban-subtitle">Bestätigt, wird bearbeitet</p>
+        <p class="kanban-subtitle">Best\u00e4tigt, wird bearbeitet</p>
       </div>
       <div class="kanban-cards" id="col-bestaetigt">
         <% if (bestaetigt.length === 0) { %>
@@ -103,48 +99,25 @@
           </div>
         <% }); %>
       </div>
-      <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
-      <div class="col-load-more" id="more-bestaetigt" hidden>
-        <button class="load-more-btn" data-col="bestaetigt">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-          <span class="load-more-label"></span>
-        </button>
-      </div>
+      <div class="kanban-empty-filter" id="empty-bestaetigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Eintr\u00e4ge f\u00fcr diesen Filter</div>
     </section>
 
-    <section class="kanban-col" aria-label="Erledigte und zurückgewiesene Störungen">
+    <!-- Erledigt (lazy per API) -->
+    <section class="kanban-col" aria-label="Erledigte und zur\u00fcckgewiesene St\u00f6rungen">
       <div class="kanban-header kanban-header-done">
         <div class="kanban-title-wrap">
           <span class="kanban-dot dot-done" aria-hidden="true"></span>
           <h2 class="kanban-title">Erledigt</h2>
-          <span class="kanban-count" id="cnt-erledigt"><%= erledigt.length + zurueckgewiesen.length %></span>
+          <span class="kanban-count" id="cnt-erledigt"><%= stats.erledigt %></span>
         </div>
-        <p class="kanban-subtitle">Abgeschlossen &amp; Zurückgewiesen</p>
+        <p class="kanban-subtitle">Abgeschlossen &amp; Zur\u00fcckgewiesen &middot; letzte 10</p>
       </div>
       <div class="kanban-cards" id="col-erledigt">
-        <% if (erledigt.length === 0 && zurueckgewiesen.length === 0) { %>
-          <div class="empty-state-card">&mdash; Noch nichts erledigt</div>
-        <% } %>
-        <% erledigt.forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
-            <%- include('partials/stoerung-card', { s, user }) %>
-          </div>
-        <% }); %>
-        <% zurueckgewiesen.forEach(s => { %>
-          <div class="kanban-card-wrap" data-fahrzeug="<%= s.fahrzeug %>" data-klasse="<%= s.klasse || 'kfz' %>">
-            <div style="margin-bottom:var(--space-1)">
-              <span style="display:inline-block;font-size:var(--text-xs);font-weight:600;padding:2px 8px;border-radius:var(--radius-full);background:var(--color-primary-highlight);color:var(--color-primary);letter-spacing:0.02em">✕ Ticket zurückgewiesen</span>
-            </div>
-            <%- include('partials/stoerung-card', { s, user }) %>
-          </div>
-        <% }); %>
+        <div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen\u2026</div>
       </div>
-      <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Einträge für diesen Filter</div>
-      <div class="col-load-more" id="more-erledigt" hidden>
-        <button class="load-more-btn" data-col="erledigt">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-          <span class="load-more-label"></span>
-        </button>
+      <div class="kanban-empty-filter" id="empty-erledigt" hidden style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Keine Eintr\u00e4ge f\u00fcr diesen Filter</div>
+      <div id="erledigt-suche-hint" hidden style="padding:var(--space-2) var(--space-4) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">
+        Weitere Eintr\u00e4ge \u2192 Hauptsuche nutzen
       </div>
     </section>
 
@@ -172,35 +145,6 @@
   background: var(--color-primary); border-color: var(--color-primary);
   color: #fff; font-weight: 600;
 }
-
-/* Load-more Button */
-.col-load-more {
-  padding: var(--space-2) var(--space-4) var(--space-4);
-}
-.load-more-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1px dashed var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
-}
-.load-more-btn:hover {
-  background: var(--color-surface-offset);
-  color: var(--color-text);
-  border-color: var(--color-primary);
-}
-.load-more-btn svg {
-  flex-shrink: 0;
-}
 </style>
 
 <script>
@@ -209,26 +153,63 @@
 
   const vfBtns = document.querySelectorAll('.vf-btn');
   const kfBtns = document.querySelectorAll('.kf-btn');
-  const cols  = [
-    { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet',   more: 'more-gesendet'   },
-    { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt', more: 'more-bestaetigt' },
-    { cards: 'col-erledigt',   cnt: 'cnt-erledigt',   empty: 'empty-erledigt',   more: 'more-erledigt'   },
+
+  // Offen + Bearbeitung: clientseitiger Filter
+  const localCols = [
+    { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
+    { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt' },
   ];
   const countEl = document.querySelector('.vf-count');
 
   let activeVf = '';
   let activeKf = '';
 
-  const visibleCount = { gesendet: PAGE_SIZE, bestaetigt: PAGE_SIZE, erledigt: PAGE_SIZE };
+  // ── Erledigt: API-Aufruf ───────────────────────────────────────
+  const erledigtCol   = document.getElementById('col-erledigt');
+  const erledigtEmpty = document.getElementById('empty-erledigt');
+  const erledigtHint  = document.getElementById('erledigt-suche-hint');
+  let erledigtTimer   = null;
 
-  function applyFilter() {
+  function loadErledigt() {
+    const params = new URLSearchParams();
+    if (activeVf) params.set('fahrzeug', activeVf);
+    if (activeKf) params.set('klasse',   activeKf);
+
+    erledigtCol.innerHTML = '<div class="erledigt-loading" style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen\u2026</div>';
+    erledigtEmpty.hidden = true;
+    erledigtHint.hidden  = true;
+
+    fetch('/api/dashboard/erledigt?' + params.toString())
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { erledigtCol.innerHTML = '<div style="padding:var(--space-4);color:var(--color-error);font-size:var(--text-xs)">Fehler beim Laden.</div>'; return; }
+        if (!data.html || data.total === 0) {
+          erledigtCol.innerHTML = '';
+          erledigtEmpty.hidden  = false;
+        } else {
+          erledigtCol.innerHTML = data.html;
+          erledigtHint.hidden   = data.total < PAGE_SIZE;
+          // Status-Change-Buttons neu binden
+          erledigtCol.querySelectorAll('.status-change-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              if (typeof window.openStatusModal === 'function') window.openStatusModal(btn);
+            });
+          });
+        }
+      })
+      .catch(function () {
+        erledigtCol.innerHTML = '<div style="padding:var(--space-4);color:var(--color-error);font-size:var(--text-xs)">Netzwerkfehler.</div>';
+      });
+  }
+
+  // ── Lokaler Filter (Offen + Bearbeitung) ──────────────────────────
+  function applyLocalFilter() {
     let totalVisible = 0;
 
-    cols.forEach(function (col) {
+    localCols.forEach(function (col) {
       const colEl   = document.getElementById(col.cards);
       const cntEl   = document.getElementById(col.cnt);
       const emptyEl = document.getElementById(col.empty);
-      const moreEl  = document.getElementById(col.more);
       const wraps   = Array.from(colEl.querySelectorAll('.kanban-card-wrap'));
 
       const matching = wraps.filter(function (w) {
@@ -237,35 +218,15 @@
         return matchVf && matchKf;
       });
 
-      const colKey = col.cards.replace('col-', '');
-      const limit  = visibleCount[colKey] || PAGE_SIZE;
-
-      let shown = 0;
       wraps.forEach(function (w) {
         const matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         const matchKf = !activeKf || w.dataset.klasse   === activeKf;
-        const matches = matchVf && matchKf;
-        const rank    = matches ? matching.indexOf(w) : -1;
-        const show    = rank >= 0 && rank < limit;
-        w.style.display = show ? '' : 'none';
-        if (show) shown++;
+        w.style.display = (matchVf && matchKf) ? '' : 'none';
       });
 
       cntEl.textContent = matching.length;
-      totalVisible += shown;
+      totalVisible += matching.length;
       emptyEl.hidden = !(wraps.length > 0 && matching.length === 0);
-
-      const remaining = matching.length - limit;
-      if (remaining > 0) {
-        const btn   = moreEl.querySelector('.load-more-btn');
-        const label = btn.querySelector('.load-more-label');
-        label.textContent = remaining <= PAGE_SIZE
-          ? remaining + ' weitere anzeigen'
-          : PAGE_SIZE + ' weitere laden (noch ' + remaining + ')';
-        moreEl.hidden = false;
-      } else {
-        moreEl.hidden = true;
-      }
     });
 
     var parts = [];
@@ -274,17 +235,15 @@
     countEl.textContent = parts.length ? totalVisible + ' sichtbar \u00b7 ' + parts.join(' + ') : '';
   }
 
-  document.querySelectorAll('.load-more-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var col = this.dataset.col;
-      visibleCount[col] = (visibleCount[col] || PAGE_SIZE) + PAGE_SIZE;
-      applyFilter();
-    });
-  });
+  function applyFilter() {
+    applyLocalFilter();
+    // Erledigt leicht verz\u00f6gert laden damit Filter-Klicks nicht zu viele Requests ausl\u00f6sen
+    clearTimeout(erledigtTimer);
+    erledigtTimer = setTimeout(loadErledigt, 120);
+  }
 
   function setVf(val) {
     activeVf = val;
-    Object.keys(visibleCount).forEach(function (k) { visibleCount[k] = PAGE_SIZE; });
     vfBtns.forEach(function (b) {
       var match = b.dataset.vf === val;
       b.classList.toggle('vf-active', match);
@@ -296,7 +255,6 @@
 
   function setKf(val) {
     activeKf = val;
-    Object.keys(visibleCount).forEach(function (k) { visibleCount[k] = PAGE_SIZE; });
     kfBtns.forEach(function (b) {
       var match = b.dataset.kf === val;
       b.classList.toggle('kf-active', match);
@@ -306,6 +264,7 @@
     applyFilter();
   }
 
+  // Gespeicherten Filter wiederherstellen
   var savedVf = '', savedKf = '';
   try { savedVf = sessionStorage.getItem('vf_active') || ''; } catch {}
   try { savedKf = sessionStorage.getItem('kf_active') || ''; } catch {}
@@ -318,9 +277,12 @@
   activeKf = savedKf;
   vfBtns.forEach(function (b) { var m = b.dataset.vf === savedVf; b.classList.toggle('vf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
   kfBtns.forEach(function (b) { var m = b.dataset.kf === savedKf; b.classList.toggle('kf-active', m); b.setAttribute('aria-pressed', m ? 'true' : 'false'); });
-  applyFilter();
 
   vfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setVf(btn.dataset.vf); }); });
   kfBtns.forEach(function (btn) { btn.addEventListener('click', function () { setKf(btn.dataset.kf); }); });
+
+  // Initial laden
+  applyLocalFilter();
+  loadErledigt();
 })();
 </script>

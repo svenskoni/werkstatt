@@ -5,10 +5,13 @@ const db      = require('../src/database');
 const router = express.Router();
 
 /**
- * GET /:token
+ * GET /view/:token
  * Zeigt das Fernseher-Dashboard – kein Login erforderlich.
  * Nur aktiv wenn FERNSEHER_TOKEN gesetzt ist und mit dem URL-Segment übereinstimmt.
  * Auto-Refresh alle 60 Sekunden.
+ *
+ * Prefix /view/ stellt sicher, dass diese Route niemals mit
+ * Störungs-IDs, Login, API- oder Upload-Pfaden kollidiert.
  */
 router.get('/:token', async (req, res, next) => {
   const token = process.env.FERNSEHER_TOKEN;
@@ -43,7 +46,7 @@ router.get('/:token', async (req, res, next) => {
     const anzahlAktiv = bestaetigt.length;
 
     res.render('fernseher', {
-      layout:        false,   // eigenes vollbild-Layout, kein normaler Header
+      layout:        false,   // eigenes Vollbild-Layout, kein normaler Header
       fahrzeugDaten,
       VEHICLES,
       SCHWERE,

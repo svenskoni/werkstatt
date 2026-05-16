@@ -97,8 +97,8 @@ app.use((req, res, next) => {
 });
 
 // ── Routen ─────────────────────────────────────────────────────────────────────────────
-// Fernseher-Route VOR den Auth-Routen registrieren (kein Login nötig, eigenes layout:false)
-app.use('/', fernseherRoute);
+// Fernseher: /view/[token] – klar abgegrenzt, kein Konflikt mit Störungs-IDs oder Auth-Pfaden
+app.use('/view', fernseherRoute);
 
 app.use('/', authRoutes);      // inkl. /login, /logout, /api/urlaub/*
 app.use('/', uploadsRoute);

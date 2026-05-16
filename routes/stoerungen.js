@@ -112,8 +112,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── API: Erledigt-Spalte (lazy, max 10, mit Schnellfilter) ────────────────────────────────
-// GET /api/dashboard/erledigt?fahrzeug=FRE1&klasse=kfz
+// ── API: Erledigt-Spalte — eine einzige SQL-Abfrage, exakt 10 Zeilen ──────────────────────
 router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
   try {
     const LIMIT = 10;
@@ -121,16 +120,8 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
     const fahrzeug = req.query.fahrzeug && req.query.fahrzeug.trim() ? req.query.fahrzeug.trim() : null;
     const klasse   = req.query.klasse   && validKlasse.includes(req.query.klasse) ? req.query.klasse : null;
 
-    const opts = { limit: LIMIT, fahrzeug, klasse };
-    const [erledigt, zurueck] = await Promise.all([
-      db.getByStatusSlim('erledigt',        opts),
-      db.getByStatusSlim('zurueckgewiesen', opts),
-    ]);
-
-    // Zusammenführen, nach Datum sortieren, auf LIMIT begrenzen
-    const combined = [...erledigt, ...zurueck]
-      .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
-      .slice(0, LIMIT);
+    // Eine einzige DB-Abfrage: erledigt + zurueckgewiesen, sortiert, LIMIT 10
+    const combined = await db.getErledigtSlim({ fahrzeug, klasse, limit: LIMIT });
 
     const user = req.session.user;
     const html = combined.map(s => {
@@ -145,7 +136,6 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
         return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
           + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
       };
-      // Wiederöffnen: KEIN data-mit-schwere / data-mit-klasse — nur Notizfeld
       const reopenBtn = isAdmin ? `
         <button class="btn btn-xs btn-ghost status-change-btn"
           data-id="${s.id}"

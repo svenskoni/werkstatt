@@ -183,6 +183,24 @@ async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit =
 }
 
 /**
+ * Kombinierte schlanke Abfrage f\u00fcr Erledigt + Zur\u00fcckgewiesen in EINER SQL-Abfrage.
+ * Liefert exakt `limit` Zeilen direkt aus der DB, sortiert nach Datum.
+ * Optional: fahrzeug, klasse als Filter.
+ */
+async function getErledigtSlim({ fahrzeug = null, klasse = null, limit = 10 } = {}) {
+  let sql = `SELECT id, fahrzeug, klasse, schwere, fehlerBeschreibung, status, createdAt, updatedAt, melderName, eskalation_stufe
+             FROM stoerungen
+             WHERE status IN ('erledigt', 'zurueckgewiesen')`;
+  const args = [];
+  if (fahrzeug) { sql += ` AND fahrzeug = ?`; args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND klasse = ?`;   args.push(klasse); }
+  sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC LIMIT ?`;
+  args.push(limit);
+  const rows = await all(sql, args);
+  return rows.map(normalizeRow);
+}
+
+/**
  * Z\u00e4hlt Eintr\u00e4ge eines Status ohne Daten zu laden.
  * F\u00fcr Stats im Dashboard.
  */
@@ -383,7 +401,7 @@ async function deleteStorung(id) {
 module.exports = {
   initDb,
   createStorung, getStorungById, getAllStorungen,
-  getByStatus, getByStatusSlim, countByStatus,
+  getByStatus, getByStatusSlim, getErledigtSlim, countByStatus,
   updateStatus, addHistoryNote,
   setReminder, getDueReminders, clearReminder,
   setAdminUrlaub, getAbwesendeAdmins, getAdminUrlaub, cleanupAbgelaufeneUrlaube,

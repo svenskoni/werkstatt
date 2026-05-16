@@ -7,9 +7,10 @@ const rateLimit      = require('express-rate-limit');
 const path           = require('path');
 const fs             = require('fs');
 
-const authRoutes     = require('../routes/auth');
-const stoerungRoutes = require('../routes/stoerungen');
-const uploadsRoute   = require('../routes/uploads');
+const authRoutes       = require('../routes/auth');
+const stoerungRoutes   = require('../routes/stoerungen');
+const uploadsRoute     = require('../routes/uploads');
+const fernseherRoute   = require('../routes/fernseher');
 const db             = require('./database');
 const cleanup        = require('./cleanup');
 const reminder       = require('./reminder');
@@ -96,6 +97,9 @@ app.use((req, res, next) => {
 });
 
 // ── Routen ─────────────────────────────────────────────────────────────────────────────
+// Fernseher: /view/[token] – klar abgegrenzt, kein Konflikt mit Störungs-IDs oder Auth-Pfaden
+app.use('/view', fernseherRoute);
+
 app.use('/', authRoutes);      // inkl. /login, /logout, /api/urlaub/*
 app.use('/', uploadsRoute);
 app.use('/', stoerungRoutes);

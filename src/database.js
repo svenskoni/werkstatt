@@ -79,11 +79,29 @@ function normalizeRow(row) {
   return out;
 }
 
+/**
+ * Macht einen Fahrzeugnamen URL- und Dateinamen-sicher für die Ticket-ID.
+ * Umlaute werden transliteriert, Leerzeichen und Sonderzeichen durch Bindestrich ersetzt.
+ * Mehrfache Bindestriche werden zu einem zusammengeführt, führender/abschließender Bindestrich entfernt.
+ */
+function sanitizeFahrzeugForId(fahrzeug) {
+  return fahrzeug
+    .normalize('NFD')                    // Umlaute in Basiszeichen + Combining-Marks zerlegen
+    .replace(/\u00e4/g, 'ae').replace(/\u00f6/g, 'oe').replace(/\u00fc/g, 'ue')
+    .replace(/\u00c4/g, 'Ae').replace(/\u00d6/g, 'Oe').replace(/\u00dc/g, 'Ue')
+    .replace(/\u00df/g, 'ss')
+    .replace(/[\u0300-\u036f]/g, '')     // Rest-Combining-Marks entfernen
+    .replace(/[^A-Za-z0-9]/g, '-')      // Alles außer Alphanumerisch → Bindestrich
+    .replace(/-+/g, '-')                 // Mehrfache Bindestriche zusammenführen
+    .replace(/^-+|-+$/g, '');           // Führende/abschließende Bindestriche entfernen
+}
+
 async function generateTicketId(fahrzeug, isoDate) {
+  const safePrefix = sanitizeFahrzeugForId(fahrzeug);
   const d      = new Date(isoDate);
   const year   = d.getUTCFullYear();
   const month  = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const prefix = `${fahrzeug}-${year}-${month}-`;
+  const prefix = `${safePrefix}-${year}-${month}-`;
   const row = await get(
     `SELECT MAX(CAST(substr(id, ?) AS INTEGER)) AS maxNum FROM stoerungen WHERE id LIKE ?`,
     [prefix.length + 1, prefix + '%']
@@ -224,7 +242,7 @@ async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
-// ── Urlaub / Abwesenheit ────────────────────────────────────────────────────────
+// ── Urlaub / Abwesenheit ────────────────────────────────────────────
 
 /** Setzt oder entfernt den Abwesenheitszeitraum eines Admins. */
 async function setAdminUrlaub(username, abwesendBis) {
@@ -263,7 +281,7 @@ async function cleanupAbgelaufeneUrlaube() {
   await run(`DELETE FROM admin_urlaub WHERE abwesend_bis <= ?`, [now]);
 }
 
-// ── Eskalation ──────────────────────────────────────────────────────────────────
+// ── Eskalation ───────────────────────────────────────────────────────
 
 /** Liefert alle gesendet-Tickets deren Eskalationsstufe erhöht werden soll. */
 async function getEskalationsFaellige(stunden) {

@@ -41,7 +41,8 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!-- Urlaubs-Button -->
+          <!-- Urlaubs-Button: nur für Admins (Melder benötigen keine Abwesenheitsverwaltung) -->
+          <% if (user.role === 'admin') { %>
           <button class="btn btn-ghost btn-sm" id="urlaubBtn"
             aria-label="Abwesenheit verwalten" title="Abwesenheit / Urlaub">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -51,6 +52,7 @@
               <line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
           </button>
+          <% } %>
           <span class="user-label" id="userLabel"><%= user.username %></span>
           <form action="/logout" method="POST" style="margin:0">
             <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden" aria-label="Abmelden">
@@ -137,8 +139,8 @@
     </div>
   </div>
 
-  <!-- Urlaubs-Modal -->
-  <% if (user) { %>
+  <!-- Urlaubs-Modal: nur für Admins -->
+  <% if (user && user.role === 'admin') { %>
   <div class="modal-backdrop" id="urlaubModal" hidden role="dialog" aria-modal="true" aria-labelledby="urlaubModalTitle" tabindex="-1">
     <div class="modal" style="max-width:420px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
@@ -273,8 +275,8 @@
       r.setAttribute('data-theme', d);
     });
   })();
-  <% if (user) { %>
-  // ── Urlaubs-Modal ────────────────────────────────────────────────────────────
+  <% if (user && user.role === 'admin') { %>
+  // ── Urlaubs-Modal (nur Admins) ─────────────────────────────────────────
   (function () {
     var btn        = document.getElementById('urlaubBtn');
     var modal      = document.getElementById('urlaubModal');
@@ -317,7 +319,6 @@
           statusBox.style.color = 'var(--color-warning)';
           statusBox.style.display = 'block';
           aufhebenBtn.style.display = '';
-          // Datum vorausfüllen
           var dt = new Date(data.abwesend_bis);
           var local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
           datumInput.value = local;
@@ -403,11 +404,12 @@
       }
     });
 
-    // Badge beim Laden der Seite sofort setzen
     ladeStatus();
   })();
+  <% } %>
 
-  // ── Such-Modal ───────────────────────────────────────────────────────────────
+  <% if (user) { %>
+  // ── Such-Modal ────────────────────────────────────────────────────
   (function () {
     var btn        = document.getElementById('searchBtn');
     var modal      = document.getElementById('searchModal');

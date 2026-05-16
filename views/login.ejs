@@ -12,7 +12,7 @@
     </div>
 
     <% if (error) { %>
-      <div class="alert alert-error" role="alert"><%= error %></div>
+      <div class="alert alert-error" role="alert" id="loginError"><%= error %></div>
     <% } %>
 
     <!-- Tabs -->
@@ -36,7 +36,8 @@
           <div class="password-wrap">
             <input type="password" id="pw-crew" name="password" class="form-control"
                    autocomplete="current-password" required maxlength="200"
-                   <% if (tab !== 'admin') { %>autofocus<% } %>>
+                   <% if (tab !== 'admin') { %>autofocus<% } %>
+                   <% if (locked && tab !== 'admin') { %>disabled<% } %>>
             <button type="button" class="pw-toggle" onclick="togglePw('pw-crew')" aria-label="Passwort anzeigen">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -44,8 +45,13 @@
             </button>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)">
-          Anmelden
+        <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)"
+          id="submitCrew" <% if (locked && tab !== 'admin') { %>disabled<% } %>>
+          <% if (locked && tab !== 'admin') { %>
+            Gesperrt (<span id="countdownCrew"><%= retryAfter %></span>s)
+          <% } else { %>
+            Anmelden
+          <% } %>
         </button>
       </form>
     </div>
@@ -58,13 +64,15 @@
           <label class="form-label required" for="username">Benutzername</label>
           <input type="text" id="username" name="username" class="form-control"
                  autocomplete="username" required maxlength="80" spellcheck="false"
-                 <% if (tab === 'admin') { %>autofocus<% } %>>
+                 <% if (tab === 'admin') { %>autofocus<% } %>
+                 <% if (locked && tab === 'admin') { %>disabled<% } %>>
         </div>
         <div class="form-group">
           <label class="form-label required" for="pw-admin">Passwort</label>
           <div class="password-wrap">
             <input type="password" id="pw-admin" name="password" class="form-control"
-                   autocomplete="current-password" required maxlength="200">
+                   autocomplete="current-password" required maxlength="200"
+                   <% if (locked && tab === 'admin') { %>disabled<% } %>>
             <button type="button" class="pw-toggle" onclick="togglePw('pw-admin')" aria-label="Passwort anzeigen">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -72,8 +80,13 @@
             </button>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)">
-          Als Admin anmelden
+        <button type="submit" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-2)"
+          id="submitAdmin" <% if (locked && tab === 'admin') { %>disabled<% } %>>
+          <% if (locked && tab === 'admin') { %>
+            Gesperrt (<span id="countdownAdmin"><%= retryAfter %></span>s)
+          <% } else { %>
+            Als Admin anmelden
+          <% } %>
         </button>
       </form>
     </div>
@@ -118,20 +131,37 @@
 
 <script>
 function togglePw(id) {
-  const i = document.getElementById(id);
+  var i = document.getElementById(id);
   i.type = i.type === 'password' ? 'text' : 'password';
 }
-document.querySelectorAll('.login-tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.login-tab').forEach(b => {
+document.querySelectorAll('.login-tab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.login-tab').forEach(function(b) {
       b.classList.remove('active');
       b.setAttribute('aria-selected', 'false');
     });
     btn.classList.add('active');
     btn.setAttribute('aria-selected', 'true');
-    const target = btn.dataset.tab;
-    document.querySelectorAll('.login-panel').forEach(p => p.classList.add('hidden'));
+    var target = btn.dataset.tab;
+    document.querySelectorAll('.login-panel').forEach(function(p) { p.classList.add('hidden'); });
     document.getElementById('panel-' + target).classList.remove('hidden');
   });
 });
+
+// Countdown bei Sperre
+(function() {
+  var sec = parseInt('<%= retryAfter %>', 10) || 0;
+  if (!sec) return;
+  var cdCrew  = document.getElementById('countdownCrew');
+  var cdAdmin = document.getElementById('countdownAdmin');
+  var iv = setInterval(function() {
+    sec--;
+    if (cdCrew)  cdCrew.textContent  = sec;
+    if (cdAdmin) cdAdmin.textContent = sec;
+    if (sec <= 0) {
+      clearInterval(iv);
+      window.location.reload();
+    }
+  }, 1000);
+})();
 </script>

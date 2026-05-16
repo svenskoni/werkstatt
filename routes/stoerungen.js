@@ -136,14 +136,11 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
         return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' })
           + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/Berlin' });
       };
+      // Wiederöffnen: KEIN data-mit-schwere / data-mit-klasse — nur Notizfeld
       const reopenBtn = isAdmin ? `
         <button class="btn btn-xs btn-ghost status-change-btn"
           data-id="${s.id}"
           data-target="gesendet"
-          data-schwere="${s.schwere}"
-          data-klasse="${s.klasse || 'kfz'}"
-          data-mit-schwere="1"
-          data-mit-klasse="1"
           data-title="Wieder\u00f6ffnen"
           data-desc="Status wird auf \u00bbEingegangen\u00ab zur\u00fcckgesetzt."
           data-label="Wieder\u00f6ffnen">

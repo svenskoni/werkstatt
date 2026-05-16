@@ -150,7 +150,6 @@ async function getAllStorungen() {
 
 /**
  * Vollst\u00e4ndige St\u00f6rungen nach Status (inkl. history + attachments).
- * F\u00fcr Dashboard-Spalten Offen + Bearbeitung.
  */
 async function getByStatus(status) {
   const rows = await all(
@@ -165,44 +164,48 @@ async function getByStatus(status) {
   }));
 }
 
+// Subquery-Snippet für attachmentCount — einmalig definiert, in beiden Slim-Funktionen genutzt
+const ATTACH_COUNT_SQL = `(SELECT COUNT(*) FROM stoerung_attachments WHERE stoerungId = s.id) AS attachmentCount`;
+
 /**
- * Schlanke Abfrage ohne history/attachments.
- * F\u00fcr Fernseher-Dashboard und Erledigt-API.
- * Optional: fahrzeug, klasse als Filter; limit f\u00fcr Paginierung.
+ * Schlanke Abfrage ohne history/attachments, aber MIT attachmentCount.
+ * Für Dashboard-Spalten Offen + Bearbeitung (kein Limit) und Fernseher-Dashboard.
  */
 async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit = null } = {}) {
-  let sql  = `SELECT id, fahrzeug, klasse, schwere, fehlerBeschreibung, status, createdAt, updatedAt, melderName, eskalation_stufe
-              FROM stoerungen WHERE status = ?`;
+  let sql = `SELECT s.id, s.fahrzeug, s.klasse, s.schwere, s.fehlerBeschreibung, s.status,
+                    s.createdAt, s.updatedAt, s.melderName, s.eskalation_stufe,
+                    ${ATTACH_COUNT_SQL}
+             FROM stoerungen s WHERE s.status = ?`;
   const args = [status];
-  if (fahrzeug) { sql += ` AND fahrzeug = ?`; args.push(fahrzeug); }
-  if (klasse)   { sql += ` AND klasse = ?`;   args.push(klasse); }
-  sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
-  if (limit)    { sql += ` LIMIT ?`;           args.push(limit); }
+  if (fahrzeug) { sql += ` AND s.fahrzeug = ?`; args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND s.klasse = ?`;   args.push(klasse); }
+  sql += ` ORDER BY COALESCE(s.updatedAt, s.createdAt) DESC`;
+  if (limit)    { sql += ` LIMIT ?`;             args.push(limit); }
   const rows = await all(sql, args);
-  return rows.map(normalizeRow);
+  return rows.map(r => { const n = normalizeRow(r); n.attachmentCount = Number(n.attachmentCount || 0); return n; });
 }
 
 /**
- * Kombinierte schlanke Abfrage f\u00fcr Erledigt + Zur\u00fcckgewiesen in EINER SQL-Abfrage.
- * Liefert exakt `limit` Zeilen direkt aus der DB, sortiert nach Datum.
- * Optional: fahrzeug, klasse als Filter.
+ * Kombinierte schlanke Abfrage für Erledigt + Zurückgewiesen, MIT attachmentCount.
+ * Liefert exakt `limit` Zeilen direkt aus der DB.
  */
 async function getErledigtSlim({ fahrzeug = null, klasse = null, limit = 10 } = {}) {
-  let sql = `SELECT id, fahrzeug, klasse, schwere, fehlerBeschreibung, status, createdAt, updatedAt, melderName, eskalation_stufe
-             FROM stoerungen
-             WHERE status IN ('erledigt', 'zurueckgewiesen')`;
+  let sql = `SELECT s.id, s.fahrzeug, s.klasse, s.schwere, s.fehlerBeschreibung, s.status,
+                    s.createdAt, s.updatedAt, s.melderName, s.eskalation_stufe,
+                    ${ATTACH_COUNT_SQL}
+             FROM stoerungen s
+             WHERE s.status IN ('erledigt', 'zurueckgewiesen')`;
   const args = [];
-  if (fahrzeug) { sql += ` AND fahrzeug = ?`; args.push(fahrzeug); }
-  if (klasse)   { sql += ` AND klasse = ?`;   args.push(klasse); }
-  sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC LIMIT ?`;
+  if (fahrzeug) { sql += ` AND s.fahrzeug = ?`; args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND s.klasse = ?`;   args.push(klasse); }
+  sql += ` ORDER BY COALESCE(s.updatedAt, s.createdAt) DESC LIMIT ?`;
   args.push(limit);
   const rows = await all(sql, args);
-  return rows.map(normalizeRow);
+  return rows.map(r => { const n = normalizeRow(r); n.attachmentCount = Number(n.attachmentCount || 0); return n; });
 }
 
 /**
- * Z\u00e4hlt Eintr\u00e4ge eines Status ohne Daten zu laden.
- * F\u00fcr Stats im Dashboard.
+ * Zählt Einträge eines Status ohne Daten zu laden.
  */
 async function countByStatus(status) {
   const row = await get(`SELECT COUNT(*) AS cnt FROM stoerungen WHERE status = ?`, [status]);

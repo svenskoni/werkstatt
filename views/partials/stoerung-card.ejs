@@ -10,6 +10,8 @@ const SCHWERE = {
   totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
 const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
+// Badge-Anzahl: volle attachments-Liste (Detail) oder attachmentCount (Slim)
+const _attCount = s.attachments ? s.attachments.length : (s.attachmentCount || 0);
 %>
 <article class="stoerung-card card-<%= s.status %>" role="article">
   <div class="card-top">
@@ -32,8 +34,8 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
     <span class="card-meta"><%= s.melderName %></span>
     <span class="card-meta">&middot;</span>
     <span class="card-meta"><%= formatCardDate(s.createdAt) %></span>
-    <% if (s.attachments?.length > 0) { %>
-      <span class="attach-badge" title="<%= s.attachments.length %> Anhang/Anh&auml;nge">&#128204; <%= s.attachments.length %></span>
+    <% if (_attCount > 0) { %>
+      <span class="attach-badge" title="<%= _attCount %> Anhang/Anh&auml;nge">&#128204; <%= _attCount %></span>
     <% } %>
   </div>
 
@@ -41,7 +43,6 @@ const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
     <a href="/stoerung/<%= s.id %>" class="btn btn-ghost btn-xs">Details</a>
     <% if (user && user.role === 'admin') { %>
       <% if (s.status === 'gesendet') { %>
-        <!-- Bestätigen: einzige Stelle wo Klasse+Schwere korrigierbar -->
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-active);color:#fff;border:none"
           data-id="<%= s.id %>"

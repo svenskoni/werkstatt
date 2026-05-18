@@ -7,6 +7,27 @@
   <title>St&ouml;rungsmelder &ndash; LZ Frechen</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F692;</text></svg>">
   <link rel="stylesheet" href="/css/main.css">
+  <style>
+    /* Modal-Scroll-Fix */
+    body.modal-open { overflow: hidden; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: var(--space-6) var(--space-4);
+      overflow-y: auto;
+      z-index: 200;
+    }
+    .modal-backdrop .modal {
+      width: 100%;
+      max-height: calc(100dvh - 3rem);
+      overflow-y: auto;
+      margin: auto;
+    }
+  </style>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
@@ -41,7 +62,6 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!-- Urlaubs-Button: nur für Admins -->
           <% if (user.role === 'admin') { %>
           <button class="btn btn-ghost btn-sm" id="urlaubBtn"
             aria-label="Abwesenheit verwalten" title="Abwesenheit / Urlaub">
@@ -275,8 +295,13 @@
       r.setAttribute('data-theme', d);
     });
   })();
+
+  // Hilfsfunktionen: body-scroll sperren/freigeben
+  function modalOpen(backdropEl)  { backdropEl.hidden = false; document.body.classList.add('modal-open'); }
+  function modalClose(backdropEl) { backdropEl.hidden = true;  document.body.classList.remove('modal-open'); }
+
   <% if (user && user.role === 'admin') { %>
-  // ── Urlaubs-Modal (nur Admins) ─────────────────────────────────────────
+  // ── Urlaubs-Modal (nur Admins) ──────────────────────────────────────────────────
   (function () {
     var btn        = document.getElementById('urlaubBtn');
     var modal      = document.getElementById('urlaubModal');
@@ -333,11 +358,8 @@
       }
     }
 
-    function openModal() {
-      modal.hidden = false;
-      ladeStatus();
-    }
-    function closeModal() { modal.hidden = true; }
+    function openModal()  { modalOpen(modal);  ladeStatus(); }
+    function closeModal() { modalClose(modal); }
 
     btn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
@@ -409,7 +431,7 @@
   <% } %>
 
   <% if (user) { %>
-  // ── Such-Modal ────────────────────────────────────────────────────
+  // ── Such-Modal ──────────────────────────────────────────────────────────────
   (function () {
     var btn        = document.getElementById('searchBtn');
     var modal      = document.getElementById('searchModal');
@@ -423,8 +445,8 @@
 
     var VEHICLES = Array.from(fahrzeugEl.options).map(function(o) { return o.value; }).filter(function(v) { return v !== ''; });
 
-    function openModal()  { modal.hidden = false; ticketEl.focus(); }
-    function closeModal() { modal.hidden = true; results.innerHTML = ''; }
+    function openModal()  { modalOpen(modal);  ticketEl.focus(); }
+    function closeModal() { modalClose(modal); results.innerHTML = ''; }
 
     btn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);

@@ -54,9 +54,16 @@ async function initDb() {
       username    TEXT PRIMARY KEY,
       abwesend_bis TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS stoerung_reminders (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      stoerungId TEXT NOT NULL,
+      username   TEXT NOT NULL,
+      reminderAt TEXT NOT NULL,
+      UNIQUE(stoerungId, username),
+      FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
+    );
   `);
 
-  // Migration: Spalten nachrüsten falls DB schon existiert
   const cols = await all(`PRAGMA table_info(stoerungen)`);
   const colNames = cols.map(c => c.name);
   if (!colNames.includes('eskalation_stufe')) {
@@ -79,11 +86,24 @@ function normalizeRow(row) {
   return out;
 }
 
+function sanitizeFahrzeugForId(fahrzeug) {
+  return fahrzeug
+    .normalize('NFD')
+    .replace(/\u00e4/g, 'ae').replace(/\u00f6/g, 'oe').replace(/\u00fc/g, 'ue')
+    .replace(/\u00c4/g, 'Ae').replace(/\u00d6/g, 'Oe').replace(/\u00dc/g, 'Ue')
+    .replace(/\u00df/g, 'ss')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 async function generateTicketId(fahrzeug, isoDate) {
+  const safePrefix = sanitizeFahrzeugForId(fahrzeug);
   const d      = new Date(isoDate);
   const year   = d.getUTCFullYear();
   const month  = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const prefix = `${fahrzeug}-${year}-${month}-`;
+  const prefix = `${safePrefix}-${year}-${month}-`;
   const row = await get(
     `SELECT MAX(CAST(substr(id, ?) AS INTEGER)) AS maxNum FROM stoerungen WHERE id LIKE ?`,
     [prefix.length + 1, prefix + '%']
@@ -123,19 +143,13 @@ async function getStorungById(id) {
   const row = normalizeRow(s);
   row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [id]);
   row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [id]);
+  row.reminders   = await all(`SELECT * FROM stoerung_reminders WHERE stoerungId = ? ORDER BY reminderAt ASC`, [id]);
   return row;
 }
 
-async function getAllStorungen() {
-  const rows = await all(`SELECT * FROM stoerungen ORDER BY COALESCE(updatedAt, createdAt) DESC`);
-  return Promise.all(rows.map(async s => {
-    const row = normalizeRow(s);
-    row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
-    row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
-    return row;
-  }));
-}
-
+/**
+ * Vollständige Störungen nach Status (inkl. history + attachments).
+ */
 async function getByStatus(status) {
   const rows = await all(
     `SELECT * FROM stoerungen WHERE status = ? ORDER BY COALESCE(updatedAt, createdAt) DESC`,
@@ -145,8 +159,55 @@ async function getByStatus(status) {
     const row = normalizeRow(s);
     row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
     row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
+    row.reminders   = await all(`SELECT * FROM stoerung_reminders WHERE stoerungId = ? ORDER BY reminderAt ASC`, [s.id]);
     return row;
   }));
+}
+
+// Subquery-Snippet für attachmentCount
+const ATTACH_COUNT_SQL = `(SELECT COUNT(*) FROM stoerung_attachments WHERE stoerungId = s.id) AS attachmentCount`;
+
+/**
+ * Schlanke Abfrage ohne history/attachments, aber MIT attachmentCount.
+ */
+async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit = null } = {}) {
+  let sql = `SELECT s.id, s.fahrzeug, s.klasse, s.schwere, s.fehlerBeschreibung, s.status,
+                    s.createdAt, s.updatedAt, s.melderName, s.eskalation_stufe,
+                    ${ATTACH_COUNT_SQL}
+             FROM stoerungen s WHERE s.status = ?`;
+  const args = [status];
+  if (fahrzeug) { sql += ` AND s.fahrzeug = ?`; args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND s.klasse = ?`;   args.push(klasse); }
+  sql += ` ORDER BY COALESCE(s.updatedAt, s.createdAt) DESC`;
+  if (limit)    { sql += ` LIMIT ?`;             args.push(limit); }
+  const rows = await all(sql, args);
+  return rows.map(r => { const n = normalizeRow(r); n.attachmentCount = Number(n.attachmentCount || 0); return n; });
+}
+
+/**
+ * Kombinierte schlanke Abfrage für Erledigt + Zurückgewiesen, MIT attachmentCount.
+ */
+async function getErledigtSlim({ fahrzeug = null, klasse = null, limit = 10 } = {}) {
+  let sql = `SELECT s.id, s.fahrzeug, s.klasse, s.schwere, s.fehlerBeschreibung, s.status,
+                    s.createdAt, s.updatedAt, s.melderName, s.eskalation_stufe,
+                    ${ATTACH_COUNT_SQL}
+             FROM stoerungen s
+             WHERE s.status IN ('erledigt', 'zurueckgewiesen')`;
+  const args = [];
+  if (fahrzeug) { sql += ` AND s.fahrzeug = ?`; args.push(fahrzeug); }
+  if (klasse)   { sql += ` AND s.klasse = ?`;   args.push(klasse); }
+  sql += ` ORDER BY COALESCE(s.updatedAt, s.createdAt) DESC LIMIT ?`;
+  args.push(limit);
+  const rows = await all(sql, args);
+  return rows.map(r => { const n = normalizeRow(r); n.attachmentCount = Number(n.attachmentCount || 0); return n; });
+}
+
+/**
+ * Zählt Einträge eines Status ohne Daten zu laden.
+ */
+async function countByStatus(status) {
+  const row = await get(`SELECT COUNT(*) AS cnt FROM stoerungen WHERE status = ?`, [status]);
+  return row ? Number(row.cnt) : 0;
 }
 
 async function updateStatus(id, newStatus, changedBy, note, neuSchwere, neuKlasse) {
@@ -201,6 +262,65 @@ async function addHistoryNote(stoerungId, changedBy, note) {
   );
 }
 
+// ── Erinnerungen (pro Admin, n:m) ────────────────────────────────────────────
+
+/**
+ * Setzt oder überschreibt die Erinnerung eines bestimmten Admins für eine Störung.
+ */
+async function setUserReminder(stoerungId, username, reminderAt) {
+  await run(
+    `INSERT INTO stoerung_reminders (stoerungId, username, reminderAt)
+     VALUES (?, ?, ?)
+     ON CONFLICT(stoerungId, username) DO UPDATE SET reminderAt = excluded.reminderAt`,
+    [stoerungId, username, reminderAt]
+  );
+}
+
+/**
+ * Löscht die Erinnerung eines bestimmten Admins für eine Störung.
+ */
+async function deleteUserReminder(stoerungId, username) {
+  await run(
+    `DELETE FROM stoerung_reminders WHERE stoerungId = ? AND username = ?`,
+    [stoerungId, username]
+  );
+}
+
+/**
+ * Gibt die Erinnerung eines bestimmten Admins für eine Störung zurück (oder null).
+ */
+async function getUserReminder(stoerungId, username) {
+  return get(
+    `SELECT * FROM stoerung_reminders WHERE stoerungId = ? AND username = ?`,
+    [stoerungId, username]
+  );
+}
+
+/**
+ * Gibt alle fälligen Erinnerungen zurück (reminderAt <= jetzt,
+ * Störung noch nicht erledigt/zurückgewiesen).
+ */
+async function getDueReminders() {
+  const now = new Date().toISOString();
+  return all(
+    `SELECT r.id, r.stoerungId, r.username, r.reminderAt
+     FROM stoerung_reminders r
+     JOIN stoerungen s ON s.id = r.stoerungId
+     WHERE r.reminderAt <= ?
+       AND s.status NOT IN ('erledigt', 'zurueckgewiesen')`,
+    [now]
+  );
+}
+
+/**
+ * Löscht die Erinnerung eines Admins nach dem Versand.
+ */
+async function clearUserReminder(stoerungId, username) {
+  await deleteUserReminder(stoerungId, username);
+}
+
+// Legacy-Wrapper (werden nicht mehr aktiv genutzt, aber nicht entfernt
+// damit alter Code nicht bricht falls noch irgendwo referenziert)
 async function setReminder(id, reminderAt, reminderTo) {
   await run(
     `UPDATE stoerungen SET reminderAt = ?, reminderTo = ? WHERE id = ?`,
@@ -208,25 +328,10 @@ async function setReminder(id, reminderAt, reminderTo) {
   );
   return getStorungById(id);
 }
-
-async function getDueReminders() {
-  const now = new Date().toISOString();
-  return all(
-    `SELECT * FROM stoerungen
-     WHERE reminderAt IS NOT NULL
-       AND reminderAt <= ?
-       AND status NOT IN ('erledigt','zurueckgewiesen')`,
-    [now]
-  );
-}
-
 async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
 
-// ── Urlaub / Abwesenheit ────────────────────────────────────────────────────────
-
-/** Setzt oder entfernt den Abwesenheitszeitraum eines Admins. */
 async function setAdminUrlaub(username, abwesendBis) {
   if (!abwesendBis) {
     await run(`DELETE FROM admin_urlaub WHERE username = ?`, [username]);
@@ -239,7 +344,6 @@ async function setAdminUrlaub(username, abwesendBis) {
   }
 }
 
-/** Gibt alle aktuell abwesenden Admins zurück (abwesend_bis in der Zukunft). */
 async function getAbwesendeAdmins() {
   const now = new Date().toISOString();
   return all(
@@ -248,7 +352,6 @@ async function getAbwesendeAdmins() {
   );
 }
 
-/** Gibt den Abwesenheitseintrag eines einzelnen Admins zurück (oder null). */
 async function getAdminUrlaub(username) {
   const now = new Date().toISOString();
   return get(
@@ -257,15 +360,11 @@ async function getAdminUrlaub(username) {
   );
 }
 
-/** Bereinigt abgelaufene Einträge (läuft täglich im cleanup). */
 async function cleanupAbgelaufeneUrlaube() {
   const now = new Date().toISOString();
   await run(`DELETE FROM admin_urlaub WHERE abwesend_bis <= ?`, [now]);
 }
 
-// ── Eskalation ──────────────────────────────────────────────────────────────────
-
-/** Liefert alle gesendet-Tickets deren Eskalationsstufe erhöht werden soll. */
 async function getEskalationsFaellige(stunden) {
   const cutoff = new Date(Date.now() - stunden * 60 * 60 * 1000).toISOString();
   return all(
@@ -280,7 +379,6 @@ async function getEskalationsFaellige(stunden) {
   );
 }
 
-/** Setzt die Eskalationsstufe und Zeitstempel. */
 async function setEskalationsStufe(id, stufe) {
   const now = new Date().toISOString();
   await run(
@@ -289,7 +387,10 @@ async function setEskalationsStufe(id, stufe) {
   );
 }
 
-async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext) {
+/**
+ * Suche nach Fahrzeug + optionale Filter: Monat, Status, Ticket-ID, Freitext, Klasse.
+ */
+async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext, klasse) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
@@ -312,6 +413,10 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freite
   if (freitext && freitext.trim()) {
     sql += ` AND lower(fehlerBeschreibung) LIKE ?`;
     args.push('%' + freitext.trim().toLowerCase() + '%');
+  }
+  if (klasse && ['kfz', 'geraet'].includes(klasse)) {
+    sql += ` AND klasse = ?`;
+    args.push(klasse);
   }
 
   sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
@@ -337,7 +442,6 @@ async function markAttachmentCompressed(id) { return run(`UPDATE stoerung_attach
 async function getOldestAttachmentsForPurge() {
   return all(`SELECT a.*, s.status AS storungStatus FROM stoerung_attachments a JOIN stoerungen s ON s.id = a.stoerungId ORDER BY CASE s.status WHEN 'erledigt' THEN 0 WHEN 'zurueckgewiesen' THEN 0 ELSE 1 END ASC, a.createdAt ASC`);
 }
-async function getOldestAttachments() { return all(`SELECT * FROM stoerung_attachments ORDER BY createdAt ASC`); }
 async function deleteAttachment(id) { return run(`DELETE FROM stoerung_attachments WHERE id = ?`, [id]); }
 async function deleteStorung(id) {
   const UPLOAD_DIR = path.join(__dirname, '..', 'public', 'uploads');
@@ -351,13 +455,18 @@ async function deleteStorung(id) {
 
 module.exports = {
   initDb,
-  createStorung, getStorungById, getAllStorungen, getByStatus, updateStatus,
-  addHistoryNote,
-  setReminder, getDueReminders, clearReminder,
+  createStorung, getStorungById,
+  getByStatus, getByStatusSlim, getErledigtSlim, countByStatus,
+  updateStatus, addHistoryNote,
+  // Neue pro-Admin Reminder-Funktionen
+  setUserReminder, deleteUserReminder, getUserReminder,
+  getDueReminders, clearUserReminder,
+  // Legacy (nicht mehr aktiv genutzt)
+  setReminder, clearReminder,
   setAdminUrlaub, getAbwesendeAdmins, getAdminUrlaub, cleanupAbgelaufeneUrlaube,
   getEskalationsFaellige, setEskalationsStufe,
   searchByFahrzeugMonat, searchSimilarFehler,
   getAttachmentsForCompression, markAttachmentCompressed,
-  getOldestAttachments, getOldestAttachmentsForPurge, deleteAttachment,
+  getOldestAttachmentsForPurge, deleteAttachment,
   deleteStorung,
 };

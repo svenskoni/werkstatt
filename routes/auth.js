@@ -71,9 +71,11 @@ function clientIp(req) {
 // ── Routen ──────────────────────────────────────────────────────────────────────
 
 // GET /login
+// ?tab=admin  → Admin-Tab direkt vorselektieren (z.B. nach Mail-Link-Redirect)
 router.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
-  res.render('login', { tab: 'crew', error: null, locked: false, retryAfter: 0 });
+  const tab = req.query.tab === 'admin' ? 'admin' : 'crew';
+  res.render('login', { tab, error: null, locked: false, retryAfter: 0 });
 });
 
 // POST /login  – type=crew oder type=admin (Hidden-Feld im Formular)

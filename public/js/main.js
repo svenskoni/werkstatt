@@ -1,6 +1,6 @@
 'use strict';
 
-// ─── Theme Toggle ───────────────────────────────────────────────────────────
+// ─── Theme Toggle ───────────────────────────────────────────────────────
 (function () {
   const root   = document.documentElement;
   const toggle = document.querySelector('[data-theme-toggle]');
@@ -36,7 +36,10 @@
   const reminderWrap    = document.getElementById('reminderWrap');
   const reminderEnabled = document.getElementById('reminderEnabled');
   const reminderFields  = document.getElementById('reminderFields');
-  const reminderAtInput = document.getElementById('modalReminderAt');
+  // fix #50: datetime-local durch Datum + Stunden-Dropdown ersetzt
+  const reminderDateInput = document.getElementById('modalReminderDate');
+  const reminderHourInput = document.getElementById('modalReminderHour');
+  const reminderFeedback  = document.getElementById('modalReminderFeedback');
   if (!modal) return;
 
   const STATUS_LABELS = {
@@ -49,19 +52,47 @@
   let aktKlasseRef   = 'kfz';
   let selectedKlasse = 'kfz';
 
-  function defaultReminderTime() {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T08:00`;
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // Setzt Datum und Stunde auf sinnvollen Default (morgen 08:00 oder nächste volle Stunde)
+  function initReminderDefaults() {
+    const now = new Date();
+    let defaultDate = new Date(now);
+    let defaultHour = now.getHours() + 1;
+    if (defaultHour >= 24) {
+      defaultDate.setDate(defaultDate.getDate() + 1);
+      defaultHour = 8;
+    } else if (defaultHour < 8) {
+      defaultHour = 8;
+    }
+    const dateStr = `${defaultDate.getFullYear()}-${pad(defaultDate.getMonth()+1)}-${pad(defaultDate.getDate())}`;
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+    reminderDateInput.value = dateStr;
+    reminderDateInput.min   = todayStr;
+    reminderHourInput.value = String(defaultHour);
+    if (reminderFeedback) reminderFeedback.textContent = '';
+    reminderDateInput.style.borderColor = '';
   }
 
-  function isFuture(val) {
-    if (!val) return false;
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    const nowStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    return val > nowStr;
+  // Baut ISO-String aus Datum + Stunde (volle Stunde, Minuten immer :00)
+  function buildReminderISO() {
+    const dateVal = reminderDateInput.value;
+    const hourVal = parseInt(reminderHourInput.value, 10);
+    if (!dateVal) return null;
+    const parts = dateVal.split('-');
+    return new Date(
+      parseInt(parts[0], 10),
+      parseInt(parts[1], 10) - 1,
+      parseInt(parts[2], 10),
+      hourVal, 0, 0, 0
+    );
+  }
+
+  // Prüft ob gewählte Zeit >= 1 Stunde in der Zukunft liegt
+  function isValidFutureHour() {
+    const dt = buildReminderISO();
+    if (!dt) return false;
+    return dt.getTime() > Date.now() + 59 * 60 * 1000;
   }
 
   function setKlasseActive(val) {
@@ -83,9 +114,7 @@
   if (reminderEnabled) {
     reminderEnabled.addEventListener('change', () => {
       reminderFields.style.display = reminderEnabled.checked ? 'block' : 'none';
-      if (reminderEnabled.checked && !reminderAtInput.value) {
-        reminderAtInput.value = defaultReminderTime();
-      }
+      if (reminderEnabled.checked) initReminderDefaults();
     });
   }
 
@@ -111,20 +140,18 @@
     modalConfirm.style.cssText = color ? `background:${color};color:#fff;border:none` : '';
     modalConfirm.disabled      = false;
 
-    // Klasse — explizit block/none statt leer/'none'
     if (mitKlasse) { show(klasseWrap); setKlasseActive(selectedKlasse); }
     else           { hide(klasseWrap); }
 
-    // Schweregrad
     if (mitSchwere) { show(schwereWrap); schwereSelect.value = aktSchwereRef; }
     else            { hide(schwereWrap); }
 
-    // Erinnerung
     if (withReminder) { show(reminderWrap); } else { hide(reminderWrap); }
     reminderEnabled.checked      = false;
     reminderFields.style.display = 'none';
-    reminderAtInput.value        = '';
-    reminderAtInput.style.borderColor = '';
+    reminderDateInput.value      = '';
+    reminderDateInput.style.borderColor = '';
+    if (reminderFeedback) reminderFeedback.textContent = '';
 
     statusNote.value = '';
     modal.hidden = false;
@@ -146,12 +173,21 @@
     if (!pendingAction) return;
 
     const wantsReminder = reminderEnabled.checked;
-    if (wantsReminder && !isFuture(reminderAtInput.value)) {
-      reminderAtInput.style.borderColor = 'var(--color-error)';
-      reminderAtInput.focus();
-      return;
+    if (wantsReminder) {
+      if (!reminderDateInput.value) {
+        if (reminderFeedback) reminderFeedback.textContent = 'Bitte ein Datum w\u00e4hlen.';
+        reminderDateInput.style.borderColor = 'var(--color-error)';
+        reminderDateInput.focus();
+        return;
+      }
+      if (!isValidFutureHour()) {
+        if (reminderFeedback) reminderFeedback.textContent = 'Der Zeitpunkt muss mindestens 1 Stunde in der Zukunft liegen.';
+        reminderDateInput.style.borderColor = 'var(--color-error)';
+        return;
+      }
+      reminderDateInput.style.borderColor = '';
+      if (reminderFeedback) reminderFeedback.textContent = '';
     }
-    if (wantsReminder) reminderAtInput.style.borderColor = '';
 
     const notiz      = statusNote.value.trim() || null;
     const mitSchwere = schwereWrap.style.display === 'block';
@@ -178,15 +214,16 @@
       if (!data.ok) {
         alert('Fehler: ' + (data.error || 'Unbekannt'));
         modalConfirm.disabled    = false;
-        modalConfirm.textContent = label;
+        modalConfirm.textContent = pendingAction.label || 'Best\u00e4tigen';
         return;
       }
 
       if (wantsReminder) {
+        const reminderISO = buildReminderISO().toISOString();
         await fetch(`/stoerung/${pendingAction.id}/reminder`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reminderAt: reminderAtInput.value, reminderTo: '' }),
+          body: JSON.stringify({ reminderAt: reminderISO, reminderTo: '' }),
         }).catch(err => console.warn('[Reminder] Setzen fehlgeschlagen:', err));
       }
 

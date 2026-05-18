@@ -13,16 +13,14 @@ const SCHWERE = {
   normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
   totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
-const isAdmin       = user && user.role === 'admin';
-const myUsername    = user && user.username ? user.username : '';
-// Eigene Erinnerung aus reminders[] herausfiltern
-const myReminder    = (storung.reminders || []).find(r => r.username === myUsername) || null;
-const hasReminder   = !!myReminder;
-const reminderDate  = hasReminder
+const isAdmin      = user && user.role === 'admin';
+const myUsername   = user && user.username ? user.username : '';
+// Nur die eigene Erinnerung – andere Admins sind nicht sichtbar
+const myReminder   = (storung.reminders || []).find(r => r.username === myUsername) || null;
+const hasReminder  = !!myReminder;
+const reminderDate = hasReminder
   ? new Date(myReminder.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'})
   : null;
-// Erinnerungen anderer Admins (nur zur Info)
-const otherReminders = (storung.reminders || []).filter(r => r.username !== myUsername);
 %>
 <div class="form-container">
   <div class="form-header">
@@ -59,23 +57,13 @@ const otherReminders = (storung.reminders || []).filter(r => r.username !== myUs
         <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
         <% if (hasReminder) { %>
-        <tr><th>&#9201; Meine Erinnerung</th><td>
+        <tr><th>&#9201; Erinnerung</th><td>
           <span style="font-size:var(--text-sm);color:var(--color-warning)">
             <strong><%= reminderDate %></strong>
           </span>
           <button class="btn btn-xs btn-ghost" id="clearReminderBtn"
             style="margin-left:var(--space-2);color:var(--color-text-muted)"
-            title="Meine Erinnerung löschen"
-            data-confirm-label="Wirklich löschen?">&#10005;</button>
-        </td></tr>
-        <% } %>
-        <% if (otherReminders.length > 0) { %>
-        <tr><th>&#9201; Erinnerungen</th><td>
-          <% otherReminders.forEach(function(r) { %>
-            <span style="font-size:var(--text-xs);color:var(--color-text-muted);display:block">
-              <%= r.username %>: <%= new Date(r.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'}) %>
-            </span>
-          <% }); %>
+            title="Erinnerung löschen">&#10005;</button>
         </td></tr>
         <% } %>
       </table>
@@ -276,7 +264,7 @@ const otherReminders = (storung.reminders || []).filter(r => r.username !== myUs
   <div class="modal" style="max-width:420px">
     <h3 id="reminderModalTitle" style="margin-bottom:var(--space-2)">&#9201; Erinnerung setzen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Erinnerungen werden immer zur vollen Stunde zugestellt. Nur du siehst und kannst deine eigene Erinnerung löschen.
+      Du bekommst eine E-Mail zur eingestellten Zeit. Nur du siehst deine eigene Erinnerung.
     </p>
     <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap">
       <div class="form-group" style="margin-bottom:0">
@@ -452,7 +440,6 @@ const otherReminders = (storung.reminders || []).filter(r => r.username !== myUs
       reminderSaveBtn.disabled = true;
       reminderSaveBtn.textContent = 'Speichere…';
 
-      // reminderTo wird nicht mehr mitgeschickt — Server nutzt Session-User
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reminderAt: parsed.toISOString() }),
@@ -482,7 +469,6 @@ const otherReminders = (storung.reminders || []).filter(r => r.username !== myUs
       if (clearReminderBtn.dataset.confirming === '1') {
         clearReminderBtn.disabled = true;
         clearReminderBtn.textContent = '…';
-        // leeres reminderAt = Lösch-Signal; kein reminderTo nötig
         fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reminderAt: '' }),

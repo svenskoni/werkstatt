@@ -140,8 +140,8 @@
   const vfBtns = document.querySelectorAll('.vf-btn');
   const kfBtns = document.querySelectorAll('.kf-btn');
   const localCols = [
-    { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet'   },
-    { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt' },
+    { cards: 'col-gesendet',   cnt: 'cnt-gesendet',   empty: 'empty-gesendet',   mehr: 'mehr-gesendet'   },
+    { cards: 'col-bestaetigt', cnt: 'cnt-bestaetigt', empty: 'empty-bestaetigt', mehr: 'mehr-bestaetigt' },
   ];
   const countEl = document.querySelector('.vf-count');
   let activeVf = '';
@@ -157,6 +157,8 @@
         w.style.display = '';
       });
       mehrEl.style.display = 'none';
+      // Filter neu anwenden, damit frisch eingeblendete Karten korrekt gefiltert werden
+      applyLocalFilter();
     });
   });
 
@@ -178,7 +180,7 @@
     var params = new URLSearchParams();
     if (activeVf) params.set('fahrzeug', activeVf);
     if (activeKf) params.set('klasse',   activeKf);
-    erledigtCol.innerHTML = '<div style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen…</div>';
+    erledigtCol.innerHTML = '<div style="padding:var(--space-6) var(--space-4);text-align:center;font-size:var(--text-xs);color:var(--color-text-faint)">Wird geladen\u2026</div>';
     erledigtEmpty.hidden = true;
     erledigtHint.hidden  = true;
     fetch('/api/dashboard/erledigt?' + params.toString())
@@ -205,27 +207,49 @@
       var colEl   = document.getElementById(col.cards);
       var cntEl   = document.getElementById(col.cnt);
       var emptyEl = document.getElementById(col.empty);
+      var mehrEl  = col.mehr ? document.getElementById(col.mehr) : null;
       var wraps   = Array.from(colEl.querySelectorAll('.kanban-card-wrap'));
+
       var matching = wraps.filter(function (w) {
         var matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         var matchKf = !activeKf || w.dataset.klasse   === activeKf;
         return matchVf && matchKf;
       });
+
       wraps.forEach(function (w) {
         var matchVf = !activeVf || w.dataset.fahrzeug === activeVf;
         var matchKf = !activeKf || w.dataset.klasse   === activeKf;
-        var filterOk    = matchVf && matchKf;
+        var filterOk     = matchVf && matchKf;
         var isMehrHidden = w.classList.contains('card-mehr-hidden');
-        w.style.display = (filterOk && !isMehrHidden) ? '' : 'none';
+        w.style.display  = (filterOk && !isMehrHidden) ? '' : 'none';
       });
+
       cntEl.textContent = matching.length;
       totalVisible += matching.length;
       emptyEl.hidden = !(wraps.length > 0 && matching.length === 0);
+
+      // ── Fix #49: Mehr-Button an gefilterte Anzahl anpassen ──────────────
+      if (mehrEl) {
+        // Wie viele passende Karten sind noch versteckt (card-mehr-hidden)?
+        var hiddenMatching = matching.filter(function (w) {
+          return w.classList.contains('card-mehr-hidden');
+        });
+        if (hiddenMatching.length > 0) {
+          // Button sichtbar lassen und Zahl aktualisieren
+          mehrEl.style.display = '';
+          var btn = mehrEl.querySelector('.mehr-btn');
+          if (btn) btn.textContent = '\u25BC ' + hiddenMatching.length + ' weitere anzeigen';
+        } else {
+          // Keine passenden versteckten Karten mehr → Button ausblenden
+          mehrEl.style.display = 'none';
+        }
+      }
     });
+
     var parts = [];
     if (activeVf) parts.push('\u00bb' + activeVf + '\u00ab');
-    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Gerät');
-    countEl.textContent = parts.length ? totalVisible + ' sichtbar · ' + parts.join(' + ') : '';
+    if (activeKf) parts.push(activeKf === 'kfz' ? 'KFZ' : 'Ger\u00e4t');
+    countEl.textContent = parts.length ? totalVisible + ' sichtbar \u00b7 ' + parts.join(' + ') : '';
   }
 
   function applyFilter() {

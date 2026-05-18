@@ -138,18 +138,8 @@ async function getStorungById(id) {
   return row;
 }
 
-async function getAllStorungen() {
-  const rows = await all(`SELECT * FROM stoerungen ORDER BY COALESCE(updatedAt, createdAt) DESC`);
-  return Promise.all(rows.map(async s => {
-    const row = normalizeRow(s);
-    row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
-    row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
-    return row;
-  }));
-}
-
 /**
- * Vollst\u00e4ndige St\u00f6rungen nach Status (inkl. history + attachments).
+ * Vollständige Störungen nach Status (inkl. history + attachments).
  */
 async function getByStatus(status) {
   const rows = await all(
@@ -164,12 +154,11 @@ async function getByStatus(status) {
   }));
 }
 
-// Subquery-Snippet für attachmentCount — einmalig definiert, in beiden Slim-Funktionen genutzt
+// Subquery-Snippet für attachmentCount
 const ATTACH_COUNT_SQL = `(SELECT COUNT(*) FROM stoerung_attachments WHERE stoerungId = s.id) AS attachmentCount`;
 
 /**
  * Schlanke Abfrage ohne history/attachments, aber MIT attachmentCount.
- * Für Dashboard-Spalten Offen + Bearbeitung (kein Limit) und Fernseher-Dashboard.
  */
 async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit = null } = {}) {
   let sql = `SELECT s.id, s.fahrzeug, s.klasse, s.schwere, s.fehlerBeschreibung, s.status,
@@ -187,7 +176,6 @@ async function getByStatusSlim(status, { fahrzeug = null, klasse = null, limit =
 
 /**
  * Kombinierte schlanke Abfrage für Erledigt + Zurückgewiesen, MIT attachmentCount.
- * Liefert exakt `limit` Zeilen direkt aus der DB.
  */
 async function getErledigtSlim({ fahrzeug = null, klasse = null, limit = 10 } = {}) {
   let sql = `SELECT s.id, s.fahrzeug, s.klasse, s.schwere, s.fehlerBeschreibung, s.status,
@@ -342,7 +330,11 @@ async function setEskalationsStufe(id, stufe) {
   );
 }
 
-async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext) {
+/**
+ * Suche nach Fahrzeug + optionale Filter: Monat, Status, Ticket-ID, Freitext, Klasse.
+ * Klassen-Filter direkt in SQL statt nachträglich im JS.
+ */
+async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext, klasse) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
   const filtered = Array.isArray(statuses) && statuses.length > 0
     ? statuses.filter(s => validStatuses.includes(s))
@@ -365,6 +357,10 @@ async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freite
   if (freitext && freitext.trim()) {
     sql += ` AND lower(fehlerBeschreibung) LIKE ?`;
     args.push('%' + freitext.trim().toLowerCase() + '%');
+  }
+  if (klasse && ['kfz', 'geraet'].includes(klasse)) {
+    sql += ` AND klasse = ?`;
+    args.push(klasse);
   }
 
   sql += ` ORDER BY COALESCE(updatedAt, createdAt) DESC`;
@@ -403,7 +399,7 @@ async function deleteStorung(id) {
 
 module.exports = {
   initDb,
-  createStorung, getStorungById, getAllStorungen,
+  createStorung, getStorungById,
   getByStatus, getByStatusSlim, getErledigtSlim, countByStatus,
   updateStatus, addHistoryNote,
   setReminder, getDueReminders, clearReminder,

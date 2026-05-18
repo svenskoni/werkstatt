@@ -74,8 +74,6 @@ function renderNeu(res, errors, old, user) {
 // ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
-    // Slim: nur die für die Karte benötigten Spalten, kein history/attachments
-    // Offen + Bearbeitung: alles (kein Limit), Erledigt: per API lazy geladen
     const [gesendet, bestaetigt, totalErl, totalZur] = await Promise.all([
       db.getByStatusSlim('gesendet'),
       db.getByStatusSlim('bestaetigt'),
@@ -104,7 +102,7 @@ router.get('/', requireLogin, async (req, res) => {
   }
 });
 
-// ── API: Erledigt-Spalte — eine einzige SQL-Abfrage, exakt 10 Zeilen aus der DB ────────────
+// ── API: Erledigt-Spalte ────────────────────────────────────────────────────────────────────────
 router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
   try {
     const LIMIT = 10;
@@ -168,7 +166,7 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Neue Störung ────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -251,7 +249,7 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
   }
 });
 
-// ── Störung-Detail ────────────────────────────────────────────────────────────────────────────────────────
+// ── Störung-Detail ──────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
@@ -263,7 +261,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ────────────────────────────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ───────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere, neuKlasse } = req.body;
@@ -272,10 +270,10 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
     const validSchwere = ['klein', 'normal', 'totalausfall'];
-    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+    const gepr\u00fcfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
     const validKlasse = ['kfz', 'geraet'];
-    const geprüfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere, geprüfteKlasse);
+    const gepr\u00fcfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, gepr\u00fcfteSchwere, gepr\u00fcfteKlasse);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
@@ -285,7 +283,7 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Info-Notiz hinzufügen (nur Admin) ─────────────────────────────────────────────────────────────────────────
+// ── Info-Notiz hinzufügen (nur Admin) ──────────────────────────────────────────────────────────
 router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   try {
     const { notiz } = req.body;
@@ -300,7 +298,7 @@ router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Erinnerung setzen/löschen (nur Admin) ────────────────────────────────────────────────────────────────────────
+// ── Erinnerung setzen/löschen (nur Admin) ──────────────────────────────────────────────────────
 router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
   try {
     const { reminderAt, reminderTo } = req.body;
@@ -331,7 +329,7 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Störung löschen (nur Admin) ─────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -342,12 +340,12 @@ router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => 
     await db.deleteStorung(storung.id);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[Löschen]', err);
-    res.status(500).json({ error: 'Löschen fehlgeschlagen.' });
+    console.error('[L\u00f6schen]', err);
+    res.status(500).json({ error: 'L\u00f6schen fehlgeschlagen.' });
   }
 });
 
-// ── Such-API ─────────────────────────────────────────────────────────────────────────────────────────────
+// ── Such-API ────────────────────────────────────────────────────────────────────────────────────
 router.get('/api/suche', requireLogin, async (req, res) => {
   try {
     const { fahrzeug, monat, status, ticketId, q, klasse } = req.query;
@@ -358,12 +356,9 @@ router.get('/api/suche', requireLogin, async (req, res) => {
     const validKlasse = ['kfz', 'geraet'];
     const klasseFilter = klasse && validKlasse.includes(klasse) ? klasse : null;
     const rows = await db.searchByFahrzeugMonat(
-      fahrzeug, monat || null, statusList, ticketId || null, q || null
+      fahrzeug, monat || null, statusList, ticketId || null, q || null, klasseFilter
     );
-    const filtered = klasseFilter
-      ? rows.filter(r => (r.klasse || 'kfz') === klasseFilter)
-      : rows;
-    res.json(filtered.map(r => ({
+    res.json(rows.map(r => ({
       id: r.id, fahrzeug: r.fahrzeug, klasse: r.klasse || 'kfz',
       fehlerBeschreibung: r.fehlerBeschreibung,
       schwere: r.schwere, status: r.status, createdAt: r.createdAt,
@@ -374,7 +369,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ─────────────────────────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ─────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

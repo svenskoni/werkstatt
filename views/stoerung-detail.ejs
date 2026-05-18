@@ -15,7 +15,6 @@ const SCHWERE = {
 };
 const isAdmin      = user && user.role === 'admin';
 const myUsername   = user && user.username ? user.username : '';
-// Nur die eigene Erinnerung – andere Admins sind nicht sichtbar
 const myReminder   = (storung.reminders || []).find(r => r.username === myUsername) || null;
 const hasReminder  = !!myReminder;
 const reminderDate = hasReminder
@@ -31,9 +30,6 @@ const reminderDate = hasReminder
   <div class="detail-grid">
 
     <% if (isAdmin) { %>
-    <!-- ═══════════════════════════════════════════════════════════════════
-         ADMIN-ANSICHT: alle Felder + Statusverlauf + Anhänge + Aktionen
-    ═══════════════════════════════════════════════════════════════════ -->
     <div class="detail-card">
       <table class="detail-table">
         <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>
@@ -148,7 +144,7 @@ const reminderDate = hasReminder
           data-label="Zurückweisen">
           &#10007; Zurückweisen
         </button>
-        <button class="btn btn-xs btn-ghost" id="setReminderBtn"
+        <button class="btn btn-xs btn-ghost js-set-reminder"
           title="Erinnerung setzen" style="color:var(--color-warning)">
           &#9201; Erinnerung setzen
         </button>
@@ -170,7 +166,7 @@ const reminderDate = hasReminder
           title="Info zum Statusverlauf hinzufügen">
           &#128172; Info hinzufügen
         </button>
-        <button class="btn btn-xs btn-ghost" id="setReminderBtn"
+        <button class="btn btn-xs btn-ghost js-set-reminder"
           title="Erinnerung setzen" style="color:var(--color-warning)">
           &#9201; Erinnerung setzen
         </button>
@@ -203,9 +199,6 @@ const reminderDate = hasReminder
     </div>
 
     <% } else { %>
-    <!-- ═══════════════════════════════════════════════════════════════════
-         MELDER-ANSICHT: nur Basisdaten, keine Kontaktinfos, kein Verlauf
-    ═══════════════════════════════════════════════════════════════════ -->
     <div class="detail-card">
       <table class="detail-table">
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
@@ -374,7 +367,8 @@ const reminderDate = hasReminder
   }
 
   // ── ERINNERUNG SETZEN ─────────────────────────────────────────────────────────
-  var setReminderBtn    = document.getElementById('setReminderBtn');
+  // querySelector statt getElementById – funktioniert für beide Status-Buttons (gleiche Klasse)
+  var setReminderBtn    = document.querySelector('.js-set-reminder');
   var reminderModal     = document.getElementById('reminderModal');
   var reminderDateInput = document.getElementById('reminderDateInput');
   var reminderHourInput = document.getElementById('reminderHourInput');

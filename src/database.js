@@ -54,6 +54,14 @@ async function initDb() {
       username    TEXT PRIMARY KEY,
       abwesend_bis TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS stoerung_reminders (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      stoerungId TEXT NOT NULL,
+      username   TEXT NOT NULL,
+      reminderAt TEXT NOT NULL,
+      UNIQUE(stoerungId, username),
+      FOREIGN KEY (stoerungId) REFERENCES stoerungen(id) ON DELETE CASCADE
+    );
   `);
 
   const cols = await all(`PRAGMA table_info(stoerungen)`);
@@ -135,6 +143,7 @@ async function getStorungById(id) {
   const row = normalizeRow(s);
   row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [id]);
   row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [id]);
+  row.reminders   = await all(`SELECT * FROM stoerung_reminders WHERE stoerungId = ? ORDER BY reminderAt ASC`, [id]);
   return row;
 }
 
@@ -150,6 +159,7 @@ async function getByStatus(status) {
     const row = normalizeRow(s);
     row.history     = await all(`SELECT * FROM stoerung_history WHERE stoerungId = ? ORDER BY changedAt ASC`, [s.id]);
     row.attachments = await all(`SELECT * FROM stoerung_attachments WHERE stoerungId = ? ORDER BY createdAt ASC`, [s.id]);
+    row.reminders   = await all(`SELECT * FROM stoerung_reminders WHERE stoerungId = ? ORDER BY reminderAt ASC`, [s.id]);
     return row;
   }));
 }
@@ -252,6 +262,65 @@ async function addHistoryNote(stoerungId, changedBy, note) {
   );
 }
 
+// ── Erinnerungen (pro Admin, n:m) ────────────────────────────────────────────
+
+/**
+ * Setzt oder überschreibt die Erinnerung eines bestimmten Admins für eine Störung.
+ */
+async function setUserReminder(stoerungId, username, reminderAt) {
+  await run(
+    `INSERT INTO stoerung_reminders (stoerungId, username, reminderAt)
+     VALUES (?, ?, ?)
+     ON CONFLICT(stoerungId, username) DO UPDATE SET reminderAt = excluded.reminderAt`,
+    [stoerungId, username, reminderAt]
+  );
+}
+
+/**
+ * Löscht die Erinnerung eines bestimmten Admins für eine Störung.
+ */
+async function deleteUserReminder(stoerungId, username) {
+  await run(
+    `DELETE FROM stoerung_reminders WHERE stoerungId = ? AND username = ?`,
+    [stoerungId, username]
+  );
+}
+
+/**
+ * Gibt die Erinnerung eines bestimmten Admins für eine Störung zurück (oder null).
+ */
+async function getUserReminder(stoerungId, username) {
+  return get(
+    `SELECT * FROM stoerung_reminders WHERE stoerungId = ? AND username = ?`,
+    [stoerungId, username]
+  );
+}
+
+/**
+ * Gibt alle fälligen Erinnerungen zurück (reminderAt <= jetzt,
+ * Störung noch nicht erledigt/zurückgewiesen).
+ */
+async function getDueReminders() {
+  const now = new Date().toISOString();
+  return all(
+    `SELECT r.id, r.stoerungId, r.username, r.reminderAt
+     FROM stoerung_reminders r
+     JOIN stoerungen s ON s.id = r.stoerungId
+     WHERE r.reminderAt <= ?
+       AND s.status NOT IN ('erledigt', 'zurueckgewiesen')`,
+    [now]
+  );
+}
+
+/**
+ * Löscht die Erinnerung eines Admins nach dem Versand.
+ */
+async function clearUserReminder(stoerungId, username) {
+  await deleteUserReminder(stoerungId, username);
+}
+
+// Legacy-Wrapper (werden nicht mehr aktiv genutzt, aber nicht entfernt
+// damit alter Code nicht bricht falls noch irgendwo referenziert)
 async function setReminder(id, reminderAt, reminderTo) {
   await run(
     `UPDATE stoerungen SET reminderAt = ?, reminderTo = ? WHERE id = ?`,
@@ -259,18 +328,6 @@ async function setReminder(id, reminderAt, reminderTo) {
   );
   return getStorungById(id);
 }
-
-async function getDueReminders() {
-  const now = new Date().toISOString();
-  return all(
-    `SELECT * FROM stoerungen
-     WHERE reminderAt IS NOT NULL
-       AND reminderAt <= ?
-       AND status NOT IN ('erledigt','zurueckgewiesen')`,
-    [now]
-  );
-}
-
 async function clearReminder(id) {
   await run(`UPDATE stoerungen SET reminderAt = NULL, reminderTo = NULL WHERE id = ?`, [id]);
 }
@@ -332,7 +389,6 @@ async function setEskalationsStufe(id, stufe) {
 
 /**
  * Suche nach Fahrzeug + optionale Filter: Monat, Status, Ticket-ID, Freitext, Klasse.
- * Klassen-Filter direkt in SQL statt nachträglich im JS.
  */
 async function searchByFahrzeugMonat(fahrzeug, monat, statuses, ticketId, freitext, klasse) {
   const validStatuses = ['gesendet', 'bestaetigt', 'erledigt', 'zurueckgewiesen'];
@@ -402,7 +458,11 @@ module.exports = {
   createStorung, getStorungById,
   getByStatus, getByStatusSlim, getErledigtSlim, countByStatus,
   updateStatus, addHistoryNote,
-  setReminder, getDueReminders, clearReminder,
+  // Neue pro-Admin Reminder-Funktionen
+  setUserReminder, deleteUserReminder, getUserReminder,
+  getDueReminders, clearUserReminder,
+  // Legacy (nicht mehr aktiv genutzt)
+  setReminder, clearReminder,
   setAdminUrlaub, getAbwesendeAdmins, getAdminUrlaub, cleanupAbgelaufeneUrlaube,
   getEskalationsFaellige, setEskalationsStufe,
   searchByFahrzeugMonat, searchSimilarFehler,

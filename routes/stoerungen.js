@@ -298,7 +298,7 @@ router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Erinnerung setzen/löschen (nur Admin, nur eigene) ──────────────────────────────────────────────
+// ── Erinnerung setzen/löschen – pro Admin, fix #51 ──────────────────────────────────────────────
 router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
   try {
     const { reminderAt } = req.body;
@@ -307,16 +307,9 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'St\u00f6rung nicht gefunden.' });
 
-    // fix #51: Erinnerung eines anderen Admins darf nicht überschrieben/gelöscht werden
-    if (storung.reminderAt && storung.reminderTo && storung.reminderTo !== me) {
-      return res.status(403).json({
-        error: `Diese Erinnerung geh\u00f6rt ${storung.reminderTo} und kann nicht ge\u00e4ndert werden.`,
-      });
-    }
-
-    // Löschen: leeres reminderAt = Erinnerung entfernen
+    // Löschen: leeres reminderAt = eigene Erinnerung entfernen
     if (!reminderAt || !reminderAt.trim()) {
-      await db.setReminder(storung.id, null, null);
+      await db.deleteUserReminder(storung.id, me);
       return res.json({ ok: true });
     }
 
@@ -329,8 +322,8 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
       return res.status(400).json({ error: 'Erinnerungszeitpunkt liegt in der Vergangenheit.' });
     }
 
-    // reminderTo wird immer auf den eigenen Username gesetzt
-    await db.setReminder(storung.id, parsed.toISOString(), me);
+    // Eigene Erinnerung setzen (überschreibt falls schon vorhanden)
+    await db.setUserReminder(storung.id, me, parsed.toISOString());
     res.json({ ok: true });
   } catch (err) {
     console.error('[Reminder]', err);

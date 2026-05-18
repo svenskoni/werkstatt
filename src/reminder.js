@@ -4,22 +4,17 @@
  * Zwei Crons – beide laufen zur vollen Stunde:
  *
  * 1) Reminder-Cron (stündlich, zur vollen Stunde)
- *    Prüft fällige Erinnerungen (reminderAt <= jetzt) und schickt dem
- *    gespeicherten Admin die gleiche Admin-Mail nochmal – Betreff: [Erinnerung]
- *    Erinnerungen werden also immer zur nächsten vollen Stunde zugestellt.
+ *    Prüft fällige Erinnerungen aus stoerung_reminders (pro Admin).
+ *    Jeder Admin erhält seine eigene Erinnerungsmail.
+ *    Nach dem Versand wird nur der eigene Eintrag gelöscht.
  *
  * 2) Eskalations-Cron (stündlich, zur vollen Stunde)
  *    Prüft ob Tickets ohne Reaktion eskaliert werden müssen.
- *    - Stufe 0 → nach ESKALATION_STUNDEN → Mail an Eskalation[0] (nächster nach Erstempfänger)
- *    - Stufe N → nach ESKALATION_STUNDEN → Mail an Eskalation[N]
- *    - Abwesende Admins werden übersprungen
  */
 const db     = require('./database');
 const mailer = require('./mailer');
 
 const ESKALATION_STUNDEN = parseInt(process.env.ESKALATION_STUNDEN || '24', 10);
-
-// ── Hilfsfunktion: Wartezeit bis zur nächsten vollen Stunde ──────────────────
 
 function msUntilNextFullHour() {
   const now = new Date();
@@ -36,12 +31,15 @@ async function checkReminder() {
     if (!faellig.length) return;
 
     for (const row of faellig) {
-      const full = await db.getStorungById(row.id);
-      if (!full) { await db.clearReminder(row.id); continue; }
+      const full = await db.getStorungById(row.stoerungId);
+      if (!full) {
+        await db.clearUserReminder(row.stoerungId, row.username);
+        continue;
+      }
 
-      await mailer.sendReminderMail(full, row.reminderTo);
-      await db.clearReminder(full.id);
-      console.log(`[Reminder] Erinnerung gesendet für Ticket ${full.id} an ${row.reminderTo}`);
+      await mailer.sendReminderMail(full, row.username);
+      await db.clearUserReminder(full.id, row.username);
+      console.log(`[Reminder] Erinnerung gesendet für Ticket ${full.id} an ${row.username}`);
     }
   } catch (err) {
     console.error('[Reminder] Fehler:', err.message);

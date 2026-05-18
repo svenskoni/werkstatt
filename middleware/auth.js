@@ -16,11 +16,6 @@ function getAdmins() {
     admins.push({ username: name.trim(), passHash: hash, role: 'admin' });
     i++;
   }
-  const legacyName = process.env.USER_ADMIN_NAME;
-  const legacyHash = process.env.USER_ADMIN_PASS_HASH;
-  if (legacyName && legacyHash && !admins.find(a => a.username.toLowerCase() === legacyName.toLowerCase())) {
-    admins.push({ username: legacyName.trim(), passHash: legacyHash, role: 'admin' });
-  }
   return admins;
 }
 
@@ -41,14 +36,25 @@ async function verifyCrewPassword(password) {
   return { username: 'Melder', role: 'crew' };
 }
 
+/**
+ * Baut die Login-Redirect-URL.
+ * Wenn die Ziel-URL ein Störungs-Detail ist (/stoerung/…), wird ?tab=admin
+ * angehängt, damit der Admin direkt auf dem richtigen Tab landet.
+ */
+function buildLoginRedirect(returnTo) {
+  if (returnTo && /^\/stoerung\//.test(returnTo)) {
+    return '/login?tab=admin';
+  }
+  return '/login';
+}
+
 function requireLogin(req, res, next) {
   if (!req.session.user) {
-    // S3: returnTo nur setzen wenn sichere URL
     const url = req.originalUrl;
     if (url && url.startsWith('/') && !url.startsWith('//')) {
       req.session.returnTo = url;
     }
-    return res.redirect('/login');
+    return res.redirect(buildLoginRedirect(url));
   }
   next();
 }
@@ -60,7 +66,7 @@ function requireRole(...roles) {
       if (url && url.startsWith('/') && !url.startsWith('//')) {
         req.session.returnTo = url;
       }
-      return res.redirect('/login');
+      return res.redirect(buildLoginRedirect(url));
     }
     if (!roles.includes(req.session.user.role)) {
       return res.status(403).render('error', {
@@ -72,8 +78,4 @@ function requireRole(...roles) {
   };
 }
 
-function optionalLogin(req, res, next) {
-  next();
-}
-
-module.exports = { verifyAdmin, verifyCrewPassword, requireLogin, requireRole, optionalLogin };
+module.exports = { verifyAdmin, verifyCrewPassword, requireLogin, requireRole };

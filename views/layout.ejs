@@ -7,6 +7,27 @@
   <title>St&ouml;rungsmelder &ndash; LZ Frechen</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F692;</text></svg>">
   <link rel="stylesheet" href="/css/main.css">
+  <style>
+    /* Modal-Scroll-Fix */
+    body.modal-open { overflow: hidden; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: var(--space-6) var(--space-4);
+      overflow-y: auto;
+      z-index: 200;
+    }
+    .modal-backdrop .modal {
+      width: 100%;
+      max-height: calc(100dvh - 3rem);
+      overflow-y: auto;
+      margin: auto;
+    }
+  </style>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Zum Inhalt springen</a>
@@ -41,7 +62,7 @@
         <% if (!user) { %>
           <a href="/login" class="btn btn-primary btn-sm">Login</a>
         <% } else { %>
-          <!-- Urlaubs-Button -->
+          <% if (user.role === 'admin') { %>
           <button class="btn btn-ghost btn-sm" id="urlaubBtn"
             aria-label="Abwesenheit verwalten" title="Abwesenheit / Urlaub">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -51,7 +72,8 @@
               <line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
           </button>
-          <span class="user-label" id="userLabel"><%= user.username %></span>
+          <% } %>
+          <span class="user-label" <% if (user.role === 'admin') { %>id="userLabel"<% } %>><%= user.username %></span>
           <form action="/logout" method="POST" style="margin:0">
             <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Abmelden" aria-label="Abmelden">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -116,17 +138,32 @@
           maxlength="500" style="resize:vertical"></textarea>
       </div>
 
+      <!-- fix #50: datetime-local (freie Minutenwahl) durch Datum + Stunden-Dropdown ersetzt.
+           Erinnerungen werden immer zur vollen Stunde zugestellt. -->
       <div id="reminderWrap" style="display:none;margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--color-divider)">
         <label style="display:flex;align-items:center;gap:var(--space-2);cursor:pointer;font-size:var(--text-sm);font-weight:500;margin-bottom:var(--space-3)">
           <input type="checkbox" id="reminderEnabled" style="width:16px;height:16px;cursor:pointer">
           &#9201; Erinnerung einrichten
         </label>
         <div id="reminderFields" style="display:none;margin-left:var(--space-6)">
-          <label class="form-label" for="modalReminderAt" style="font-size:var(--text-xs);color:var(--color-text-muted)">Datum &amp; Uhrzeit</label>
-          <input type="datetime-local" class="form-control" id="modalReminderAt" style="max-width:240px">
-          <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">
-            Du erh&auml;ltst eine E-Mail-Erinnerung zum gew&auml;hlten Zeitpunkt.
+          <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-3)">
+            Erinnerungen werden immer zur vollen Stunde zugestellt.
           </p>
+          <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" for="modalReminderDate" style="font-size:var(--text-xs);color:var(--color-text-muted)">Datum</label>
+              <input type="date" class="form-control" id="modalReminderDate" style="max-width:180px">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" for="modalReminderHour" style="font-size:var(--text-xs);color:var(--color-text-muted)">Stunde</label>
+              <select class="form-control" id="modalReminderHour" style="max-width:120px">
+                <% for (var h = 0; h < 24; h++) { %>
+                  <option value="<%= h %>"><%= String(h).padStart(2,'0') %>:00 Uhr</option>
+                <% } %>
+              </select>
+            </div>
+          </div>
+          <div id="modalReminderFeedback" style="font-size:var(--text-xs);color:var(--color-error);margin-top:var(--space-2);min-height:1.2em"></div>
         </div>
       </div>
 
@@ -137,8 +174,8 @@
     </div>
   </div>
 
-  <!-- Urlaubs-Modal -->
-  <% if (user) { %>
+  <!-- Urlaubs-Modal: nur für Admins -->
+  <% if (user && user.role === 'admin') { %>
   <div class="modal-backdrop" id="urlaubModal" hidden role="dialog" aria-modal="true" aria-labelledby="urlaubModalTitle" tabindex="-1">
     <div class="modal" style="max-width:420px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4)">
@@ -180,7 +217,7 @@
           <span style="font-weight:400;color:var(--color-text-muted);font-size:var(--text-xs)">(optional &ndash; Teilsuche m&ouml;glich)</span>
         </label>
         <input type="text" class="form-control" id="searchTicketId"
-          placeholder="z.&thinsp;B.&nbsp;LKW1-2026-05 oder LKW1-2026-05-003"
+          placeholder="z.&thinsp;B.&nbsp;FRE1-HLF20-1-2026-05 oder -003"
           maxlength="60" autocomplete="off" spellcheck="false">
         <p id="searchTicketIdHint" style="font-size:var(--text-xs);color:var(--color-primary);margin-top:var(--space-1);display:none">
           &#10003; Fahrzeug automatisch erkannt
@@ -273,8 +310,13 @@
       r.setAttribute('data-theme', d);
     });
   })();
-  <% if (user) { %>
-  // ── Urlaubs-Modal ────────────────────────────────────────────────────────────
+
+  // Hilfsfunktionen: body-scroll sperren/freigeben
+  function modalOpen(backdropEl)  { backdropEl.hidden = false; document.body.classList.add('modal-open'); }
+  function modalClose(backdropEl) { backdropEl.hidden = true;  document.body.classList.remove('modal-open'); }
+
+  <% if (user && user.role === 'admin') { %>
+  // ── Urlaubs-Modal (nur Admins) ──────────────────────────────────────────────────
   (function () {
     var btn        = document.getElementById('urlaubBtn');
     var modal      = document.getElementById('urlaubModal');
@@ -317,7 +359,6 @@
           statusBox.style.color = 'var(--color-warning)';
           statusBox.style.display = 'block';
           aufhebenBtn.style.display = '';
-          // Datum vorausfüllen
           var dt = new Date(data.abwesend_bis);
           var local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
           datumInput.value = local;
@@ -332,11 +373,17 @@
       }
     }
 
-    function openModal() {
-      modal.hidden = false;
-      ladeStatus();
+    async function ladeBadge() {
+      try {
+        var r = await fetch('/api/urlaub/status');
+        var data = await r.json();
+        istAbwesend = data.abwesend;
+        setUrlaubBadge(istAbwesend);
+      } catch (e) { /* Badge-Fehler still ignorieren */ }
     }
-    function closeModal() { modal.hidden = true; }
+
+    function openModal()  { modalOpen(modal);  ladeStatus(); }
+    function closeModal() { modalClose(modal); }
 
     btn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
@@ -403,11 +450,13 @@
       }
     });
 
-    // Badge beim Laden der Seite sofort setzen
-    ladeStatus();
+    // Nur Badge beim Seitenload – kein volles ladeStatus()
+    ladeBadge();
   })();
+  <% } %>
 
-  // ── Such-Modal ───────────────────────────────────────────────────────────────
+  <% if (user) { %>
+  // ── Such-Modal ──────────────────────────────────────────────────────────────
   (function () {
     var btn        = document.getElementById('searchBtn');
     var modal      = document.getElementById('searchModal');
@@ -421,8 +470,8 @@
 
     var VEHICLES = Array.from(fahrzeugEl.options).map(function(o) { return o.value; }).filter(function(v) { return v !== ''; });
 
-    function openModal()  { modal.hidden = false; ticketEl.focus(); }
-    function closeModal() { modal.hidden = true; results.innerHTML = ''; }
+    function openModal()  { modalOpen(modal);  ticketEl.focus(); }
+    function closeModal() { modalClose(modal); results.innerHTML = ''; }
 
     btn.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);

@@ -19,7 +19,6 @@
     "dotenv": "^17.0.0",
     "multer": "^2.0.0",
     "nodemailer": "^8.0.7",
-    "uuid": "^11.0.0",
     "helmet": "^8.0.0",
     "express-rate-limit": "^8.0.0",
     "ejs": "^3.1.10",

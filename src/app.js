@@ -24,8 +24,8 @@ const REQUIRED_ENV = [
   'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURE',
   'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM',
   'ADMIN_ESCALATION',
-  'ADMIN_1_NAME', 'ADMIN_1_PASS_HASH',  // mind. ein Admin muss konfiguriert sein
-  'CREW_PASS_HASH',                      // Melder-Passwort
+  'ADMIN_1_NAME', 'ADMIN_1_PASS_HASH',
+  'CREW_PASS_HASH',
 ];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length > 0) {
@@ -90,17 +90,14 @@ app.set('layout', 'layout');
 app.use((req, res, next) => {
   res.locals.user        = req.session.user || null;
   res.locals.currentPath = req.path;
-  res.locals.path        = req.path;
   res.locals.VEHICLES    = VEHICLES;
   res.locals.SCHWERE     = SCHWERE;
   next();
 });
 
 // ── Routen ─────────────────────────────────────────────────────────────────────────────
-// Fernseher: /view/[token] – klar abgegrenzt, kein Konflikt mit Störungs-IDs oder Auth-Pfaden
 app.use('/view', fernseherRoute);
-
-app.use('/', authRoutes);      // inkl. /login, /logout, /api/urlaub/*
+app.use('/', authRoutes);
 app.use('/', uploadsRoute);
 app.use('/', stoerungRoutes);
 
@@ -113,11 +110,5 @@ app.use((err, req, res, _next) => {
   });
 });
 
-db.initDb()
-  .then(() => {
-    cleanup.scheduleDaily();
-    reminder.start();
-  })
-  .catch(err => { console.error('[Init] DB-Fehler:', err); process.exit(1); });
-
+// initDb wird nur in app.js (Root) aufgerufen – NICHT hier nochmal
 module.exports = app;

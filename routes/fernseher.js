@@ -4,58 +4,64 @@ const db      = require('../src/database');
 
 const router = express.Router();
 
+const SCHWERE = {
+  klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
+  normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
+  totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
+};
+
+/**
+ * Gemeinsame Daten-Logik – wird von HTML-Route und JSON-Route genutzt.
+ */
+async function buildDaten() {
+  const VEHICLES = (process.env.VEHICLES || '').split(',').map(v => v.trim()).filter(Boolean);
+  const [gesendet, bestaetigt] = await Promise.all([
+    db.getByStatusSlim('gesendet'),
+    db.getByStatusSlim('bestaetigt'),
+  ]);
+  const fahrzeugDaten = VEHICLES.map(fz => ({
+    name: fz,
+    offen: gesendet.filter(t => t.fahrzeug === fz),
+    aktiv:  bestaetigt.filter(t => t.fahrzeug === fz),
+  }));
+  return { fahrzeugDaten, VEHICLES, anzahlOffen: gesendet.length, anzahlAktiv: bestaetigt.length };
+}
+
+/**
+ * Token-Prüfung als Mini-Middleware.
+ */
+function checkToken(req, res, next) {
+  const token = process.env.FERNSEHER_TOKEN;
+  if (!token || !token.trim() || req.params.token !== token.trim()) return next('route');
+  next();
+}
+
 /**
  * GET /view/:token
  * Zeigt das Fernseher-Dashboard – kein Login erforderlich.
- * Nur aktiv wenn FERNSEHER_TOKEN gesetzt ist und mit dem URL-Segment übereinstimmt.
- * Auto-Refresh alle 60 Sekunden.
- *
- * Prefix /view/ stellt sicher, dass diese Route niemals mit
- * Störungs-IDs, Login, API- oder Upload-Pfaden kollidiert.
  */
-router.get('/:token', async (req, res, next) => {
-  const token = process.env.FERNSEHER_TOKEN;
-
-  // Deaktiviert oder falsches Token → 404 (kein Hinweis dass diese Route existiert)
-  if (!token || !token.trim() || req.params.token !== token.trim()) {
-    return next();
-  }
-
+router.get('/:token', checkToken, async (req, res, next) => {
   try {
-    const VEHICLES = (process.env.VEHICLES || '').split(',').map(v => v.trim()).filter(Boolean);
-    const SCHWERE = {
-      klein:        { label: 'Klein',        icon: '\uD83D\uDFE2' },
-      normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
-      totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
-    };
-
-    const [gesendet, bestaetigt] = await Promise.all([
-      db.getByStatus('gesendet'),
-      db.getByStatus('bestaetigt'),
-    ]);
-
-    // Pro Fahrzeug: offene + aktive Tickets zusammenstellen
-    const fahrzeugDaten = VEHICLES.map(fz => ({
-      name: fz,
-      offen:   gesendet.filter(t => t.fahrzeug === fz),
-      aktiv:   bestaetigt.filter(t => t.fahrzeug === fz),
-    }));
-
-    // Gesamt-Zähler für Header
-    const anzahlOffen = gesendet.length;
-    const anzahlAktiv = bestaetigt.length;
-
-    res.render('fernseher', {
-      layout:        false,   // eigenes Vollbild-Layout, kein normaler Header
-      fahrzeugDaten,
-      VEHICLES,
-      SCHWERE,
-      anzahlOffen,
-      anzahlAktiv,
-    });
+    const daten = await buildDaten();
+    res.render('fernseher', { layout: false, SCHWERE, ...daten });
   } catch (err) {
     console.error('[Fernseher]', err);
     res.status(500).send('Fehler beim Laden des Fernseher-Dashboards.');
+  }
+});
+
+/**
+ * GET /view/:token/daten
+ * JSON-Endpunkt für den clientseitigen fetch-Refresh.
+ * Gleicher Token-Schutz, kein Login nötig.
+ */
+router.get('/:token/daten', checkToken, async (req, res, next) => {
+  try {
+    const daten = await buildDaten();
+    res.json({ ok: true, SCHWERE, ...daten });
+  } catch (err) {
+    console.error('[Fernseher/daten]', err);
+    res.status(500).json({ ok: false, error: 'Datenbankfehler' });
   }
 });
 

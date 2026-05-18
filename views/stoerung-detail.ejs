@@ -13,9 +13,16 @@ const SCHWERE = {
   normal:       { label: 'Normal',       icon: '\uD83D\uDFE1' },
   totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
-const isAdmin      = user && user.role === 'admin';
-const hasReminder  = !!storung.reminderAt;
-const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'}) : null;
+const isAdmin       = user && user.role === 'admin';
+const myUsername    = user && user.username ? user.username : '';
+// Eigene Erinnerung aus reminders[] herausfiltern
+const myReminder    = (storung.reminders || []).find(r => r.username === myUsername) || null;
+const hasReminder   = !!myReminder;
+const reminderDate  = hasReminder
+  ? new Date(myReminder.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'})
+  : null;
+// Erinnerungen anderer Admins (nur zur Info)
+const otherReminders = (storung.reminders || []).filter(r => r.username !== myUsername);
 %>
 <div class="form-container">
   <div class="form-header">
@@ -52,19 +59,23 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         <tr><th>Zeitpunkt</th><td><%= formatDate(storung.createdAt) %></td></tr>
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
         <% if (hasReminder) { %>
-        <tr><th>&#9201; Erinnerung</th><td>
+        <tr><th>&#9201; Meine Erinnerung</th><td>
           <span style="font-size:var(--text-sm);color:var(--color-warning)">
             <strong><%= reminderDate %></strong>
           </span>
-          <% if (storung.reminderTo) { %>
-            <span style="font-size:var(--text-xs);color:var(--color-text-muted);margin-left:var(--space-2)">
-              &rarr; <%= storung.reminderTo %>
-            </span>
-          <% } %>
           <button class="btn btn-xs btn-ghost" id="clearReminderBtn"
             style="margin-left:var(--space-2);color:var(--color-text-muted)"
-            title="Erinnerung löschen"
+            title="Meine Erinnerung löschen"
             data-confirm-label="Wirklich löschen?">&#10005;</button>
+        </td></tr>
+        <% } %>
+        <% if (otherReminders.length > 0) { %>
+        <tr><th>&#9201; Erinnerungen</th><td>
+          <% otherReminders.forEach(function(r) { %>
+            <span style="font-size:var(--text-xs);color:var(--color-text-muted);display:block">
+              <%= r.username %>: <%= new Date(r.reminderAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Berlin'}) %>
+            </span>
+          <% }); %>
         </td></tr>
         <% } %>
       </table>
@@ -148,6 +159,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           data-desc="Das Ticket wird als &raquo;Zurückgewiesen&laquo; geschlossen."
           data-label="Zurückweisen">
           &#10007; Zurückweisen
+        </button>
+        <button class="btn btn-xs btn-ghost" id="setReminderBtn"
+          title="Erinnerung setzen" style="color:var(--color-warning)">
+          &#9201; Erinnerung setzen
         </button>
       </div>
       <% } %>
@@ -261,7 +276,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
   <div class="modal" style="max-width:420px">
     <h3 id="reminderModalTitle" style="margin-bottom:var(--space-2)">&#9201; Erinnerung setzen</h3>
     <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4)">
-      Erinnerungen werden immer zur vollen Stunde zugestellt.
+      Erinnerungen werden immer zur vollen Stunde zugestellt. Nur du siehst und kannst deine eigene Erinnerung löschen.
     </p>
     <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap">
       <div class="form-group" style="margin-bottom:0">
@@ -317,7 +332,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 (function () {
   var IS_ADMIN = <%= isAdmin ? 'true' : 'false' %>;
   var STOERUNG_ID = '<%= storung.id %>';
-  var CURRENT_USER = '<%= user && user.username ? user.username.replace(/'/g, "\\'") : '' %>';
 
   if (!IS_ADMIN) return;
 
@@ -371,7 +385,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
-  // ── ERINNERUNG ────────────────────────────────────────────────────────────────
+  // ── ERINNERUNG SETZEN ─────────────────────────────────────────────────────────
   var setReminderBtn    = document.getElementById('setReminderBtn');
   var reminderModal     = document.getElementById('reminderModal');
   var reminderDateInput = document.getElementById('reminderDateInput');
@@ -436,11 +450,12 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       reminderFeedback.textContent = '';
       reminderDateInput.style.borderColor = '';
       reminderSaveBtn.disabled = true;
-      reminderSaveBtn.textContent = 'Speichere\u2026';
+      reminderSaveBtn.textContent = 'Speichere…';
 
+      // reminderTo wird nicht mehr mitgeschickt — Server nutzt Session-User
       fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reminderAt: parsed.toISOString(), reminderTo: CURRENT_USER }),
+        body: JSON.stringify({ reminderAt: parsed.toISOString() }),
       })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -460,17 +475,17 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
-  // ── ERINNERUNG LÖSCHEN (Inline-Confirm statt blockierendem confirm()) ─────────
+  // ── EIGENE ERINNERUNG LÖSCHEN ─────────────────────────────────────────────────
   var clearReminderBtn = document.getElementById('clearReminderBtn');
   if (clearReminderBtn) {
     clearReminderBtn.addEventListener('click', function () {
       if (clearReminderBtn.dataset.confirming === '1') {
-        // zweiter Klick: wirklich löschen
         clearReminderBtn.disabled = true;
-        clearReminderBtn.textContent = '\u2026';
+        clearReminderBtn.textContent = '…';
+        // leeres reminderAt = Lösch-Signal; kein reminderTo nötig
         fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reminderAt: '', reminderTo: '' }),
+          body: JSON.stringify({ reminderAt: '' }),
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
@@ -479,12 +494,10 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         })
         .catch(function () { alert('Netzwerkfehler.'); });
       } else {
-        // erster Klick: Bestätigung einfordern
         clearReminderBtn.dataset.confirming = '1';
         clearReminderBtn.textContent = 'Löschen?';
         clearReminderBtn.style.color = 'var(--color-error)';
         clearReminderBtn.style.borderColor = 'var(--color-error)';
-        // nach 4 s automatisch zurücksetzen
         setTimeout(function () {
           if (clearReminderBtn.dataset.confirming === '1') {
             clearReminderBtn.dataset.confirming = '0';
@@ -528,7 +541,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       infoFeedback.textContent = '';
       infoText.style.borderColor = '';
       infoSaveBtn.disabled = true;
-      infoSaveBtn.textContent = 'Speichere\u2026';
+      infoSaveBtn.textContent = 'Speichere…';
       fetch('/stoerung/' + STOERUNG_ID + '/notiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

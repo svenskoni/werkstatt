@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="60">
   <title>Störungsübersicht</title>
   <style>
     /* ── Reset & Basis ───────────────────────────────── */
@@ -59,6 +58,17 @@
     }
     .badge-offen  { background: #3b2a00; color: #f5a623; border: 1px solid #6b4e00; }
     .badge-aktiv  { background: #002a3b; color: #4cb8d8; border: 1px solid #005a7a; }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+    .header-refresh-info {
+      font-size: 11px;
+      color: #555;
+      font-style: italic;
+    }
     .header-clock {
       font-size: 13px;
       color: #888;
@@ -162,11 +172,6 @@
       opacity: 0.7;
       white-space: nowrap;
     }
-    .ticket-klasse {
-      font-size: 10px;
-      opacity: 0.75;
-      white-space: nowrap;
-    }
     .ticket-zeit {
       font-size: 9px;
       color: #666;
@@ -198,7 +203,10 @@
       <span class="badge badge-offen">⚠️ Offen: <%= anzahlOffen %></span>
       <span class="badge badge-aktiv">🔧 In Bearbeitung: <%= anzahlAktiv %></span>
     </div>
-    <span class="header-clock" id="clock"></span>
+    <div class="header-right">
+      <span class="header-refresh-info">↻ update jede volle Minute</span>
+      <span class="header-clock" id="clock"></span>
+    </div>
   </div>
 
   <!-- Fahrzeug-Spalten -->
@@ -219,7 +227,6 @@
                 <div class="ticket-meta">
                   <% var sw = SCHWERE[t.schwere]; %>
                   <% if (sw) { %><span class="ticket-schwere"><%= sw.icon %> <%= sw.label %></span><% } %>
-                  <span class="ticket-klasse"><%= t.klasse === 'geraet' ? '🔧' : '🚒' %></span>
                   <span class="ticket-zeit"><%= new Date(t.createdAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}) %></span>
                 </div>
               </div>
@@ -234,7 +241,6 @@
                 <div class="ticket-meta">
                   <% var sw2 = SCHWERE[t.schwere]; %>
                   <% if (sw2) { %><span class="ticket-schwere"><%= sw2.icon %> <%= sw2.label %></span><% } %>
-                  <span class="ticket-klasse"><%= t.klasse === 'geraet' ? '🔧' : '🚒' %></span>
                   <span class="ticket-zeit"><%= new Date(t.createdAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',timeZone:'Europe/Berlin'}) %></span>
                 </div>
               </div>
@@ -253,13 +259,22 @@
 </div>
 
 <script>
-  // Live-Uhr
+  // Live-Uhr (sekündlich)
   (function tick() {
     var now = new Date();
     var pad = function(n) { return String(n).padStart(2,'0'); };
     document.getElementById('clock').textContent =
       pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
     setTimeout(tick, 1000);
+  })();
+
+  // Reload genau zur nächsten vollen Minute
+  (function scheduleReload() {
+    var now = new Date();
+    var msUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+    setTimeout(function() {
+      window.location.reload();
+    }, msUntilNextMinute);
   })();
 </script>
 </body>

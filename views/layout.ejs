@@ -138,17 +138,32 @@
           maxlength="500" style="resize:vertical"></textarea>
       </div>
 
+      <!-- fix #50: datetime-local (freie Minutenwahl) durch Datum + Stunden-Dropdown ersetzt.
+           Erinnerungen werden immer zur vollen Stunde zugestellt. -->
       <div id="reminderWrap" style="display:none;margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--color-divider)">
         <label style="display:flex;align-items:center;gap:var(--space-2);cursor:pointer;font-size:var(--text-sm);font-weight:500;margin-bottom:var(--space-3)">
           <input type="checkbox" id="reminderEnabled" style="width:16px;height:16px;cursor:pointer">
           &#9201; Erinnerung einrichten
         </label>
         <div id="reminderFields" style="display:none;margin-left:var(--space-6)">
-          <label class="form-label" for="modalReminderAt" style="font-size:var(--text-xs);color:var(--color-text-muted)">Datum &amp; Uhrzeit</label>
-          <input type="datetime-local" class="form-control" id="modalReminderAt" style="max-width:240px">
-          <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">
-            Du erh&auml;ltst eine E-Mail-Erinnerung zum gew&auml;hlten Zeitpunkt.
+          <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-3)">
+            Erinnerungen werden immer zur vollen Stunde zugestellt.
           </p>
+          <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" for="modalReminderDate" style="font-size:var(--text-xs);color:var(--color-text-muted)">Datum</label>
+              <input type="date" class="form-control" id="modalReminderDate" style="max-width:180px">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label" for="modalReminderHour" style="font-size:var(--text-xs);color:var(--color-text-muted)">Stunde</label>
+              <select class="form-control" id="modalReminderHour" style="max-width:120px">
+                <% for (var h = 0; h < 24; h++) { %>
+                  <option value="<%= h %>"><%= String(h).padStart(2,'0') %>:00 Uhr</option>
+                <% } %>
+              </select>
+            </div>
+          </div>
+          <div id="modalReminderFeedback" style="font-size:var(--text-xs);color:var(--color-error);margin-top:var(--space-2);min-height:1.2em"></div>
         </div>
       </div>
 

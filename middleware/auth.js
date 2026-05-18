@@ -16,11 +16,6 @@ function getAdmins() {
     admins.push({ username: name.trim(), passHash: hash, role: 'admin' });
     i++;
   }
-  const legacyName = process.env.USER_ADMIN_NAME;
-  const legacyHash = process.env.USER_ADMIN_PASS_HASH;
-  if (legacyName && legacyHash && !admins.find(a => a.username.toLowerCase() === legacyName.toLowerCase())) {
-    admins.push({ username: legacyName.trim(), passHash: legacyHash, role: 'admin' });
-  }
   return admins;
 }
 
@@ -83,8 +78,4 @@ function requireRole(...roles) {
   };
 }
 
-function optionalLogin(req, res, next) {
-  next();
-}
-
-module.exports = { verifyAdmin, verifyCrewPassword, requireLogin, requireRole, optionalLogin };
+module.exports = { verifyAdmin, verifyCrewPassword, requireLogin, requireRole };

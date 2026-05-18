@@ -33,7 +33,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
       <table class="detail-table">
         <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>
         <tr><th>Klasse</th><td>
-          <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:var(--text-xs);font-weight:700;background:var(--color-primary-highlight);color:var(--color-primary)">
+          <span class="klasse-chip">
             <%= storung.klasse === 'geraet' ? '\uD83D\uDD27 Gerät' : '\uD83D\uDE92 KFZ' %>
           </span>
         </td></tr>
@@ -63,7 +63,8 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
           <% } %>
           <button class="btn btn-xs btn-ghost" id="clearReminderBtn"
             style="margin-left:var(--space-2);color:var(--color-text-muted)"
-            title="Erinnerung löschen">&#10005;</button>
+            title="Erinnerung löschen"
+            data-confirm-label="Wirklich löschen?">&#10005;</button>
         </td></tr>
         <% } %>
       </table>
@@ -125,7 +126,6 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
 
       <% if (storung.status === 'gesendet') { %>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
-        <!-- Bestätigen: Klasse + Schwere korrigierbar (einzige Stelle) -->
         <button class="btn btn-sm status-change-btn"
           style="background:var(--color-active);color:#fff;border:none"
           data-id="<%= storung.id %>"
@@ -208,7 +208,7 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
         <tr><th>Meldungs-ID</th><td><code style="font-size:var(--text-xs)"><%= storung.id %></code></td></tr>
         <tr><th>Fahrzeug</th><td><strong><%= storung.fahrzeug %></strong></td></tr>
         <tr><th>Klasse</th><td>
-          <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:var(--text-xs);font-weight:700;background:var(--color-primary-highlight);color:var(--color-primary)">
+          <span class="klasse-chip">
             <%= storung.klasse === 'geraet' ? '\uD83D\uDD27 Gerät' : '\uD83D\uDE92 KFZ' %>
           </span>
         </td></tr>
@@ -460,20 +460,40 @@ const reminderDate = hasReminder ? new Date(storung.reminderAt).toLocaleString('
     });
   }
 
+  // ── ERINNERUNG LÖSCHEN (Inline-Confirm statt blockierendem confirm()) ─────────
   var clearReminderBtn = document.getElementById('clearReminderBtn');
   if (clearReminderBtn) {
     clearReminderBtn.addEventListener('click', function () {
-      if (!confirm('Erinnerung wirklich löschen?')) return;
-      fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reminderAt: '', reminderTo: '' }),
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) window.location.reload();
-        else alert('Fehler: ' + (data.error || 'Unbekannt'));
-      })
-      .catch(function () { alert('Netzwerkfehler.'); });
+      if (clearReminderBtn.dataset.confirming === '1') {
+        // zweiter Klick: wirklich löschen
+        clearReminderBtn.disabled = true;
+        clearReminderBtn.textContent = '\u2026';
+        fetch('/stoerung/' + STOERUNG_ID + '/reminder', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reminderAt: '', reminderTo: '' }),
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) window.location.reload();
+          else alert('Fehler: ' + (data.error || 'Unbekannt'));
+        })
+        .catch(function () { alert('Netzwerkfehler.'); });
+      } else {
+        // erster Klick: Bestätigung einfordern
+        clearReminderBtn.dataset.confirming = '1';
+        clearReminderBtn.textContent = 'Löschen?';
+        clearReminderBtn.style.color = 'var(--color-error)';
+        clearReminderBtn.style.borderColor = 'var(--color-error)';
+        // nach 4 s automatisch zurücksetzen
+        setTimeout(function () {
+          if (clearReminderBtn.dataset.confirming === '1') {
+            clearReminderBtn.dataset.confirming = '0';
+            clearReminderBtn.innerHTML = '&#10005;';
+            clearReminderBtn.style.color = '';
+            clearReminderBtn.style.borderColor = '';
+          }
+        }, 4000);
+      }
     });
   }
 

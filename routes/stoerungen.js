@@ -71,7 +71,7 @@ function renderNeu(res, errors, old, user) {
   res.status(errors.length ? 400 : 200).render('stoerung-neu', { errors: errors || [], old: old || {}, user });
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────────────────────────────
+// ── Dashboard ────────────────────────────────────────────────────────────────────────────────────
 router.get('/', requireLogin, async (req, res) => {
   try {
     const [gesendet, bestaetigt, totalErl, totalZur] = await Promise.all([
@@ -166,7 +166,7 @@ router.get('/api/dashboard/erledigt', requireLogin, async (req, res) => {
   }
 });
 
-// ── Neue Störung ────────────────────────────────────────────────────────────────────────────────
+// ── Neue Störung ─────────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/neu', requireLogin, (req, res) => {
   renderNeu(res, [], {}, req.session.user);
 });
@@ -249,7 +249,7 @@ router.post('/stoerung/neu', requireLogin, (req, res, next) => {
   }
 });
 
-// ── Störung-Detail ──────────────────────────────────────────────────────────────────────────────
+// ── Störung-Detail ───────────────────────────────────────────────────────────────────────────────
 router.get('/stoerung/:id', requireLogin, async (req, res) => {
   try {
     const storung = await db.getStorungById(req.params.id);
@@ -261,7 +261,7 @@ router.get('/stoerung/:id', requireLogin, async (req, res) => {
   }
 });
 
-// ── Status ändern (nur Admin) ───────────────────────────────────────────────────────────────────
+// ── Status ändern (nur Admin) ───────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   try {
     const { status, notiz, neuSchwere, neuKlasse } = req.body;
@@ -270,10 +270,10 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'Nicht gefunden.' });
     const validSchwere = ['klein', 'normal', 'totalausfall'];
-    const gepr\u00fcfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
+    const geprüfteSchwere = neuSchwere && validSchwere.includes(neuSchwere) ? neuSchwere : null;
     const validKlasse = ['kfz', 'geraet'];
-    const gepr\u00fcfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
-    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, gepr\u00fcfteSchwere, gepr\u00fcfteKlasse);
+    const geprüfteKlasse = neuKlasse && validKlasse.includes(neuKlasse) ? neuKlasse : null;
+    const updated = await db.updateStatus(storung.id, status, req.session.user.username, notiz || null, geprüfteSchwere, geprüfteKlasse);
     mailer.sendStatusMail(updated, req.session.user.username, notiz || null)
       .catch(err => console.error('[Route] sendStatusMail:', err.message));
     res.json({ ok: true, newStatus: status });
@@ -283,7 +283,7 @@ router.post('/stoerung/:id/status', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Info-Notiz hinzufügen (nur Admin) ──────────────────────────────────────────────────────────
+// ── Info-Notiz hinzufügen (nur Admin) ──────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   try {
     const { notiz } = req.body;
@@ -298,13 +298,23 @@ router.post('/stoerung/:id/notiz', requireRole('admin'), async (req, res) => {
   }
 });
 
-// ── Erinnerung setzen/löschen (nur Admin) ──────────────────────────────────────────────────────
+// ── Erinnerung setzen/löschen (nur Admin, nur eigene) ──────────────────────────────────────────────
 router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => {
   try {
-    const { reminderAt, reminderTo } = req.body;
+    const { reminderAt } = req.body;
+    const me = req.session.user.username;
+
     const storung = await db.getStorungById(req.params.id);
     if (!storung) return res.status(404).json({ error: 'St\u00f6rung nicht gefunden.' });
 
+    // fix #51: Erinnerung eines anderen Admins darf nicht überschrieben/gelöscht werden
+    if (storung.reminderAt && storung.reminderTo && storung.reminderTo !== me) {
+      return res.status(403).json({
+        error: `Diese Erinnerung geh\u00f6rt ${storung.reminderTo} und kann nicht ge\u00e4ndert werden.`,
+      });
+    }
+
+    // Löschen: leeres reminderAt = Erinnerung entfernen
     if (!reminderAt || !reminderAt.trim()) {
       await db.setReminder(storung.id, null, null);
       return res.json({ ok: true });
@@ -319,9 +329,8 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
       return res.status(400).json({ error: 'Erinnerungszeitpunkt liegt in der Vergangenheit.' });
     }
 
-    const safeAt = parsed.toISOString();
-    const safeTo = reminderTo && reminderTo.trim() ? reminderTo.trim() : null;
-    await db.setReminder(storung.id, safeAt, safeTo);
+    // reminderTo wird immer auf den eigenen Username gesetzt
+    await db.setReminder(storung.id, parsed.toISOString(), me);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Reminder]', err);
@@ -329,7 +338,7 @@ router.post('/stoerung/:id/reminder', requireRole('admin'), async (req, res) => 
   }
 });
 
-// ── Störung löschen (nur Admin) ─────────────────────────────────────────────────────────────────
+// ── Störung löschen (nur Admin) ──────────────────────────────────────────────────────────────────────────────
 router.post('/stoerung/:id/loeschen', requireRole('admin'), async (req, res) => {
   try {
     const { grund } = req.body;
@@ -369,7 +378,7 @@ router.get('/api/suche', requireLogin, async (req, res) => {
   }
 });
 
-// ── Ähnliche Fehler API ─────────────────────────────────────────────────────────────────────────
+// ── Ähnliche Fehler API ───────────────────────────────────────────────────────────────────────────────
 router.get('/api/similar', requireLogin, async (req, res) => {
   try {
     const { q, fahrzeug, includeErledigt } = req.query;

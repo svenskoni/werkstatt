@@ -10,7 +10,6 @@ const SCHWERE = {
   totalausfall: { label: 'Totalausfall', icon: '\uD83D\uDD34' },
 };
 const KLASSE_LABEL = { kfz: 'KFZ', geraet: 'Ger\u00e4t' };
-// Badge-Anzahl: volle attachments-Liste (Detail) oder attachmentCount (Slim)
 const _attCount = s.attachments ? s.attachments.length : (s.attachmentCount || 0);
 %>
 <article class="stoerung-card card-<%= s.status %>" role="article">
@@ -91,17 +90,3 @@ const _attCount = s.attachments ? s.attachments.length : (s.attachmentCount || 0
     <% } %>
   </div>
 </article>
-
-<style>
-.klasse-chip {
-  display: inline-block;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: var(--radius-full);
-  background: var(--color-surface-offset);
-  color: var(--color-text-muted);
-  letter-spacing: 0.02em;
-  border: 1px solid var(--color-border);
-}
-</style>

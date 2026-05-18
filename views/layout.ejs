@@ -358,6 +358,15 @@
       }
     }
 
+    async function ladeBadge() {
+      try {
+        var r = await fetch('/api/urlaub/status');
+        var data = await r.json();
+        istAbwesend = data.abwesend;
+        setUrlaubBadge(istAbwesend);
+      } catch (e) { /* Badge-Fehler still ignorieren */ }
+    }
+
     function openModal()  { modalOpen(modal);  ladeStatus(); }
     function closeModal() { modalClose(modal); }
 
@@ -426,7 +435,8 @@
       }
     });
 
-    ladeStatus();
+    // Nur Badge beim Seitenload – kein volles ladeStatus()
+    ladeBadge();
   })();
   <% } %>
 

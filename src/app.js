@@ -35,7 +35,6 @@ if (missing.length > 0) {
 
 const VEHICLES = process.env.VEHICLES.split(',').map(v => v.trim());
 
-// Issue #13: 'schwer' entfernt – nur noch klein / normal / totalausfall
 const SCHWERE = {
   klein:        { label: 'Klein',        icon: '\ud83d\udfe2' },
   normal:       { label: 'Normal',       icon: '\ud83d\udfe1' },
@@ -43,6 +42,10 @@ const SCHWERE = {
 };
 
 const app = express();
+
+// Reverse-Proxy-Vertrauen (Plesk / Phusion Passenger / nginx)
+// MUSS vor session() stehen, damit secure-Cookies korrekt gesetzt werden.
+app.set('trust proxy', 1);
 
 const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -95,7 +98,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Routen ─────────────────────────────────────────────────────────────────────────────
+// ── Routen ──────────────────────────────────────────────────────────────────────────────────────
 app.use('/view', fernseherRoute);
 app.use('/', authRoutes);
 app.use('/', uploadsRoute);
@@ -110,5 +113,4 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// initDb wird nur in app.js (Root) aufgerufen – NICHT hier nochmal
 module.exports = app;
